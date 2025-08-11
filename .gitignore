@@ -1,0 +1,41 @@
+# Node / Electron
+node_modules/
+dist/
+out/
+*.log
+*.map
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+# Project-specific (models, native binaries, large artifacts)
+_models/
+_xxl_data/
+*.exe
+*.dll
+*.pyd
+*.bin
+*.onnx
+*.msi
+*.dmg
+*.zip
+
+# Media and generated subtitles (keep sample docs images)
+*.mp4
+*.wav
+*.srt
+chunk_*.srt
+
+# Caches / temp
+.cache/
+logs/
+temp/
+tmp/
+
+# Env / secrets
+.env
+.env.* 
