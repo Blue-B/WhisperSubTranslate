@@ -39,6 +39,27 @@ npm run build-win
 ```
 生成在 `dist/` 目录。
 
+## 开发者环境（本地运行/打包）
+
+本地开发需要 Faster‑Whisper 可执行文件。
+
+1) 从 Purfview 的发布页下载 `Faster-Whisper-XXL_r245.4_windows.7z`: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) 解压到项目根目录（与 `main.js` 同级），排除 `.bat` 文件。示例（7‑Zip）：
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+3) 确认根目录中存在 `faster-whisper-xxl.exe`（及所需 DLL）
+4) 运行：
+```bash
+npm install
+npm start
+```
+5) 打包前也需要存在该 exe：
+```bash
+npm run build-win
+```
+注意：不要把 exe 或 `.bat` 提交到 Git；只在发布的安装包里包含。
+
 ## 技术栈
 
 [![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/zh/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
@@ -136,6 +157,10 @@ fix: localize target language note
 - 月度支持（$3/mo，GitHub Sponsors 自动扣款）额外享受 “Sponsor Request” issue 的优先分流（best‑effort）
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/一次性_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
+
+## 致谢
+
+- 感谢提供 Faster‑Whisper 独立可执行文件的项目： [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
 
 ## 许可证
 

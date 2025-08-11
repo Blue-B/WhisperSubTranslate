@@ -141,6 +141,31 @@ If this project saves you time or helps you publish better subtitles, supporting
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/One‑time_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
 
+## Acknowledgments
+
+- Faster‑Whisper standalone executables are provided by the Purfview project. Many thanks: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+
 ## License
 
 ISC. External APIs/services (DeepL, OpenAI, etc.) require compliance with their own terms.
+
+## Developer setup (local run/build)
+
+For local development you need the Faster‑Whisper executable next to the app files.
+
+1) Download `Faster-Whisper-XXL_r245.4_windows.7z` from Purfview releases: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) Extract everything except .bat files into the project root (same folder as `main.js`). Example (7‑Zip):
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+3) Ensure `faster-whisper-xxl.exe` (and required DLLs) exists in the root.
+4) Run:
+```bash
+npm install
+npm start
+```
+5) For packaging, ensure the exe exists before build:
+```bash
+npm run build-win
+```
+Note: Do NOT commit the exe or .bat files to git. Installers will bundle needed files.

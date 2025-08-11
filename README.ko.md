@@ -39,6 +39,27 @@ npm run build-win
 ```
 산출물은 `dist/`에 생성됩니다.
 
+## 개발자 설정(로컬 실행/빌드)
+
+로컬 개발 시 Faster‑Whisper 실행파일이 필요합니다.
+
+1) Purfview 릴리스에서 `Faster-Whisper-XXL_r245.4_windows.7z` 다운로드: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) `.bat` 파일을 제외하고 프로젝트 루트(`main.js`와 같은 위치)로 압축 해제합니다. 예시(7‑Zip):
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+3) 루트에 `faster-whisper-xxl.exe`(필요 DLL 포함)가 있는지 확인
+4) 실행:
+```bash
+npm install
+npm start
+```
+5) 패키징 전에도 exe가 존재해야 합니다:
+```bash
+npm run build-win
+```
+참고: exe나 `.bat`는 깃에 커밋하지 마세요. 배포용 설치 파일에만 포함됩니다.
+
 ## 기술 스택
 
 [![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/ko/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
@@ -140,6 +161,10 @@ fix: localize target language note
 - 월 정기 후원($3/mo, GitHub Sponsors 자동결제)은 “Sponsor Request” 이슈 우선 확인(베스트 에포트) 혜택을 추가로 제공합니다.
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/일시후원_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
+
+## 감사의 말
+
+- Faster‑Whisper 단독 실행 파일을 제공해 주신 프로젝트에 감사드립니다: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
 
 ## 라이선스
 
