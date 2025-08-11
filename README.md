@@ -27,6 +27,15 @@ All processing runs locally — your video never leaves your machine. No cloud u
 
 ## Getting started
 
+Prerequisite (one‑time, required for extraction)
+
+1) Download `Faster-Whisper-XXL_r245.4_windows.7z` from Purfview releases: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) Extract everything except .bat files into the project root (same folder as `main.js`). Example (7‑Zip):
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+
+Then run the app:
 ```bash
 npm install
 npm start
@@ -151,21 +160,4 @@ ISC. External APIs/services (DeepL, OpenAI, etc.) require compliance with their 
 
 ## Developer setup (local run/build)
 
-For local development you need the Faster‑Whisper executable next to the app files.
-
-1) Download `Faster-Whisper-XXL_r245.4_windows.7z` from Purfview releases: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) Extract everything except .bat files into the project root (same folder as `main.js`). Example (7‑Zip):
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
-3) Ensure `faster-whisper-xxl.exe` (and required DLLs) exists in the root.
-4) Run:
-```bash
-npm install
-npm start
-```
-5) For packaging, ensure the exe exists before build:
-```bash
-npm run build-win
-```
-Note: Do NOT commit the exe or .bat files to git. Installers will bundle needed files.
+Moved: The prerequisite Faster‑Whisper setup is now part of “Getting started” above.

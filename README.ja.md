@@ -27,11 +27,20 @@
 
 ## はじめに
 
+事前準備（初回のみ、抽出に必須）
+
+1) Purfview のリリースから `Faster-Whisper-XXL_r245.4_windows.7z` をダウンロード: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) `.bat` を除外してプロジェクトルート（`main.js` と同じ場所）へ展開。例（7‑Zip）:
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+
+その後、実行:
 ```bash
 npm install
 npm start
 ```
-初回はモデルが無ければ `_models/` に自動ダウンロードします。
+初回は、モデルが無ければ `_models/` に自動ダウンロードします。
 
 ### Windows 用ビルド
 ```bash
@@ -63,24 +72,7 @@ API キー/設定は `app.getPath('userData')` 配下の `translation-config.jso
 
 ## 開発者向けセットアップ（ローカル実行/ビルド）
 
-ローカル開発では Faster‑Whisper 実行ファイルが必要です。
-
-1) Purfview のリリースから `Faster-Whisper-XXL_r245.4_windows.7z` をダウンロード: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) `.bat` ファイルを除外してプロジェクトルート（`main.js` と同じ場所）に展開。例（7‑Zip）:
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
-3) ルートに `faster-whisper-xxl.exe`（必要DLL）があることを確認
-4) 実行:
-```bash
-npm install
-npm start
-```
-5) パッケージング前にも exe が存在している必要があります:
-```bash
-npm run build-win
-```
-注: exe や `.bat` を Git にコミットしないでください。配布用インストーラにのみ含めます。
+この内容は「はじめに」に統合しました。上の事前準備をご参照ください。
 
 ## ブランチ（シンプル Trunk）
 

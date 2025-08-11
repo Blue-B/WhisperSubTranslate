@@ -27,6 +27,15 @@
 
 ## 시작하기
 
+사전 준비(1회, 자막 추출에 필수)
+
+1) Purfview 릴리스에서 `Faster-Whisper-XXL_r245.4_windows.7z` 다운로드: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) `.bat` 파일을 제외하고 프로젝트 루트(`main.js`와 같은 위치)로 압축 해제. 예시(7‑Zip):
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+
+그다음 실행:
 ```bash
 npm install
 npm start
@@ -41,24 +50,7 @@ npm run build-win
 
 ## 개발자 설정(로컬 실행/빌드)
 
-로컬 개발 시 Faster‑Whisper 실행파일이 필요합니다.
-
-1) Purfview 릴리스에서 `Faster-Whisper-XXL_r245.4_windows.7z` 다운로드: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) `.bat` 파일을 제외하고 프로젝트 루트(`main.js`와 같은 위치)로 압축 해제합니다. 예시(7‑Zip):
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
-3) 루트에 `faster-whisper-xxl.exe`(필요 DLL 포함)가 있는지 확인
-4) 실행:
-```bash
-npm install
-npm start
-```
-5) 패키징 전에도 exe가 존재해야 합니다:
-```bash
-npm run build-win
-```
-참고: exe나 `.bat`는 깃에 커밋하지 마세요. 배포용 설치 파일에만 포함됩니다.
+이 절은 “시작하기”에 통합되었습니다. 위 사전 준비 단계를 참고하세요.
 
 ## 기술 스택
 

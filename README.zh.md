@@ -27,6 +27,15 @@
 
 ## 快速开始
 
+前置条件（首次一次性，字幕提取必需）
+
+1) 从 Purfview 发布页下载 `Faster-Whisper-XXL_r245.4_windows.7z`：https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
+2) 解压到项目根目录（与 `main.js` 同级），排除 `.bat` 文件。示例（7‑Zip）：
+```powershell
+7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
+```
+
+然后运行：
 ```bash
 npm install
 npm start
@@ -41,24 +50,7 @@ npm run build-win
 
 ## 开发者环境（本地运行/打包）
 
-本地开发需要 Faster‑Whisper 可执行文件。
-
-1) 从 Purfview 的发布页下载 `Faster-Whisper-XXL_r245.4_windows.7z`: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) 解压到项目根目录（与 `main.js` 同级），排除 `.bat` 文件。示例（7‑Zip）：
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
-3) 确认根目录中存在 `faster-whisper-xxl.exe`（及所需 DLL）
-4) 运行：
-```bash
-npm install
-npm start
-```
-5) 打包前也需要存在该 exe：
-```bash
-npm run build-win
-```
-注意：不要把 exe 或 `.bat` 提交到 Git；只在发布的安装包里包含。
+该章节已合并到“快速开始”。请参考上面的前置条件步骤。
 
 ## 技术栈
 
