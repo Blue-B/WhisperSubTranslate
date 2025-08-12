@@ -27,6 +27,8 @@
 
 ## はじめに
 
+### 開発者: ローカルで実行
+
 事前準備（初回のみ、抽出に必須）
 
 1) Purfview のリリースから `Faster-Whisper-XXL_r245.4_windows.7z` をダウンロード: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
@@ -41,6 +43,11 @@ npm install
 npm start
 ```
 初回は、モデルが無ければ `_models/` に自動ダウンロードします。
+
+### 一般ユーザー: 配布（ポータブル）で実行
+
+- Releases から最新のポータブルアーカイブ：`WhisperSubTranslate v1.0.0.7z`
+- 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
 ### Windows 用ビルド
 ```bash

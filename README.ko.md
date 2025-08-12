@@ -27,6 +27,8 @@
 
 ## 시작하기
 
+### 개발자: 로컬에서 실행
+
 사전 준비(1회, 자막 추출에 필수)
 
 1) Purfview 릴리스에서 `Faster-Whisper-XXL_r245.4_windows.7z` 다운로드: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
@@ -41,6 +43,11 @@ npm install
 npm start
 ```
 첫 실행 시 모델이 없으면 `_models/`에 자동 내려받습니다.
+
+### 사용자: 배포(포터블)로 바로 실행
+
+- Releases에서 최신 포터블 압축 파일: `WhisperSubTranslate v1.0.0.7z`
+- 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 ### Windows 빌드
 ```bash
