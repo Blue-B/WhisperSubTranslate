@@ -16,20 +16,25 @@
     "appId": "com.whispersubtranslate.app",
     "productName": "WhisperSubTranslate",
     "directories": {
-      "output": "dist"
+      "output": "dist2"
     },
     "files": [
       "main.js",
       "preload.js",
       "index.html",
       "renderer.js",
-      "faster-whisper-xxl.exe",
-      "nya.wav",
-      "_models/",
-      "_xxl_data/"
+      "translator-enhanced.js",
+      "myMemoryTranslator.js",
+      "utils/**",
+      "nya.wav"
+    ],
+    "extraResources": [
+      { "from": "faster-whisper-xxl.exe", "to": "faster-whisper-xxl.exe" },
+      { "from": "_xxl_data", "to": "_xxl_data" },
+      { "from": "_models", "to": "_models" }
     ],
     "win": {
-      "target": "nsis"
+      "target": ["zip"]
     },
     "nsis": {
       "oneClick": false,
@@ -40,7 +45,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^37.2.3",
+    "electron": "^30.0.9",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {

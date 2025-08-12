@@ -1,6 +1,7 @@
 # Node / Electron
 node_modules/
 dist/
+dist2/
 out/
 *.log
 *.map
@@ -23,6 +24,7 @@ _xxl_data/
 *.msi
 *.dmg
 *.zip
+*.7z
 
 # Media and generated subtitles (keep sample docs images)
 *.mp4
