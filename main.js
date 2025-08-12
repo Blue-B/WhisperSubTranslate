@@ -230,7 +230,8 @@ function extractSingleFile(filePath, model, language, device) {
             mainWindow.webContents.send('output-update', `${line}\n`);
         }
 
-        const exePath = path.join(__dirname, 'faster-whisper-xxl.exe');
+        const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+        const exePath = path.join(basePath, 'faster-whisper-xxl.exe');
         const args = [
             filePath,
             '--model', model,
@@ -256,6 +257,7 @@ function extractSingleFile(filePath, model, language, device) {
         currentProcess = spawn(exePath, args, { 
             windowsHide: true, 
             stdio: ['ignore', 'pipe', 'pipe'],
+            cwd: basePath,
             timeout: 600000 // 10분 타임아웃
         });
         
@@ -403,7 +405,7 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
 });
 
 ipcMain.handle('check-model-status', async () => {
-  const modelsPath = path.join(__dirname, '_models');
+  const modelsPath = path.join(app.isPackaged ? process.resourcesPath : __dirname, '_models');
   const availableModels = {};
   try {
     const modelFolders = fs.readdirSync(modelsPath);
@@ -439,7 +441,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
       throw new Error(`Unknown model: ${modelName}`);
     }
 
-    const targetDir = path.join(__dirname, '_models', `faster-whisper-${modelName}`);
+    const targetDir = path.join(app.isPackaged ? process.resourcesPath : __dirname, '_models', `faster-whisper-${modelName}`);
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
     const files = ['config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt'];
