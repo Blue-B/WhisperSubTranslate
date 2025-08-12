@@ -27,6 +27,8 @@ All processing runs locally — your video never leaves your machine. No cloud u
 
 ## Getting started
 
+### For developers: run from source
+
 Prerequisite (one‑time, required for extraction)
 
 1) Download `Faster-Whisper-XXL_r245.4_windows.7z` from Purfview releases: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
@@ -41,6 +43,15 @@ npm install
 npm start
 ```
 The first run will download the selected model into `_models/` when missing.
+
+### For users: run the portable release
+
+## Quick Start (Portable)
+
+- Download the latest portable archive from Releases: `WhisperSubTranslate v1.0.0.7z`
+- Open the extracted folder and run `WhisperSubTranslate.exe`
+
+That’s it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
 
 ### Build (Windows)
 ```bash
@@ -157,7 +168,6 @@ If this project saves you time or helps you publish better subtitles, supporting
 ## License
 
 ISC. External APIs/services (DeepL, OpenAI, etc.) require compliance with their own terms.
-
 ## Developer setup (local run/build)
 
 Moved: The prerequisite Faster‑Whisper setup is now part of “Getting started” above.
