@@ -4,6 +4,8 @@ English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](.
 
 A fast, local desktop app for turning video into subtitles (SRT) and translating them into the language you need. Powered by Faster‑Whisper for extraction and optional online engines for translation.
 
+> Important: This app creates new SRT subtitles from your video's audio using Faster‑Whisper. It does not extract existing embedded subtitle tracks or on‑screen text (no OCR).
+
 ## Preview
 
 ![WhisperSubTranslate main UI](docs/preview_en.png)
