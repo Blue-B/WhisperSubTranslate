@@ -4,6 +4,8 @@
 
 動画の音声を文字起こし（SRT）し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は Faster‑Whisper 実行ファイルで安定稼働し、翻訳は MyMemory（無料）/DeepL/ChatGPT（OpenAI）を選択できます。
 
+> 重要: 本アプリは Whisper（Faster‑Whisper）で動画の音声から新規に SRT 字幕を生成します。既存の埋め込み字幕トラックや画面上の文字（OCR）を抽出するツールではありません。
+
 ## プレビュー
 
 ![メイン UI](docs/preview_ja.png)

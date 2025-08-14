@@ -4,6 +4,8 @@
 
 将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 Faster‑Whisper 可执行文件，翻译支持 MyMemory（免费）、DeepL、ChatGPT（OpenAI）。
 
+> 重要：本应用使用 Whisper（Faster‑Whisper）从视频音频新生成 SRT 字幕；不会提取已有的内嵌字幕轨道，也不会识别屏幕文字（无 OCR）。
+
 ## 预览
 
 ![主界面](docs/preview_zh.png)

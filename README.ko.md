@@ -4,6 +4,8 @@
 
 로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 Faster‑Whisper 실행 파일로 안정적으로 처리되며, 번역은 MyMemory(무료), DeepL, ChatGPT(OpenAI)를 선택할 수 있습니다.
 
+> 중요: 이 앱은 동영상의 소리를 Whisper(Faster‑Whisper)로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
+
 ## 미리보기
 
 ![메인 UI](docs/preview_ko.png)
