@@ -899,6 +899,8 @@ const I18N = {
     deviceStatusHtml: '<strong>GPU 권장:</strong> NVIDIA GPU가 있으면 훨씬 빠른 처리 가능<br><strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적',
     translationEnabledHtml: '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
     translationDisabledHtml: '번역을 사용하지 않습니다.',
+    translationDeeplHtml: '<strong>DeepL:</strong> 월 50만글자 무료, API키 필요<br><strong>고품질</strong> 번역 서비스',
+    translationChatgptHtml: '<strong>ChatGPT:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
     // 셀렉트 옵션
     langAutoOption: '자동 감지 (각 파일별로 자동 판별)',
     deviceAuto: '자동 (GPU 있으면 GPU, 없으면 CPU)',
@@ -958,6 +960,8 @@ const I18N = {
     deviceStatusHtml: '<strong>GPU recommended:</strong> Much faster if NVIDIA GPU is available<br><strong>CPU:</strong> Use when no GPU or memory is limited',
     translationEnabledHtml: '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
     translationDisabledHtml: 'Translation is disabled.',
+    translationDeeplHtml: '<strong>DeepL:</strong> 500K chars/month free, API key required<br><strong>High quality</strong> translation service',
+    translationChatgptHtml: '<strong>ChatGPT:</strong> User API key required<br><strong>Natural</strong> translation possible',
     langAutoOption: 'Auto-detect (per file)',
     deviceAuto: 'Auto (Use GPU if available, otherwise CPU)',
     deviceCuda: 'GPU (CUDA) - Fast',
@@ -1013,6 +1017,8 @@ const I18N = {
     deviceStatusHtml: '<strong>GPU 推奨:</strong> NVIDIA GPU があれば高速処理<br><strong>CPU:</strong> GPU がない場合やメモリ不足時に安定',
     translationEnabledHtml: '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳\n<strong>1日約5万文字</strong>（目安）',
     translationDisabledHtml: '翻訳は使用しません。',
+    translationDeeplHtml: '<strong>DeepL:</strong> 月50万文字無料、APIキー必要<br><strong>高品質</strong>翻訳サービス',
+    translationChatgptHtml: '<strong>ChatGPT:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
     langAutoOption: '自動検出（ファイルごと）',
     deviceAuto: '自動（GPUがあればGPU、なければCPU）',
     deviceCuda: 'GPU (CUDA) - 高速',
@@ -1068,6 +1074,8 @@ const I18N = {
     deviceStatusHtml: '<strong>推荐 GPU:</strong> 若有 NVIDIA GPU 速度更快<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
     translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定\n<strong>约5万字/天</strong>（参考）',
     translationDisabledHtml: '不使用翻译。',
+    translationDeeplHtml: '<strong>DeepL:</strong> 每月50万字免费，需API密钥<br><strong>高质量</strong>翻译服务',
+    translationChatgptHtml: '<strong>ChatGPT:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
     langAutoOption: '自动检测（每个文件）',
     deviceAuto: '自动（有 GPU 用 GPU，否则 CPU）',
     deviceCuda: 'GPU (CUDA) - 快速',
@@ -1538,6 +1546,18 @@ function initTranslationSelect() {
       if (translationStatus) translationStatus.innerHTML = I18N[currentUiLang].translationDisabledHtml;
     } else {
       targetLanguageGroup.style.display = '';
+      if (translationStatus) {
+        // 선택한 번역 방법에 따라 다른 메시지 표시
+        if (method === 'mymemory') {
+          translationStatus.innerHTML = I18N[currentUiLang].translationEnabledHtml;
+        } else if (method === 'deepl') {
+          translationStatus.innerHTML = I18N[currentUiLang].translationDeeplHtml;
+        } else if (method === 'chatgpt') {
+          translationStatus.innerHTML = I18N[currentUiLang].translationChatgptHtml;
+        } else {
+          translationStatus.innerHTML = I18N[currentUiLang].translationEnabledHtml;
+        }
+      }
     }
   };
   translationSelect.addEventListener('change', update);
