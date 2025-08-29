@@ -1,4 +1,4 @@
-// Queue-based renderer for multi-file processing (memory-leak safe) (🎬 대기열 기반 렌더러 - 다중 파일 처리)
+// Queue-based renderer for multi-file processing (memory-leak safe) (대기열 기반 렌더러 - 다중 파일 처리)
 let fileQueue = []; // processing queue (처리 대기열)
 let isProcessing = false;
 let currentProcessingIndex = -1;
@@ -116,7 +116,7 @@ function updateQueueDisplay() {
   if (fileQueue.length === 0) {
     queueContainer.style.display = 'none';
     runBtn.disabled = true;
-    runBtn.textContent = '🎬 자막 추출 시작';
+    runBtn.textContent = '자막 추출 시작';
     pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
     return;
@@ -209,17 +209,8 @@ function updateProgress(progress, text) {
     lastProgress = Math.max(0, Math.min(100, progress));
     progressFill.style.width = lastProgress + '%';
   }
-  // Simple ETA: linear estimate from progress (간단 ETA, 선형 추정)
-  let etaText = '';
-  // Hide ETA during indeterminate phase (인디터미넌트 시 ETA 숨김)
-  const isIndeterminate = !!indeterminateTimer;
-  if (!isIndeterminate && lastProgress > 0 && lastProgress < 100) {
-    const elapsed = Date.now() - etaStartTime;
-    const rate = lastProgress / elapsed; // % per ms
-    const remainingMs = rate > 0 ? (100 - lastProgress) / rate : undefined;
-    if (remainingMs) etaText = ` • ${formatETA(remainingMs)}`;
-  }
-  progressText.textContent = (text || `${lastProgress}%`) + etaText;
+  // ETA 표시 제거 - 부정확하므로 진행률과 텍스트만 표시
+  progressText.textContent = (text || `${lastProgress}%`);
 }
 
 function startProgressAnimation() {
@@ -455,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
             extractedPath = window.electronAPI.getFilePathFromFile(file);
             console.log('✅ 방법 2 시도 (webUtils):', extractedPath);
           } catch (error) {
-            console.error('❌ 방법 2 실패:', error);
+            console.error('방법 2 실패:', error);
           }
         }
         
@@ -499,10 +490,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (warm?.success) {
           addOutput(`✅ 오프라인 모델 준비 완료\n`);
         } else {
-          addOutput(`⚠️ 오프라인 모델 준비 실패: ${warm?.error || '알 수 없는 오류'}\n`);
+          addOutput(`오프라인 모델 준비 실패: ${warm?.error || '알 수 없는 오류'}\n`);
         }
       } catch (e) {
-        addOutput(`⚠️ 오프라인 모델 준비 오류: ${e.message}\n`);
+        addOutput(`오프라인 모델 준비 오류: ${e.message}\n`);
       }
     }
 
@@ -634,10 +625,10 @@ document.addEventListener('DOMContentLoaded', () => {
               if (translationResult.success) {
                 addOutput(`✅ 번역 완료: ${fileName}_${targetLang}.srt (작업 마무리 중...)\n`);
               } else {
-                addOutput(`❌ 번역 실패: ${translationResult.error}\n`);
+                addOutput(`번역 실패: ${translationResult.error}\n`);
               }
             } catch (error) {
-              addOutput(`❌ 번역 오류: ${error.message}\n`);
+              addOutput(`번역 오류: ${error.message}\n`);
             }
           }
         }
@@ -699,10 +690,13 @@ document.addEventListener('DOMContentLoaded', () => {
       addOutput(`\n🎉 전체 작업 완료! (추출+번역) (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
     }
     
+    // 처리 완료 상태 초기화
+    isProcessing = false;
+    currentProcessingIndex = -1;
+    shouldStop = false;
+    
     // 처리 후 버튼 상태 업데이트
-    const runBtn = document.getElementById('runBtn');
-    runBtn.textContent = '🎬 자막 추출 시작';
-    runBtn.disabled = fileQueue.length === 0;
+    updateQueueDisplay();
   }
   
   // 버튼 이벤트  
@@ -760,8 +754,8 @@ const LOG_I18N = {
     // 추가 일반 로그 패턴
     { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '$1 files added to queue.' },
     { re: /^(\d+)개 파일 순차 처리 시작/m, to: 'Starting sequential processing of $1 file(s)' },
-    { re: /(?:🔧\s*)?CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CUDA device...' },
-    { re: /(?:🔧\s*)?CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CPU device...' },
+    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CUDA device...' },
+    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CPU device...' },
     { re: /파일 선택 중 오류 발생:/g, to: 'File selection error:' },
     { re: /이미 대기열에 있는 파일입니다:/g, to: 'Already in queue:' },
     { re: /대기열이 모두 삭제되었습니다\./g, to: 'Queue cleared.' },
@@ -799,8 +793,8 @@ const LOG_I18N = {
     // 追加: 예시 로그 문구들 변환
     { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '$1 件のファイルをキューに追加しました。' },
     { re: /^(\d+)개 파일 순차 처리 시작/m, to: '$1 件のファイルを順次処理開始' },
-    { re: /(?:🔧\s*)?CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CUDA デバイスで字幕抽出を開始します...' },
-    { re: /(?:🔧\s*)?CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CPU デバイスで字幕抽出を開始します...' },
+    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CUDA デバイスで字幕抽出を開始します...' },
+    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CPU デバイスで字幕抽出を開始します...' },
     { re: /파일 선택 중 오류 발생:/g, to: 'ファイル選択エラー:' },
     { re: /이미 대기열에 있는 파일입니다:/g, to: 'すでにキューにあります:' },
     { re: /대기열이 모두 삭제되었습니다\./g, to: 'キューをすべて削除しました。' },
@@ -844,8 +838,8 @@ const LOG_I18N = {
     // 追加: 예시 로그 변환
     { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '已将 $1 个文件添加到队列。' },
     { re: /^(\d+)개 파일 순차 처리 시작/m, to: '开始顺序处理 $1 个文件' },
-    { re: /(?:🔧\s*)?CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CUDA 设备开始提取字幕...' },
-    { re: /(?:🔧\s*)?CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CPU 设备开始提取字幕...' },
+    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CUDA 设备开始提取字幕...' },
+    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CPU 设备开始提取字幕...' },
     { re: /파일 선택 중 오류 발생:/g, to: '选择文件时出错:' },
     { re: /이미 대기열에 있는 파일입니다:/g, to: '已在队列中:' },
     { re: /대기열이 모두 삭제되었습니다\./g, to: '已清空队列。' },
@@ -929,7 +923,7 @@ const I18N = {
     testConnBtn: '연결 테스트',
     saveBtn: '저장',
     cancelBtn: '취소',
-    mymemoryInfoHtml: '✅ MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.',
+    mymemoryInfoHtml: '✅ MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>📝 사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
     openaiLinkText: 'OpenAI API 키 발급 받기',
     openaiHelpSuffix: ' (유료, 매우 저렴)',
     deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
@@ -986,7 +980,7 @@ const I18N = {
     testConnBtn: 'Test Connection',
     saveBtn: 'Save',
     cancelBtn: 'Cancel',
-    mymemoryInfoHtml: '✅ MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).',
+    mymemoryInfoHtml: '✅ MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).<br><br><strong>📝 Usage Guide:</strong><br>• Enter API keys and test immediately with "Test Connection"<br>• Or save keys first, then test saved keys<br>• Real-time testing supported without saving',
     openaiLinkText: 'Get OpenAI API Key',
     openaiHelpSuffix: ' (paid, low cost)',
     deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
@@ -1043,7 +1037,7 @@ const I18N = {
     testConnBtn: '接続テスト',
     saveBtn: '保存',
     cancelBtn: 'キャンセル',
-    mymemoryInfoHtml: '✅ MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。',
+    mymemoryInfoHtml: '✅ MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。<br><br><strong>📝 使用方法：</strong><br>• API キーを入力後「接続テスト」で即座に確認可能<br>• または先にキーを保存してからテストすることも可能<br>• 保存せずに入力したキーでリアルタイムテスト対応',
     openaiLinkText: 'OpenAI API キーを取得',
     openaiHelpSuffix: '（有料・低コスト）',
     deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
@@ -1100,7 +1094,7 @@ const I18N = {
     testConnBtn: '测试连接',
     saveBtn: '保存',
     cancelBtn: '取消',
-    mymemoryInfoHtml: '✅ MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。',
+    mymemoryInfoHtml: '✅ MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。<br><br><strong>📝 使用说明：</strong><br>• 输入 API 密钥后可通过"测试连接"立即验证<br>• 或者先保存密钥再进行测试<br>• 支持不保存直接用输入的密钥实时测试',
     openaiLinkText: '获取 OpenAI API 密钥',
     openaiHelpSuffix: '（付费，成本低）',
     deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
@@ -1269,7 +1263,7 @@ function applyI18n(lang) {
   setText('apiModalTitle', d.apiModalTitle);
   setText('labelDeeplKey', d.labelDeeplKey);
   setText('labelOpenaiKey', d.labelOpenaiKey);
-  const mm = document.getElementById('mymemoryInfo'); if (mm) mm.innerHTML = d.mymemoryInfoHtml;
+  // MyMemory 정보는 API 키 설정에서 제거됨
   const oLink = document.getElementById('openaiLink'); if (oLink) oLink.textContent = d.openaiLinkText;
   const oSuf = document.getElementById('openaiHelpSuffix'); if (oSuf) oSuf.textContent = d.openaiHelpSuffix;
   setText('testApiKeysBtn', d.testConnBtn);
@@ -1345,7 +1339,7 @@ function updateQueueDisplay() {
   if (fileQueue.length === 0) {
     queueContainer.style.display = 'none';
     runBtn.disabled = true;
-    runBtn.textContent = '🎬 ' + d.runBtn;
+    runBtn.textContent = d.runBtn;
     if (pauseBtn) pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
     return;
@@ -1655,7 +1649,7 @@ async function saveApiKeys() {
         status.style.background = '#f8d7da';
         status.style.border = '1px solid #f5c6cb';
         status.style.color = '#721c24';
-        status.textContent = '❌ 저장 실패';
+        status.textContent = '저장 실패';
       }
     }
   } catch (e) {
@@ -1664,7 +1658,7 @@ async function saveApiKeys() {
       status.style.background = '#f8d7da';
       status.style.border = '1px solid #f5c6cb';
       status.style.color = '#721c24';
-      status.textContent = `❌ 오류: ${e.message || e}`;
+      status.textContent = `오류: ${e.message || e}`;
     }
   }
 }
@@ -1679,20 +1673,73 @@ async function testApiKeys() {
     status.textContent = '🔍 API 키를 확인하는 중...';
   }
   try {
-    const res = await window.electronAPI.validateApiKeys();
+    // 현재 입력된 키들 수집
+    const tempKeys = {};
+    const deeplKey = document.getElementById('deeplApiKey')?.value?.trim();
+    const openaiKey = document.getElementById('openaiApiKey')?.value?.trim();
+    
+    if (deeplKey) tempKeys.deepl = deeplKey;
+    if (openaiKey) tempKeys.openai = openaiKey;
+    
+    console.log('[Frontend] Collected temp keys:', { 
+      hasDeepL: !!deeplKey,
+      hasOpenAI: !!openaiKey,
+      keysToTest: Object.keys(tempKeys)
+    });
+    
+    // 입력된 키가 없으면 안내 메시지
+    if (Object.keys(tempKeys).length === 0) {
+      if (status) {
+        status.style.display = 'block';
+        status.style.background = '#fff3cd';
+        status.style.border = '1px solid #ffeeba';
+        status.style.color = '#856404';
+        const noKeyMessage = {
+          ko: 'API 키를 입력한 후 테스트하거나, 저장된 키로 테스트하려면 먼저 저장해주세요.',
+          en: 'Please enter API keys to test, or save keys first to test saved keys.',
+          ja: 'APIキーを入力してテストするか、保存されたキーでテストする場合は先に保存してください。',
+          zh: '请输入API密钥后进行测试，或先保存密钥后测试保存的密钥。'
+        };
+        status.textContent = noKeyMessage[currentUiLang] || noKeyMessage.ko;
+      }
+      return;
+    }
+    
+    const res = await window.electronAPI.validateApiKeys(tempKeys);
     if (!res || !res.success) throw new Error(res?.error || '검증 실패');
     const { results } = res;
     const deeplOk = results?.deepl === true;
     const openaiOk = results?.openai === true;
-    const deeplMsg = deeplOk ? '✅ DeepL OK' : `❌ DeepL ${results?.errors?.deepl ? '- ' + results.errors.deepl : ''}`;
-    const openaiMsg = openaiOk ? '✅ ChatGPT OK' : `❌ ChatGPT ${results?.errors?.openai ? '- ' + results.errors.openai : ''}`;
-    if (status) {
-      const allOk = deeplOk || openaiOk; // 둘 중 하나만 쓰는 경우도 고려
+    // 입력된 키가 있는 서비스만 표시
+    const messages = [];
+    
+    // DeepL 키가 입력되어 있으면 결과 표시
+    const deeplInput = document.getElementById('deeplApiKey')?.value?.trim();
+    if (deeplInput) {
+      const deeplMsg = deeplOk ? 'DeepL - 연결 성공' : `DeepL - ${results?.errors?.deepl || '연결 실패'}`;
+      messages.push(deeplMsg);
+    }
+    
+    // OpenAI 키가 입력되어 있으면 결과 표시  
+    const openaiInput = document.getElementById('openaiApiKey')?.value?.trim();
+    if (openaiInput) {
+      const openaiMsg = openaiOk ? 'ChatGPT - 연결 성공' : `ChatGPT - ${results?.errors?.openai || '연결 실패'}`;
+      messages.push(openaiMsg);
+    }
+    
+    if (status && messages.length > 0) {
+      const hasSuccess = deeplOk || openaiOk;
       status.style.display = 'block';
-      status.style.background = allOk ? '#d4edda' : '#f8d7da';
-      status.style.border = allOk ? '1px solid #c3e6cb' : '1px solid #f5c6cb';
-      status.style.color = allOk ? '#155724' : '#721c24';
-      status.innerHTML = `${deeplMsg}<br>${openaiMsg}`;
+      status.style.background = hasSuccess ? '#d4edda' : '#f8d7da';
+      status.style.border = hasSuccess ? '1px solid #c3e6cb' : '1px solid #f5c6cb';
+      status.style.color = hasSuccess ? '#155724' : '#721c24';
+      status.innerHTML = messages.join('<br>');
+    } else if (status) {
+      status.style.display = 'block';
+      status.style.background = '#fff3cd';
+      status.style.border = '1px solid #ffeeba';
+      status.style.color = '#856404';
+      status.textContent = '테스트할 API 키를 입력해주세요.';
     }
   } catch (e) {
     if (status) {
@@ -1700,7 +1747,7 @@ async function testApiKeys() {
       status.style.background = '#f8d7da';
       status.style.border = '1px solid #f5c6cb';
       status.style.color = '#721c24';
-      status.textContent = `❌ 오류: ${e.message || e}`;
+      status.textContent = `오류: ${e.message || e}`;
     }
   }
 }
