@@ -6,6 +6,7 @@ try {
 const path = require('path');
 const fs = require('fs');
 const { spawn, execSync } = require('child_process');
+const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
 const { Menu } = require('electron');
@@ -30,7 +31,7 @@ function cancelActiveDownloads() {
     try { d.writer?.destroy?.(); } catch {}
   }
   activeDownloads.clear();
-  try { mainWindow?.webContents?.send('output-update', '⏹ Model download cancelled\n'); } catch {}
+  try { mainWindow?.webContents?.send('output-update', 'Model download cancelled\n'); } catch {}
 }
 
 // ===== Device auto‑selection helper (장치 자동 선택 헬퍼) =====
@@ -59,11 +60,87 @@ function resolveDevice(requestedDevice) {
   return req;
 }
 
+// Dynamic performance settings based on system specs
+function getOptimalWhisperSettings(device) {
+  const totalMemory = os.totalmem() / (1024 * 1024 * 1024); // GB
+  const cpuCores = os.cpus().length;
+  
+  console.log(`[System Info] RAM: ${totalMemory.toFixed(1)}GB, CPU Cores: ${cpuCores}`);
+  
+  if (device === 'cuda') {
+    // GPU settings - balanced for stability and performance
+    if (totalMemory >= 16 && cpuCores >= 8) {
+      // High-end system - good performance with safety margin
+      console.log('[Performance] High-end GPU settings applied');
+      return [
+        '--compute_type', 'float16',
+        '--beam_size', '5',
+        '--batch_size', '16',
+        '--threads', '4',
+        '--chunk_length', '30'
+      ];
+    } else if (totalMemory >= 8) {
+      // Mid-range system - balanced settings
+      console.log('[Performance] Mid-range GPU settings applied');
+      return [
+        '--compute_type', 'float16',
+        '--beam_size', '3',
+        '--batch_size', '8',
+        '--threads', '2',
+        '--chunk_length', '25'
+      ];
+    } else {
+      // Low-end system with GPU - conservative but faster than CPU
+      console.log('[Performance] Low-end GPU settings applied');
+      return [
+        '--compute_type', 'int8',
+        '--beam_size', '1',
+        '--batch_size', '4',
+        '--threads', '1',
+        '--chunk_length', '20'
+      ];
+    }
+  } else {
+    // CPU settings - optimized for different CPU configurations
+    if (totalMemory >= 16 && cpuCores >= 8) {
+      // High-end CPU system
+      console.log('[Performance] High-end CPU settings applied');
+      return [
+        '--compute_type', 'int8',
+        '--beam_size', '3',
+        '--batch_size', '8',
+        '--threads', Math.min(cpuCores - 2, 6).toString(),
+        '--chunk_length', '25'
+      ];
+    } else if (totalMemory >= 8 && cpuCores >= 4) {
+      // Mid-range CPU system
+      console.log('[Performance] Mid-range CPU settings applied');
+      return [
+        '--compute_type', 'int8',
+        '--beam_size', '2',
+        '--batch_size', '4',
+        '--threads', Math.min(cpuCores - 1, 4).toString(),
+        '--chunk_length', '20'
+      ];
+    } else {
+      // Low-end CPU system
+      console.log('[Performance] Low-end CPU settings applied');
+      return [
+        '--compute_type', 'int8',
+        '--beam_size', '1',
+        '--batch_size', '2',
+        '--threads', '1',
+        '--chunk_length', '15'
+      ];
+    }
+  }
+}
+
 // Enhanced memory/GPU cleanup across files (파일 간 메모리/GPU 정리)
 function forceMemoryCleanup(device, isFileTransition = false) {
     return new Promise(resolve => {
         const cleanupType = isFileTransition ? '파일 간 메모리 정리' : '일반 메모리 정리';
-        console.log(`🧹 ${cleanupType} 시작...`);
+        console.log(`${cleanupType} 시작...`);
         
         try {
             // 1. Kill current process
@@ -116,7 +193,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                             console.log('   - ✅ GPU 메모리 강제 정리 완료');
                             
                         } catch (e) {
-                            console.log(`   - ⚠️ GPU 정리 일부 실패: ${e.message}`);
+                            console.log(`   - GPU 정리 일부 실패: ${e.message}`);
                         }
                         
                         // 4. System memory cleanup
@@ -170,6 +247,10 @@ function createWindow() {
         autoHideMenuBar: true,
     });
     mainWindow.loadFile('index.html');
+    
+    // Translator에 mainWindow 설정 (UI 업데이트용)
+    translator.setMainWindow(mainWindow);
+    
     // 기본 메뉴 제거 (File/Edit/View/Window/Help 숨김)
     try { Menu.setApplicationMenu(null); } catch {}
     try { mainWindow.setMenuBarVisibility(false); } catch {}
@@ -221,11 +302,11 @@ function extractSingleFile(filePath, model, language, device) {
         // 실제 사용할 장치 결정
         const chosenDevice = resolveDevice(device);
         if (device === 'auto') {
-            const line = `🧠 Auto device: using ${chosenDevice.toUpperCase()}`;
+            const line = `Auto device: using ${chosenDevice.toUpperCase()}`;
             console.log(line);
             mainWindow.webContents.send('output-update', `${line}\n`);
         } else if (device === 'cuda' && chosenDevice !== 'cuda') {
-            const line = '⚠️ GPU not available, falling back to CPU';
+            const line = 'GPU not available, falling back to CPU';
             console.log(line);
             mainWindow.webContents.send('output-update', `${line}\n`);
         }
@@ -238,36 +319,44 @@ function extractSingleFile(filePath, model, language, device) {
             '--device', chosenDevice,
             '--output_dir', path.dirname(filePath),
             '--output_format', 'srt',
-            '--compute_type', 'int8',
-            '--beam_size', '1',
-            '--best_of', '1',
-            '--chunk_length', '8',
-            '--threads', '1',
+            ...getOptimalWhisperSettings(chosenDevice),
             '--vad_filter', 'true',
             '--condition_on_previous_text', 'false',
             '--word_timestamps', 'false',
+            '--no_speech_threshold', '0.6',
         ];
         if (language && language !== 'auto') {
             args.push('--language', language);
+        } else if (language === 'auto') {
+            // 언어 자동 감지를 위해 파라미터 생략 (Whisper 기본 동작)
+            console.log('[Language Detection] Auto-detect enabled - no language parameter passed');
+        } else {
+            console.log(`[Language Detection] Fixed language mode: ${language}`);
         }
 
         console.log(`[EXEC] ${exePath} ${args.join(' ')}`);
-        mainWindow.webContents.send('output-update', `🔧 Starting extraction with ${chosenDevice.toUpperCase()} device...\n`);
+        
+        if (chosenDevice === 'cuda') {
+            mainWindow.webContents.send('output-update', `GPU 가속 추출 시작 (float16, beam_size=5, batch_size=16)...\n`);
+            console.log('[GPU Config] High-performance settings: float16, beam_size=5, batch_size=16');
+        } else {
+            mainWindow.webContents.send('output-update', `CPU 추출 시작 (안정성 우선 설정)...\n`);
+        }
 
         currentProcess = spawn(exePath, args, { 
             windowsHide: true, 
             stdio: ['ignore', 'pipe', 'pipe'],
             cwd: basePath,
-            timeout: 600000 // 10분 타임아웃
+            timeout: 1800000 // 30분 타임아웃 (긴 영상 대응)
         });
         
         // Process timeout handling
         const processTimeout = setTimeout(() => {
             if (currentProcess && !currentProcess.killed) {
-                console.log(`[TIMEOUT] ${path.basename(filePath)} - 10분 타임아웃`);
+                console.log(`[TIMEOUT] ${path.basename(filePath)} - 30분 타임아웃`);
                 currentProcess.kill('SIGKILL');
             }
-        }, 600000);
+        }, 1800000); // 30분으로 연장
 
         currentProcess.stdout.on('data', (data) => {
             mainWindow.webContents.send('output-update', data.toString('utf8'));
@@ -296,9 +385,13 @@ function extractSingleFile(filePath, model, language, device) {
             } else {
                 let errorMessage = `Error code: ${code}`;
                 if (code === 3221226505) {
-                    errorMessage = 'Possible GPU out-of-memory or driver issue';
+                    errorMessage = 'GPU 메모리 부족 또는 드라이버 문제';
                 } else if (code === null || code === undefined) {
-                    errorMessage = 'Process terminated unexpectedly';
+                    errorMessage = '프로세스가 예상치 못하게 종료됨 (메모리 부족 가능성)';
+                } else if (code === 1) {
+                    errorMessage = '❌ Whisper 처리 실패 (파일 포맷 또는 오디오 문제)';
+                } else if (code === 127) {
+                    errorMessage = '📁 faster-whisper-xxl.exe를 찾을 수 없음';
                 }
                 console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
                 reject(new Error(errorMessage));
@@ -341,27 +434,27 @@ ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, 
             // Next file preview message
             if (i < filesToProcess.length - 1) {
                 const nextFile = filesToProcess[i + 1];
-                event.sender.send('output-update', `📋 Next file: ${path.basename(nextFile)}\n`);
+                event.sender.send('output-update', `Next file: ${path.basename(nextFile)}\n`);
                 
                 if (device === 'cuda') {
-                    event.sender.send('output-update', `🧹 Cleaning GPU memory and preparing next file... (wait 10s)\n`);
+                    event.sender.send('output-update', `Cleaning GPU memory and preparing next file... (wait 10s)\n`);
                     await new Promise(resolve => setTimeout(resolve, 10000));
-                    event.sender.send('output-update', `🚀 Start next file!\n\n`);
+                    event.sender.send('output-update', `Start next file!\n\n`);
                 }
             }
         } catch (error) {
             failCount++;
-            event.sender.send('output-update', `❌ [${i + 1}/${filesToProcess.length}] Failed: ${path.basename(currentFile)} - ${error.message}\n`);
+            event.sender.send('output-update', `[${i + 1}/${filesToProcess.length}] Failed: ${path.basename(currentFile)} - ${error.message}\n`);
             
             // Next file preview after failure
             if (i < filesToProcess.length - 1) {
                 const nextFile = filesToProcess[i + 1];
-                event.sender.send('output-update', `📋 Next file: ${path.basename(nextFile)}\n`);
+                event.sender.send('output-update', `Next file: ${path.basename(nextFile)}\n`);
                 
                 if (device === 'cuda') {
-                    event.sender.send('output-update', `🧹 Recovering and preparing next file... (wait 10s)\n`);
+                    event.sender.send('output-update', `Recovering and preparing next file... (wait 10s)\n`);
                     await new Promise(resolve => setTimeout(resolve, 10000));
-                    event.sender.send('output-update', `🚀 Start next file!\n\n`);
+                    event.sender.send('output-update', `Start next file!\n\n`);
                 }
             }
         }
@@ -461,7 +554,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
       let lastPct = -1;
       let lastSentAt = 0;
       const emit = (pct) => {
-        try { mainWindow.webContents.send('output-update', `⬇️ ${path.basename(destPath)} ${pct}%\n`); } catch {}
+        try { mainWindow.webContents.send('output-update', `${path.basename(destPath)} ${pct}%\n`); } catch {}
       };
       response.data.on('data', (chunk) => {
         received += chunk.length;
@@ -510,7 +603,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
   } catch (error) {
     console.error('Model download failed:', error);
     if (String(error && error.message).includes('cancelled') || String(error && error.name).includes('AbortError')) {
-      try { mainWindow.webContents.send('output-update', `⏹ Model download cancelled\n`); } catch {}
+      try { mainWindow.webContents.send('output-update', `Model download cancelled\n`); } catch {}
       return { success: false, error: 'cancelled' };
     }
     try { mainWindow.webContents.send('output-update', `❌ Model download failed: ${error.message}\n`); } catch {}
@@ -558,12 +651,29 @@ ipcMain.handle('load-api-keys', async () => {
 
 // 오프라인 관련 IPC 제거됨
 
-// API 키 유효성 검사
-ipcMain.handle('validate-api-keys', async () => {
+// API 키 유효성 검사 (임시 키 지원)
+ipcMain.handle('validate-api-keys', async (event, tempKeys) => {
   try {
-    const results = await translator.validateApiKeys();
-    return { success: true, results };
+    console.log('[API Key Validation]', { 
+      hasTempKeys: !!tempKeys, 
+      tempKeysCount: tempKeys ? Object.keys(tempKeys).length : 0,
+      tempKeys: tempKeys ? Object.keys(tempKeys) : []
+    });
+    
+    // 임시 키가 제공되면 사용, 아니면 저장된 키 사용
+    if (tempKeys && Object.keys(tempKeys).length > 0) {
+      console.log('[Using temporary keys for validation]');
+      const tempTranslator = new EnhancedSubtitleTranslator();
+      tempTranslator.apiKeys = { ...tempTranslator.apiKeys, ...tempKeys };
+      const results = await tempTranslator.validateApiKeys();
+      return { success: true, results };
+    } else {
+      console.log('[Using saved keys for validation]');
+      const results = await translator.validateApiKeys();
+      return { success: true, results };
+    }
   } catch (error) {
+    console.error('[API Key Validation Error]', error);
     return { success: false, error: error.message };
   }
 });

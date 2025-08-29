@@ -49,9 +49,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('load-api-keys');
   },
   
-  // API 키 유효성 검사
-  validateApiKeys: () => {
-    return ipcRenderer.invoke('validate-api-keys');
+  // API 키 유효성 검사 (임시 키 지원)
+  validateApiKeys: (tempKeys) => {
+    return ipcRenderer.invoke('validate-api-keys', tempKeys);
   },
   
   // 자막 번역
