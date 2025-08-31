@@ -1495,6 +1495,15 @@ if (window?.electronAPI) {
         stopIndeterminate();
         translationSessionActive = false;
         setProgressTarget(Math.max(lastProgress, 99), data?.message || I18N[currentUiLang].progressTranslating);
+        
+        // 처리 상태 초기화
+        isProcessing = false;
+        currentProcessingIndex = -1;
+        shouldStop = false;
+        
+        // UI 상태 업데이트
+        updateQueueDisplay();
+        
         // UX: 짧은 지연 후 100%로 마무리
         setTimeout(() => {
           setProgressTarget(100, I18N[currentUiLang].allDoneWithTr);
