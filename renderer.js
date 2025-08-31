@@ -1511,13 +1511,19 @@ if (window?.electronAPI) {
         translationSessionActive = false;
         setProgressTarget(Math.max(lastProgress, 99), data?.message || I18N[currentUiLang].progressTranslating);
         
-        // 처리 상태 초기화
+        // 번역 완료 후 처리 상태 초기화
         isProcessing = false;
         currentProcessingIndex = -1;
         shouldStop = false;
         
         // UI 상태 업데이트
         updateQueueDisplay();
+        
+        // 대기 중인 파일이 더 있는지 확인하여 사용자에게 알림
+        const remainingFiles = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
+        if (remainingFiles > 0) {
+          addOutput(`✅ 파일 완료! 대기 중인 파일 ${remainingFiles}개가 있습니다. 처리 시작 버튼을 눌러주세요.\n`);
+        }
         
         // UX: 짧은 지연 후 100%로 마무리
         setTimeout(() => {
