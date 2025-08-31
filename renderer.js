@@ -559,19 +559,13 @@ document.addEventListener('DOMContentLoaded', () => {
         file.status = 'error';
         updateQueueDisplay();
         addOutput(`지원되지 않는 파일 형식: ${file.path.split('\\').pop()}\n`);
-        continue;
+        return;
       }
       
-      // 중지 또는 일시정지 요청 확인
+      // 중지 요청 확인
       if (shouldStop) {
         addOutput('사용자가 처리를 중지했습니다.\n');
-        break;
-      }
-      
-      
-      if (shouldStop) {
-        addOutput('일시정지 중 사용자가 처리를 중지했습니다.\n');
-        break;
+        return;
       }
       
       currentProcessingIndex = i;
