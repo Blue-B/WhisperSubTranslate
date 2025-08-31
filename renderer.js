@@ -131,9 +131,11 @@ function updateQueueDisplay() {
     stopBtn.style.display = 'inline-block';
     clearQueueBtn.textContent = '대기 파일 삭제';
   } else {
-    runBtn.textContent = `${fileQueue.length}개 파일 처리 시작`;
-    runBtn.disabled = false;
-    runBtn.className = 'btn-success';
+    // 대기 중인 파일만 카운트 (완료되지 않은 파일들)
+    const pendingCount = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
+    runBtn.textContent = `${pendingCount}개 파일 처리 시작`;
+    runBtn.disabled = pendingCount === 0;
+    runBtn.className = pendingCount > 0 ? 'btn-success' : 'btn-secondary';
     stopBtn.style.display = 'none';
     clearQueueBtn.textContent = '대기열 전체 삭제';
   }
@@ -406,6 +408,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectFileBtn = document.getElementById('selectFileBtn');
   
   // drag & drop events (드래그앤드롭 이벤트)
+  if (!dropZone) {
+    console.error('dropZone element not found');
+    return;
+  }
+  
   dropZone.ondragover = (e) => {
     e.preventDefault();
     dropZone.classList.add('dragover');
@@ -506,19 +513,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const language = document.getElementById('languageSelect').value;
     const device = document.getElementById('deviceSelect').value;
     
-    // 순차적으로 파일 처리
+    // 대기 중인 파일 중 첫 번째만 처리 (한 번에 하나씩)
     shouldStop = false;
     
-    // 처리되지 않은 파일부터 시작
-    let startIndex = currentProcessingIndex >= 0 ? currentProcessingIndex : 0;
+    // 처리할 파일 찾기
+    let fileToProcess = null;
+    let fileIndex = -1;
     
-    for (let i = startIndex; i < fileQueue.length && !shouldStop; i++) {
+    for (let i = 0; i < fileQueue.length; i++) {
       const file = fileQueue[i];
-      
-      // 이미 완료되거나 오류이거나 중지된 파일은 건너뛰기
-      if (file.status === 'completed' || file.status === 'error' || file.status === 'stopped') {
-        continue;
+      if (file.status !== 'completed' && file.status !== 'error' && file.status !== 'stopped') {
+        fileToProcess = file;
+        fileIndex = i;
+        break;
       }
+    }
+    
+    // 처리할 파일이 없으면 완료
+    if (!fileToProcess) {
+      isProcessing = false;
+      shouldStop = false;
+      currentProcessingIndex = -1;
+      updateQueueDisplay();
+      
+      const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+      const errorCount = fileQueue.filter(f => f.status === 'error').length;
+      const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+      
+      setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
+      showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+      try { playCompletionSound(); } catch {}
+      
+      addOutput(`\n🎉 전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
+      return;
+    }
+    
+    // 단일 파일 처리
+    const i = fileIndex;
+    const file = fileToProcess;
       
       // 현재 시작 시점의 번역 사용 여부를 캡쳐 (중간 변경과 무관하게 처리 일관성 확보)
       const methodAtStart = (document.getElementById('translationSelect')?.value || 'none');
@@ -643,60 +675,38 @@ document.addEventListener('DOMContentLoaded', () => {
         stopIndeterminate();
       }
       
-      updateQueueDisplay();
+    updateQueueDisplay();
+    
+    // 단일 파일 처리 완료 후 상태 리셋
+    isProcessing = false;
+    shouldStop = false;
+    currentProcessingIndex = -1;
+    updateQueueDisplay();
+    
+    // 번역 없이 자막 추출만 한 경우 즉시 완료 처리
+    if (methodAtStart === 'none') {
+      setProgressTarget(100, `파일 처리 완료: ${file.path.split('\\').pop()}`);
       
-      // 각 파일 완료 후 충분한 메모리 정리 대기시간
-      // 메모리 해제 시간을 대폭 늘려서 ACCESS_VIOLATION 방지
-      const lastIndex = fileQueue.length - 1;
-      if (i < lastIndex) {
-        addOutput(`다음 파일을 위한 메모리 정리 중... (10초 대기)\n`);
-        await sleep(10000);
-      } else if (methodAtStart !== 'none') {
-        // 마지막 파일이지만 번역 사용 시, 짧게 정리 대기
-        addOutput(`메모리 정리 중... (잠시만 기다려주세요)\n`);
-        await sleep(2000);
+      // 대기 중인 파일이 더 있는지 확인
+      const remainingFiles = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
+      if (remainingFiles > 0) {
+        addOutput(`✅ 파일 완료! 대기 중인 파일 ${remainingFiles}개가 있습니다. 처리 시작 버튼을 눌러주세요.\n`);
+      } else {
+        const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+        const errorCount = fileQueue.filter(f => f.status === 'error').length;
+        const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+        
+        setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
+        showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+        try { playCompletionSound(); } catch {}
+        
+        addOutput(`\n🎉 전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
       }
     }
     
-    // 모든 처리 완료: 번역 사용 여부에 따라 완료 시점 결정
-    const translationMethodAtEnd = document.getElementById('translationSelect').value;
-    const usedTranslation = translationMethodAtEnd && translationMethodAtEnd !== 'none';
-    
-    isProcessing = false;
-    shouldStop = false;
-    currentProcessingIndex = -1;
-    updateQueueDisplay();
-    
-    if (!usedTranslation) {
-      setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
-      showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
-      try { playCompletionSound(); } catch {}
-    } else {
-      // 번역까지 포함된 워크플로우: 파일별 번역은 위 루프 내에서 끝나므로 여기서는 최종 완료만 표시
-      // 번역 완료 직후 99% 안내가 오고 나면 여기서 100%와 함께 최종 완료 안내를 표시
-      setProgressTarget(100, I18N[currentUiLang].allDoneWithTr);
-      showToast(I18N[currentUiLang].allDoneWithTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
-      try { playCompletionSound(); } catch {}
-    }
-    
-    // 정확한 성공/실패 카운팅
-    const completedCount = fileQueue.filter(f => f.status === 'completed').length;
-    const errorCount = fileQueue.filter(f => f.status === 'error').length;
-    const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
-    
-    if (!usedTranslation) {
-      addOutput(`\n🎉 전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
-    } else {
-      addOutput(`\n🎉 전체 작업 완료! (추출+번역) (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
-    }
-    
-    // 처리 완료 상태 초기화
-    isProcessing = false;
-    currentProcessingIndex = -1;
-    shouldStop = false;
-    
-    // 처리 후 버튼 상태 업데이트
-    updateQueueDisplay();
+    // 메모리 정리 (짧게)
+    addOutput(`메모리 정리 중...\n`);
+    await sleep(2000);
   }
   
   // 버튼 이벤트  
@@ -727,6 +737,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // 초기 설정
   checkModelStatus(); // 모델 상태 확인
   updateQueueDisplay();
+  
+  // 전역 초기화 함수 호출
+  initApp();
 });
 
 // Electron IPC 이벤트 처리
@@ -1354,9 +1367,11 @@ function updateQueueDisplay() {
     stopBtn.style.display = 'inline-block';
     clearQueueBtn.textContent = d.clearQueueBtn.replace('전체 ', '').replace('대기 ', '');
   } else {
-    runBtn.textContent = typeof d.runBtnCount === 'function' ? d.runBtnCount(fileQueue.length) : d.runBtn;
-    runBtn.disabled = false;
-    runBtn.className = 'btn-success';
+    // 대기 중인 파일만 카운트 (완료되지 않은 파일들)
+    const pendingCount = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
+    runBtn.textContent = typeof d.runBtnCount === 'function' ? d.runBtnCount(pendingCount) : d.runBtn;
+    runBtn.disabled = pendingCount === 0;
+    runBtn.className = pendingCount > 0 ? 'btn-success' : 'btn-secondary';
     stopBtn.style.display = 'none';
     clearQueueBtn.textContent = d.clearQueueBtn;
   }
@@ -1575,7 +1590,7 @@ function initApp() {
   try { initTranslationSelect(); } catch {}
 }
 
-document.addEventListener('DOMContentLoaded', initApp);
+// initApp은 첫 번째 DOMContentLoaded에서 호출됨
 
 async function playCompletionSound() {
   try {
