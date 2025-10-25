@@ -59,6 +59,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('translate-subtitle', data);
   },
 
+  // 레거시 호환 (복수형 메서드명 지원)
+  translateSubtitles: (data) => {
+    return ipcRenderer.invoke('translate-subtitle', data);
+  },
+
   // 오프라인 모델 준비
   warmupOfflineModel: () => {
     return ipcRenderer.invoke('warmup-offline-model');

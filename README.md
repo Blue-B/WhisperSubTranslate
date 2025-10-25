@@ -12,7 +12,7 @@ A fast, local desktop app for turning video into subtitles (SRT) and translating
 
 ## Why use WhisperSubTranslate
 
-All processing runs locally — your video never leaves your machine. No cloud uploads, no accounts, no credit cards. Create accurate SRT offline; add translation only when you want (free MyMemory, or your own DeepL/OpenAI keys).
+Subtitle extraction runs 100% locally — your video never leaves your machine. No cloud uploads, no accounts, no credit cards. Create accurate SRT offline; translation requires internet connection (free MyMemory, or your own DeepL/OpenAI API keys).
 
 ### Value at a glance
 
@@ -50,7 +50,7 @@ The first run will download the selected model into `_models/` when missing.
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate v1.0.0.7z`
+- Download the latest portable archive from Releases: `WhisperSubTranslate v1.2.0.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That’s it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
@@ -81,7 +81,18 @@ Artifacts are emitted to `dist/`.
 | DeepL | Free 500K/month | Yes | Paid tiers available |
 | ChatGPT (OpenAI) | Paid | Yes | Usage‑based billing |
 
-API keys and preferences are saved to `translation-config.json` under `app.getPath('userData')`. The file is ignored by Git and excluded from builds.
+API keys and preferences are saved locally on your PC under `app.getPath('userData')` with basic encoding to prevent casual exposure. The configuration file is never uploaded to Git or included in builds.
+
+## Language support
+
+### UI Languages
+Korean, English, Japanese, Chinese (4 languages)
+
+### Translation Target Languages (12)
+Korean (ko), English (en), Japanese (ja), Chinese (zh), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Russian (ru), **Hungarian (hu)**, **Arabic (ar)**
+
+### Audio Recognition Languages
+Faster-Whisper XXL supports 100+ languages including all major world languages (English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, and many more).
 
 ## Models & performance
 

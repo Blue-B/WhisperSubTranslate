@@ -2,13 +2,20 @@ const axios = require('axios');
 const deepl = require('deepl-node');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const MyMemoryTranslator = require('./myMemoryTranslator');
 
 let electronApp = null;
 try {
   const { app } = require('electron');
   electronApp = app;
-} catch {}
+} catch (error) {
+  console.log('[Translator] Running without Electron app context:', error.message);
+}
+
+// Encryption settings (암호화 설정)
+const ENCRYPTION_KEY = 'whisper-sub-translate-secure-key-2024-32bytes!!';
+const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
 
 function getConfigPath() {
   try {
@@ -16,8 +23,86 @@ function getConfigPath() {
       const base = electronApp.getPath('userData');
       return path.join(base, 'translation-config.json');
     }
-  } catch {}
+  } catch (error) {
+    console.log('[Config] Failed to get user data path:', error.message);
+  }
   return path.join(__dirname, 'translation-config.json');
+}
+
+function getEncryptedConfigPath() {
+  try {
+    if (electronApp && electronApp.getPath) {
+      const base = electronApp.getPath('userData');
+      return path.join(base, 'translation-config-encrypted.json');
+    }
+  } catch (error) {
+    console.log('[Config] Failed to get encrypted config path:', error.message);
+  }
+  return path.join(__dirname, 'translation-config-encrypted.json');
+}
+
+// Encrypt data (데이터 암호화)
+function encryptData(text) {
+  try {
+    const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return iv.toString('hex') + ':' + encrypted;
+  } catch (error) {
+    console.error('[Encryption] Failed:', error.message);
+    return null;
+  }
+}
+
+// Decrypt data (데이터 복호화)
+function decryptData(encryptedText) {
+  try {
+    const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+    const parts = encryptedText.split(':');
+    const iv = Buffer.from(parts[0], 'hex');
+    const encrypted = parts[1];
+    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    console.error('[Decryption] Failed:', error.message);
+    return null;
+  }
+}
+
+// Migrate from plaintext to encrypted storage (평문에서 암호화 저장소로 마이그레이션)
+function migratePlaintextConfig() {
+  const configPath = getConfigPath();
+  const encryptedConfigPath = getEncryptedConfigPath();
+
+  if (fs.existsSync(configPath) && !fs.existsSync(encryptedConfigPath)) {
+    try {
+      console.log('[Migration] Found plaintext config, migrating to encrypted storage...');
+      const plainConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+      // Encrypt and save
+      const encryptedData = encryptData(JSON.stringify(plainConfig));
+      if (encryptedData) {
+        fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
+
+        // Backup plaintext file
+        const backupPath = configPath + '.backup';
+        fs.renameSync(configPath, backupPath);
+
+        console.log('[Migration] Success! Plaintext file backed up to:', backupPath);
+        console.log('[Migration] API keys are now stored securely with encryption');
+        return true;
+      }
+    } catch (error) {
+      console.error('[Migration] Failed to migrate plaintext config:', error.message);
+      return false;
+    }
+  }
+
+  return false;
 }
 
 class EnhancedSubtitleTranslator {
@@ -26,6 +111,7 @@ class EnhancedSubtitleTranslator {
     this.myMemoryTranslator = new MyMemoryTranslator();
     this.apiKeys = this.loadApiKeys();
     this.translationCache = new Map();
+    this.currentFileId = null;       // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
     this.lastRequestTime = 0;
     this.minRequestInterval = 50;    // 100ms → 50ms (2배 빨라짐)
     this.maxRetries = 3;             // 번역 실패 최소화를 위해 재시도 횟수 증가
@@ -49,24 +135,63 @@ class EnhancedSubtitleTranslator {
     this.mainWindow = window;
   }
 
+  // 현재 처리 중인 파일 설정 (파일별 캐시 격리)
+  setCurrentFile(filePath) {
+    if (filePath) {
+      // 파일 경로를 간단한 ID로 변환 (파일명만 사용)
+      const path = require('path');
+      this.currentFileId = path.basename(filePath, path.extname(filePath));
+      console.log(`[Cache] File-specific cache activated for: ${this.currentFileId}`);
+    } else {
+      this.currentFileId = null;
+    }
+  }
+
+  // 파일 처리 완료 시 캐시 정리 (선택적)
+  clearFileCache() {
+    if (this.currentFileId) {
+      console.log(`[Cache] Clearing cache for file: ${this.currentFileId}`);
+      // 현재 파일의 캐시만 삭제
+      const keysToDelete = [];
+      for (const key of this.translationCache.keys()) {
+        if (key.startsWith(`${this.currentFileId}_`)) {
+          keysToDelete.push(key);
+        }
+      }
+      keysToDelete.forEach(key => this.translationCache.delete(key));
+      console.log(`[Cache] Removed ${keysToDelete.length} cached translations for ${this.currentFileId}`);
+    }
+    this.currentFileId = null;
+  }
+
   loadApiKeys() {
-    const configPath = getConfigPath();
+    // Attempt migration from plaintext on first run (첫 실행 시 평문 마이그레이션 시도)
+    migratePlaintextConfig();
+
+    const encryptedConfigPath = getEncryptedConfigPath();
+
     try {
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        return {
-          deepl: config.deepl || '',
-          openai: config.openai || '',
-          deepseek: config.deepseek || '',
-          preferredService: config.preferredService || 'mymemory',
-          enableCache: config.enableCache !== false,
-          batchTranslation: config.batchTranslation !== false,
-          maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency()
-        };
+      if (fs.existsSync(encryptedConfigPath)) {
+        const encryptedFile = JSON.parse(fs.readFileSync(encryptedConfigPath, 'utf8'));
+        const decrypted = decryptData(encryptedFile.data);
+
+        if (decrypted) {
+          const config = JSON.parse(decrypted);
+          return {
+            deepl: config.deepl || '',
+            openai: config.openai || '',
+            deepseek: config.deepseek || '',
+            preferredService: config.preferredService || 'mymemory',
+            enableCache: config.enableCache !== false,
+            batchTranslation: config.batchTranslation !== false,
+            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency()
+          };
+        }
       }
     } catch (error) {
-      this.logError('Failed to load API key config (API 키 설정 파일 로드 실패)', error);
+      console.error('[Config] Failed to load encrypted config:', error.message);
     }
+
     return this.getDefaultConfig();
   }
 
@@ -121,25 +246,41 @@ class EnhancedSubtitleTranslator {
   }
 
   saveApiKeys(keys) {
-    const configPath = getConfigPath();
+    const encryptedConfigPath = getEncryptedConfigPath();
+
     try {
+      // Load existing config
       const existingConfig = this.loadApiKeys();
       const newConfig = { ...existingConfig, ...keys };
-      fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
-      this.apiKeys = newConfig;
-      if (newConfig.deepl) {
-        this.deeplTranslator = new deepl.Translator(newConfig.deepl);
+
+      // Encrypt and save
+      const encryptedData = encryptData(JSON.stringify(newConfig));
+      if (encryptedData) {
+        fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
+
+        // Reload keys
+        this.apiKeys = this.loadApiKeys();
+
+        if (this.apiKeys.deepl) {
+          this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
+        }
+
+        console.log('[Config] API keys saved securely with encryption');
+        return true;
+      } else {
+        throw new Error('Encryption failed');
       }
-      return true;
     } catch (error) {
-      this.logError('Failed to save API key config (API 키 저장 실패)', error);
+      console.error('[Config] Failed to save API keys:', error.message);
       return false;
     }
   }
 
-  // Cache system (캐시 시스템)
+  // Cache system with per-file isolation (파일별 캐시 격리 시스템)
   getCacheKey(text, method, targetLang) {
-    return `${method}_${targetLang}_${this.hashString(text)}`;
+    // 파일별 캐시 격리: 파일 ID를 캐시 키에 포함
+    const filePrefix = this.currentFileId ? `${this.currentFileId}_` : '';
+    return `${filePrefix}${method}_${targetLang}_${this.hashString(text)}`;
   }
 
   hashString(str) {
@@ -155,18 +296,33 @@ class EnhancedSubtitleTranslator {
   getCachedTranslation(text, method, targetLang) {
     if (!this.apiKeys.enableCache) return null;
     const key = this.getCacheKey(text, method, targetLang);
-    return this.translationCache.get(key);
+    const cached = this.translationCache.get(key);
+
+    // LRU: Move to end (most recently used) (최근 사용으로 갱신)
+    if (cached !== undefined) {
+      this.translationCache.delete(key);
+      this.translationCache.set(key, cached);
+    }
+
+    return cached;
   }
 
   setCachedTranslation(text, method, targetLang, translation) {
     if (!this.apiKeys.enableCache) return;
     const key = this.getCacheKey(text, method, targetLang);
+
+    // LRU: Remove if exists, then add to end (최신으로 갱신)
+    if (this.translationCache.has(key)) {
+      this.translationCache.delete(key);
+    }
+
     this.translationCache.set(key, translation);
-    
-    // Cache size limit (1000 items) (캐시 크기 제한 1000개)
+
+    // LRU Cache size limit (1000 items) - Remove least recently used (캐시 크기 제한 1000개 - 가장 오래 사용 안 한 것 삭제)
     if (this.translationCache.size > 1000) {
       const firstKey = this.translationCache.keys().next().value;
       this.translationCache.delete(firstKey);
+      console.log('[Cache] LRU eviction - removed least recently used item');
     }
   }
 
@@ -475,6 +631,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       it: 'Italian (Italiano)',
       pt: 'Portuguese (Português)',
       ru: 'Russian (Русский)',
+      hu: 'Hungarian (Magyar)',
       ar: 'Arabic (العربية)',
       hi: 'Hindi (हिन्दी)',
       th: 'Thai (ไทย)',
@@ -625,51 +782,94 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     }
   }
 
+  // 비대사 부분 감지 (음악, 효과음, 빈 대사 등)
+  isNonDialogue(text) {
+    const trimmed = text.trim();
+
+    // 빈 문자열
+    if (!trimmed) return true;
+
+    // 음악 기호만 있는 경우 (♪, ♫, ♬, ♩)
+    if (/^[♪♫♬♩\s]+$/.test(trimmed)) return true;
+
+    // 효과음/설명 대괄호 [...]만 있는 경우
+    if (/^\[.*\]$/.test(trimmed)) return true;
+
+    // 괄호만 있는 경우 (...)
+    if (/^\(.*\)$/.test(trimmed)) return true;
+
+    // 하이픈/대시만 있는 경우 (- - -, ---, etc)
+    if (/^[-–—\s]+$/.test(trimmed)) return true;
+
+    return false;
+  }
+
   // 향상된 SRT 내용 번역 (배치 처리 + 진행률)
   async translateSRTContent(srtContent, method = 'mymemory', targetLang = null, progressCallback = null, sourceLang = null) {
     const lines = srtContent.split('\n');
     const translatedLines = [];
     const textsToTranslate = [];
     const textIndices = [];
-    
+
     let i = 0;
 
     // 1단계: 번역할 텍스트 수집
     while (i < lines.length) {
-      const line = lines[i].trim();
-      
-      if (!line) {
-        translatedLines.push('');
-        i++;
-        continue;
-      }
+      const line = lines[i];
+      const trimmed = line.trim();
 
-      if (/^\d+$/.test(line)) {
+      // 빈 줄 (원본 유지 - 공백 포함)
+      if (!trimmed) {
         translatedLines.push(line);
         i++;
         continue;
       }
 
-      if (line.includes('-->')) {
+      // 자막 번호 (숫자만 있는 줄)
+      if (/^\d+$/.test(trimmed)) {
         translatedLines.push(line);
         i++;
         continue;
       }
 
-      // 자막 텍스트 수집
-      let subtitleText = line;
+      // 타임코드 (00:00:00,000 --> 00:00:00,000)
+      if (trimmed.includes('-->')) {
+        translatedLines.push(line);
+        i++;
+        continue;
+      }
+
+      // 자막 텍스트 수집 (여러 줄 가능)
+      let subtitleText = trimmed;
       let j = i + 1;
-      
-      while (j < lines.length && lines[j].trim() && 
-             !lines[j].includes('-->') && 
-             !/^\d+$/.test(lines[j].trim())) {
-        subtitleText += '\n' + lines[j].trim();
+
+      while (j < lines.length) {
+        const nextLine = lines[j].trim();
+
+        // 빈 줄이면 자막 끝
+        if (!nextLine) break;
+
+        // 타임코드면 자막 끝
+        if (nextLine.includes('-->')) break;
+
+        // 숫자만 있으면 다음 자막 번호이므로 끝
+        if (/^\d+$/.test(nextLine)) break;
+
+        // 자막 텍스트 계속 수집
+        subtitleText += '\n' + nextLine;
         j++;
       }
 
-      textsToTranslate.push(subtitleText);
-      textIndices.push(translatedLines.length);
-      translatedLines.push(null); // 나중에 채울 자리 예약
+      // 비대사 부분은 번역하지 않고 원본 유지
+      if (this.isNonDialogue(subtitleText)) {
+        translatedLines.push(subtitleText);
+        console.log('[Non-Dialogue] Skipping translation:', subtitleText.substring(0, 30) + '...');
+      } else {
+        // 번역 대상에 추가
+        textsToTranslate.push(subtitleText);
+        textIndices.push(translatedLines.length);
+        translatedLines.push(null); // 나중에 채울 자리 예약
+      }
 
       i = j;
     }

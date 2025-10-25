@@ -82,7 +82,9 @@ class MyMemoryTranslator {
             'de': 'de',
             'it': 'it',
             'pt': 'pt',
-            'ru': 'ru'
+            'ru': 'ru',
+            'hu': 'hu',
+            'ar': 'ar'
         };
         return langMap[lang] || lang;
     }

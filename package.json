@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron --expose-gc .",
@@ -29,12 +29,23 @@
       "nya.wav"
     ],
     "extraResources": [
-      { "from": "faster-whisper-xxl.exe", "to": "faster-whisper-xxl.exe" },
-      { "from": "_xxl_data", "to": "_xxl_data" },
-      { "from": "_models", "to": "_models" }
+      {
+        "from": "faster-whisper-xxl.exe",
+        "to": "faster-whisper-xxl.exe"
+      },
+      {
+        "from": "_xxl_data",
+        "to": "_xxl_data"
+      },
+      {
+        "from": "_models",
+        "to": "_models"
+      }
     ],
     "win": {
-      "target": ["dir"]
+      "target": [
+        "dir"
+      ]
     },
     "nsis": {
       "oneClick": false,

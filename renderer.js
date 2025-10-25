@@ -12,6 +12,11 @@ let indeterminateTimer = null; // pseudo progress timer (의사 진행률 타이
 let currentPhase = null; // 'extract' | 'translate' | null
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 
+// Utility: sleep function for delays (지연용 sleep 함수)
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ETA state (ETA 계산 상태)
 let etaStartTime = null;
 let etaLastUpdate = null;
@@ -116,51 +121,54 @@ function updateQueueDisplay() {
   if (fileQueue.length === 0) {
     queueContainer.style.display = 'none';
     runBtn.disabled = true;
-    runBtn.textContent = '자막 추출 시작';
+    runBtn.textContent = I18N[currentUiLang].runBtn;
     pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
     return;
   }
-  
+
   queueContainer.style.display = 'block';
-  
+
   if (isProcessing) {
-    runBtn.textContent = '처리 중...';  
+    runBtn.textContent = I18N[currentUiLang].runBtnProcessing;
     runBtn.disabled = true;
     runBtn.className = 'btn-secondary';
     stopBtn.style.display = 'inline-block';
-    clearQueueBtn.textContent = '대기 파일 삭제';
+    clearQueueBtn.textContent = I18N[currentUiLang].clearQueueWaiting;
   } else {
     // 대기 중인 파일만 카운트 (완료되지 않은 파일들)
     const pendingCount = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
-    runBtn.textContent = `${pendingCount}개 파일 처리 시작`;
+    runBtn.textContent = I18N[currentUiLang].runBtnCount(pendingCount);
     runBtn.disabled = pendingCount === 0;
     runBtn.className = pendingCount > 0 ? 'btn-success' : 'btn-secondary';
     stopBtn.style.display = 'none';
-    clearQueueBtn.textContent = '대기열 전체 삭제';
+    clearQueueBtn.textContent = I18N[currentUiLang].clearQueueAll;
   }
   
   queueList.innerHTML = fileQueue.map((file, index) => {
     const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
     const isValid = isVideoFile(file.path);
-    
-    let statusText = '대기 중';
+
+    let statusText = I18N[currentUiLang].qWaiting;
     let itemClass = 'queue-item';
-    
+
     if (file.status === 'completed') {
-      statusText = '완료';
+      statusText = I18N[currentUiLang].qCompleted;
       itemClass = 'queue-item completed';
     } else if (file.status === 'processing') {
-      statusText = '처리 중';
+      statusText = I18N[currentUiLang].qProcessing;
+      itemClass = 'queue-item processing';
+    } else if (file.status === 'translating') {
+      statusText = I18N[currentUiLang].qTranslating;
       itemClass = 'queue-item processing';
     } else if (file.status === 'stopped') {
-      statusText = '중지됨';
+      statusText = I18N[currentUiLang].qStopped;
       itemClass = 'queue-item error';
     } else if (file.status === 'error') {
-      statusText = '오류';
+      statusText = I18N[currentUiLang].qError;
       itemClass = 'queue-item error';
     } else if (!isValid) {
-      statusText = '지원되지 않는 형식';
+      statusText = I18N[currentUiLang].qUnsupported;
       itemClass = 'queue-item error';
     }
     
@@ -178,9 +186,9 @@ function updateQueueDisplay() {
           <div class="file-status">${d.statusLabel}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
         </div>
         <div>
-          ${file.status === 'completed' ? 
-            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">열기</button>` : 
-            file.status === 'processing' ?
+          ${file.status === 'completed' ?
+            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">열기</button>` :
+            file.status === 'processing' || file.status === 'translating' ?
             `<span style="color: #ffc107; font-size: 12px; font-weight: 600;">처리 중</span>` :
             (file.status === 'error' || file.status === 'stopped') ?
             `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">제거</button>` :
@@ -332,20 +340,20 @@ function removeFromQueue(index) {
     const file = fileQueue[index];
     
     // cannot remove item currently processing (처리 중 파일 삭제 불가)
-    if (file.status === 'processing') {
-      addOutput('현재 처리 중인 파일은 삭제할 수 없습니다.\n');
+    if (file.status === 'processing' || file.status === 'translating') {
+      addOutput(`${I18N[currentUiLang].cannotRemoveProcessing}\n`);
       return;
     }
-    
+
     const removedFile = fileQueue.splice(index, 1)[0];
     const fileName = removedFile.path.split('\\').pop() || removedFile.path.split('/').pop();
-    
+
     // adjust current index (현재 처리 인덱스 조정)
     if (currentProcessingIndex > index) {
       currentProcessingIndex--;
     }
-    
-    addOutput(`대기열에서 제거됨: ${fileName}\n`);
+
+    addOutput(`${I18N[currentUiLang].removedFromQueue(fileName)}\n`);
     updateQueueDisplay();
   }
 }
@@ -356,14 +364,14 @@ function clearQueue() {
     fileQueue = [];
     currentProcessingIndex = -1;
     updateQueueDisplay();
-    addOutput('대기열이 모두 삭제되었습니다.\n');
+    addOutput(`${I18N[currentUiLang].queueCleared}\n`);
   } else {
     // when busy: remove only pending items (처리 중엔 대기 항목만 삭제)
     const pendingFiles = fileQueue.filter(file => file.status === 'pending');
     fileQueue = fileQueue.filter(file => file.status !== 'pending');
-    
+
     updateQueueDisplay();
-    addOutput(`대기 중인 ${pendingFiles.length}개 파일이 삭제되었습니다.\n`);
+    addOutput(`${I18N[currentUiLang].pendingFilesRemoved(pendingFiles.length)}\n`);
   }
 }
 
@@ -372,7 +380,7 @@ function stopProcessing() {
   if (isProcessing) {
     shouldStop = true;
     isProcessing = false;
-    addOutput('\n처리 중지 요청됨. 현재 파일 완료 후 중지됩니다.\n');
+    addOutput(`\n${I18N[currentUiLang].stopRequested}\n`);
     
     // force-stop current work (현재 진행 작업 강제 중지)
     window.electronAPI.stopCurrentProcess();
@@ -397,6 +405,264 @@ async function openOutputFolder() {
     const firstFile = fileQueue.find(f => f.status === 'completed') || fileQueue[0];
     const folderPath = firstFile.path.substring(0, firstFile.path.lastIndexOf('\\'));
     window.electronAPI.openFolder(folderPath);
+  }
+}
+
+// 처리 계속 함수 (일시정지 재개 시에도 사용) - 전역 함수로 선언
+async function continueProcessing() {
+  console.log('[continueProcessing] Called, isProcessing:', isProcessing);
+  console.log('[continueProcessing] Queue status:', fileQueue.map(f => ({ path: f.path.split('\\').pop(), status: f.status })));
+
+  const model = document.getElementById('modelSelect').value;
+  const language = document.getElementById('languageSelect').value;
+  const device = document.getElementById('deviceSelect').value;
+
+  // 대기 중인 파일 중 첫 번째만 처리 (한 번에 하나씩)
+  shouldStop = false;
+
+  // 처리할 파일 찾기
+  let fileToProcess = null;
+  let fileIndex = -1;
+
+  console.log('[continueProcessing] Searching for files, queue length:', fileQueue.length);
+
+  for (let i = 0; i < fileQueue.length; i++) {
+    const file = fileQueue[i];
+    console.log(`[continueProcessing] File ${i}: status=${file.status}, path=${file.path.split('\\').pop()}`);
+
+    if (file.status !== 'completed' &&
+        file.status !== 'error' &&
+        file.status !== 'stopped' &&
+        file.status !== 'translating' &&
+        file.status !== 'processing') {
+      fileToProcess = file;
+      fileIndex = i;
+      console.log(`[continueProcessing] Found file to process at index ${i}`);
+      break;
+    }
+  }
+
+  console.log('[continueProcessing] Search complete, file found:', fileToProcess ? 'yes' : 'no');
+
+  // 처리할 파일이 없으면 완료
+  if (!fileToProcess) {
+    isProcessing = false;
+    shouldStop = false;
+    currentProcessingIndex = -1;
+    updateQueueDisplay();
+
+    const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+    const errorCount = fileQueue.filter(f => f.status === 'error').length;
+    const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+
+    setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
+    showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+    try {
+      playCompletionSound();
+    } catch (error) {
+      console.log('[Audio] Failed to play completion sound:', error.message);
+    }
+
+    addOutput(`\n전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
+    return;
+  }
+
+  // 단일 파일 처리
+  const i = fileIndex;
+  const file = fileToProcess;
+
+    // 현재 시작 시점의 번역 사용 여부를 캡쳐 (중간 변경과 무관하게 처리 일관성 확보)
+    const methodAtStart = (document.getElementById('translationSelect')?.value || 'none');
+
+    if (!isVideoFile(file.path)) {
+      file.status = 'error';
+      updateQueueDisplay();
+      addOutput(`${I18N[currentUiLang].unsupportedFormat(file.path.split('\\').pop())}\n`);
+      return;
+    }
+
+    // 중지 요청 확인
+    if (shouldStop) {
+      addOutput(`${I18N[currentUiLang].userStopped}\n`);
+      return;
+    }
+
+    console.log('[continueProcessing] 파일 처리 시작, index:', i, 'fileName:', file.path.split('\\').pop());
+    currentProcessingIndex = i;
+    file.status = 'processing';
+    file.progress = 0;
+    updateQueueDisplay();
+
+    // 파일별 처리 시작 시 프로그래스바 초기화
+    resetProgress('prepare');
+
+    const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
+    addOutput(`\n${I18N[currentUiLang].processingFile(i + 1, fileQueue.length, fileName)}\n`);
+
+    try {
+      // 모델 다운로드가 필요한 경우 먼저 다운로드
+      if (!availableModels[model]) {
+        addOutput(`${I18N[currentUiLang].downloadingModel}: ${model}\n`);
+        await window.electronAPI.downloadModel(model);
+        availableModels[model] = true;
+        updateModelSelect();
+      }
+
+      // 자막 추출 단계 의사 진행률 시작(최대 90%)
+      startIndeterminate(90, 'extract');
+
+      console.log('[continueProcessing] extractSubtitles 호출 시작');
+      const result = await window.electronAPI.extractSubtitles({
+        filePath: file.path,
+        model: model,
+        language: language,
+        device: device
+      });
+
+      // 추출 단계 종료 → 의사 진행률 중지
+      stopIndeterminate();
+
+      if (result.userStopped) {
+        file.status = 'stopped';
+        addOutput(`[${i + 1}/${fileQueue.length}] 중지됨: ${fileName}\n`);
+      } else if (!result.success) {
+        file.status = 'error';
+        addOutput(`[${i + 1}/${fileQueue.length}] 실패: ${fileName} - ${result.error || '알 수 없는 오류'}\n`);
+      } else {
+        addOutput(`${I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName)}\n`);
+
+        // 번역 처리
+        const translationMethod = methodAtStart;
+        console.log('[continueProcessing] Translation method:', translationMethod);
+        let translationDelegated = false;
+        if (translationMethod && translationMethod !== 'none') {
+          // 번역이 있는 경우 상태를 'translating'으로 설정 (completed 아님!)
+          file.status = 'translating';
+          file.progress = 90;
+          translationSessionActive = true;
+          try {
+            // 번역 방식에 따른 안내 메시지
+            let translationInfo = '';
+            switch (translationMethod) {
+              case 'mymemory':
+                translationInfo = 'MyMemory (무료)';
+                break;
+              case 'deepl':
+                translationInfo = 'DeepL (API 키 확인 중...)';
+                break;
+              case 'chatgpt':
+                translationInfo = 'ChatGPT (API 키 확인 중...)';
+                break;
+              case 'offline':
+                translationInfo = 'Offline (오프라인 번역)';
+                break;
+              default:
+                translationInfo = translationMethod;
+            }
+
+            addOutput(`번역 시작 (${translationInfo})...\n`);
+
+            const targetLang = (document.getElementById('targetLangSelect')?.value || 'ko');
+            const srtPathFromResult =
+              (typeof result?.srtFile === 'string' && result.srtFile) ||
+              (Array.isArray(result?.results) && result.results.length > 0 ? result.results[0]?.srtPath : null);
+            if (!srtPathFromResult || typeof srtPathFromResult !== 'string') {
+              throw new Error('SRT file path missing after extraction');
+            }
+
+            const translationResult = await window.electronAPI.translateSubtitle({
+              filePath: srtPathFromResult,
+              method: translationMethod,
+              targetLang: targetLang
+            });
+            translationDelegated = true;
+
+            // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
+
+            if (translationResult.success) {
+              addOutput(`✅ 번역 완료: ${fileName}_${targetLang}.srt\n`);
+            } else {
+              addOutput(`❌ 번역 실패: ${translationResult.error}\n`);
+            }
+          } catch (error) {
+            console.error('[continueProcessing] Translation error:', error);
+            translationSessionActive = false;
+            file.status = 'error';
+            file.progress = 0;
+            addOutput(`${I18N[currentUiLang].translationError}: ${error.message}\n`);
+            setProgressTarget(Math.max(lastProgress, 95), I18N[currentUiLang].translationFailed + (error.message || ''));
+            updateQueueDisplay();
+          }
+
+          // 번역이 있는 경우 onTranslationProgress 이벤트에서 자동 처리 담당
+          // 여기서는 종료하고 이벤트 핸들러에 맡김
+          if (translationDelegated) {
+            return;
+          }
+        } else {
+          // 번역이 없는 경우만 여기서 completed 처리
+          console.log('[continueProcessing] No translation, marking as completed');
+          file.status = 'completed';
+          file.progress = 100;
+        }
+      }
+
+
+
+    } catch (error) {
+      console.error('[continueProcessing] Processing error:', error);
+      file.status = 'error';
+      file.progress = 0;
+      addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].processingError}: ${fileName} - ${error.message}\n`);
+      setProgressTarget(0, I18N[currentUiLang].processingError);
+      updateQueueDisplay();
+    } finally {
+      // 단계 전환 누수 방지
+      stopIndeterminate();
+    }
+
+  updateQueueDisplay();
+
+  // 단일 파일 처리 완료 후 잠시 대기 (GPU 메모리 정리 시간 확보)
+  addOutput(`${I18N[currentUiLang].cleaningMemory}\n`);
+  await sleep(2000);
+
+  // 번역 없이 자막 추출만 한 경우 즉시 완료 처리
+  setProgressTarget(100, I18N[currentUiLang].fileProcessed(file.path.split('\\').pop()));
+
+  // 자동 처리: 다음 파일 확인 및 처리 (재귀 호출)
+  const remainingFiles = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
+
+  console.log('[continueProcessing] Auto-process check:', {
+    remainingFiles,
+    shouldStop,
+    fileQueue: fileQueue.map(f => ({ path: f.path.split('\\').pop(), status: f.status }))
+  });
+
+  if (remainingFiles > 0 && !shouldStop) {
+    // 다음 파일이 있으면 자동으로 계속 처리
+    addOutput(`${I18N[currentUiLang].processingNext(remainingFiles)}\n\n`);
+    await continueProcessing(); // 재귀 호출로 다음 파일 처리
+  } else {
+    // 모든 파일 처리 완료
+    isProcessing = false;
+    shouldStop = false;
+    currentProcessingIndex = -1;
+    updateQueueDisplay();
+
+    const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+    const errorCount = fileQueue.filter(f => f.status === 'error').length;
+    const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+
+    setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
+    showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+    try {
+      playCompletionSound();
+    } catch (error) {
+      console.log('[Audio] Failed to play completion sound:', error.message);
+    }
+
+    addOutput(`\n${I18N[currentUiLang].allTasksComplete(completedCount, errorCount, stoppedCount)}\n`);
   }
 }
 
@@ -507,201 +773,6 @@ document.addEventListener('DOMContentLoaded', () => {
     await continueProcessing();
   }
   
-  // 처리 계속 함수 (일시정지 재개 시에도 사용)
-  async function continueProcessing() {
-    const model = document.getElementById('modelSelect').value;
-    const language = document.getElementById('languageSelect').value;
-    const device = document.getElementById('deviceSelect').value;
-    
-    // 대기 중인 파일 중 첫 번째만 처리 (한 번에 하나씩)
-    shouldStop = false;
-    
-    // 처리할 파일 찾기
-    let fileToProcess = null;
-    let fileIndex = -1;
-    
-    for (let i = 0; i < fileQueue.length; i++) {
-      const file = fileQueue[i];
-      if (file.status !== 'completed' && file.status !== 'error' && file.status !== 'stopped') {
-        fileToProcess = file;
-        fileIndex = i;
-        break;
-      }
-    }
-    
-    // 처리할 파일이 없으면 완료
-    if (!fileToProcess) {
-      isProcessing = false;
-      shouldStop = false;
-      currentProcessingIndex = -1;
-      updateQueueDisplay();
-      
-      const completedCount = fileQueue.filter(f => f.status === 'completed').length;
-      const errorCount = fileQueue.filter(f => f.status === 'error').length;
-      const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
-      
-      setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
-      showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
-      try { playCompletionSound(); } catch {}
-      
-      addOutput(`\n🎉 전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
-      return;
-    }
-    
-    // 단일 파일 처리
-    const i = fileIndex;
-    const file = fileToProcess;
-      
-      // 현재 시작 시점의 번역 사용 여부를 캡쳐 (중간 변경과 무관하게 처리 일관성 확보)
-      const methodAtStart = (document.getElementById('translationSelect')?.value || 'none');
-      
-      if (!isVideoFile(file.path)) {
-        file.status = 'error';
-        updateQueueDisplay();
-        addOutput(`지원되지 않는 파일 형식: ${file.path.split('\\').pop()}\n`);
-        return;
-      }
-      
-      // 중지 요청 확인
-      if (shouldStop) {
-        addOutput('사용자가 처리를 중지했습니다.\n');
-        return;
-      }
-      
-      currentProcessingIndex = i;
-      file.status = 'processing';
-      file.progress = 0;
-      updateQueueDisplay();
-
-      // 파일별 처리 시작 시 프로그래스바 초기화
-      resetProgress('prepare');
-      
-      const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
-      addOutput(`\n[${i + 1}/${fileQueue.length}] 처리 중: ${fileName}\n`);
-      
-      try {
-        // 모델 다운로드가 필요한 경우 먼저 다운로드
-        if (!availableModels[model]) {
-          addOutput(`${I18N[currentUiLang].downloadingModel}: ${model}\n`);
-          await window.electronAPI.downloadModel(model);
-          availableModels[model] = true;
-          updateModelSelect();
-        }
-        
-        // 자막 추출 단계 의사 진행률 시작(최대 90%)
-        startIndeterminate(90, 'extract');
-
-        const result = await window.electronAPI.extractSubtitles({
-          filePath: file.path,
-          model: model,
-          language: language,
-          device: device
-        });
-        
-        // 추출 단계 종료 → 의사 진행률 중지
-        stopIndeterminate();
-
-        if (result.userStopped) {
-          file.status = 'stopped';
-          addOutput(`[${i + 1}/${fileQueue.length}] 중지됨: ${fileName}\n`);
-        } else if (!result.success) {
-          file.status = 'error';
-          addOutput(`[${i + 1}/${fileQueue.length}] 실패: ${fileName} - ${result.error || '알 수 없는 오류'}\n`);
-        } else {
-          file.status = 'completed';
-          file.progress = 100;
-          addOutput(`[${i + 1}/${fileQueue.length}] 자막 추출 완료: ${fileName}\n`);
-          
-          // 번역 처리
-          const translationMethod = methodAtStart;
-          if (translationMethod && translationMethod !== 'none') {
-            translationSessionActive = true;
-            try {
-              // 번역 방식에 따른 안내 메시지
-              let translationInfo = '';
-              switch (translationMethod) {
-                case 'mymemory':
-                  translationInfo = 'MyMemory (무료)';
-                  break;
-                case 'deepl':
-                  translationInfo = 'DeepL (API 키 확인 중...)';
-                  break;
-                case 'chatgpt':
-                  translationInfo = 'ChatGPT (API 키 확인 중...)';
-                  break;
-              }
-              
-              addOutput(`🌐 번역 시작 [${translationInfo}]: ${fileName}\n`);
-              const srtPath = file.path.replace(/\.[^/.]+$/, '.srt');
-              const targetLang = (document.getElementById('targetLanguageSelect')?.value || 'ko').trim();
-              const sourceLang = (document.getElementById('languageSelect')?.value || 'auto').trim();
-
-              // 번역 단계 시작: 우선 표시를 소폭 끌어올림, 이후 translation-progress로 실시간 갱신
-              setProgressTarget(Math.max(lastProgress, 91), I18N[currentUiLang].progressTranslating);
- 
-              const translationResult = await window.electronAPI.translateSubtitle({
-                filePath: srtPath,
-                method: translationMethod,
-                targetLang,
-                sourceLang
-              });
-              
-              // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
- 
-              if (translationResult.success) {
-                addOutput(`✅ 번역 완료: ${fileName}_${targetLang}.srt (작업 마무리 중...)\n`);
-              } else {
-                addOutput(`번역 실패: ${translationResult.error}\n`);
-              }
-            } catch (error) {
-              addOutput(`번역 오류: ${error.message}\n`);
-            }
-          }
-        }
-        
-
-        
-      } catch (error) {
-        file.status = 'error';
-        addOutput(`[${i + 1}/${fileQueue.length}] 오류: ${fileName} - ${error.message}\n`);
-      } finally {
-        // 단계 전환 누수 방지
-        stopIndeterminate();
-      }
-      
-    updateQueueDisplay();
-    
-    // 단일 파일 처리 완료 후 상태 리셋
-    isProcessing = false;
-    shouldStop = false;
-    currentProcessingIndex = -1;
-    updateQueueDisplay();
-    
-    // 번역 없이 자막 추출만 한 경우 즉시 완료 처리
-    if (methodAtStart === 'none') {
-      setProgressTarget(100, `파일 처리 완료: ${file.path.split('\\').pop()}`);
-      
-      // 대기 중인 파일이 더 있는지 확인
-      const remainingFiles = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
-      if (remainingFiles > 0) {
-        addOutput(`✅ 파일 완료! 대기 중인 파일 ${remainingFiles}개가 있습니다. 처리 시작 버튼을 눌러주세요.\n`);
-      } else {
-        const completedCount = fileQueue.filter(f => f.status === 'completed').length;
-        const errorCount = fileQueue.filter(f => f.status === 'error').length;
-        const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
-        
-        setProgressTarget(100, I18N[currentUiLang].allDoneNoTr);
-        showToast(I18N[currentUiLang].allDoneNoTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
-        try { playCompletionSound(); } catch {}
-        
-        addOutput(`\n🎉 전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
-      }
-    }
-    
-    // 메모리 정리 (짧게)
-    addOutput(`메모리 정리 중...\n`);
-    await sleep(2000);
-  }
   
   // 버튼 이벤트  
   runBtn.onclick = async () => {
@@ -889,10 +960,31 @@ const I18N = {
     labelDevice: '처리 장치 선택',
     labelTranslation: '번역 설정',
     runBtn: '자막 추출 시작',
+    runBtnProcessing: '처리 중...',
+    clearQueueWaiting: '대기 파일 삭제',
+    clearQueueAll: '대기열 전체 삭제',
     apiBtn: 'API 키 설정',
     selectFileBtn: '파일 선택',
     stopBtn: '중지',
     logTitle: '처리 로그',
+    cannotRemoveProcessing: '현재 처리 중인 파일은 삭제할 수 없습니다.',
+    removedFromQueue: (name) => `대기열에서 제거됨: ${name}`,
+    queueCleared: '대기열이 모두 삭제되었습니다.',
+    pendingFilesRemoved: (n) => `대기 중인 ${n}개 파일이 삭제되었습니다.`,
+    stopRequested: '처리 중지 요청됨. 현재 파일 완료 후 중지됩니다.',
+    userStopped: '사용자가 처리를 중지했습니다.',
+    unsupportedFormat: (name) => `지원되지 않는 파일 형식: ${name}`,
+    processingFile: (idx, total, name) => `[${idx}/${total}] 처리 중: ${name}`,
+    extractionComplete: (idx, total, name) => `[${idx}/${total}] 자막 추출 완료: ${name}`,
+    cleaningMemory: '메모리 정리 중...',
+    fileProcessed: (name) => `파일 처리 완료: ${name}`,
+    allTasksComplete: (success, error, stopped) => `🎉 전체 작업 완료! (성공: ${success}개, 실패: ${error}개, 중지: ${stopped}개)`,
+    translationProgress: '번역 진행: ',
+    translationStarting: '번역 시작 중...',
+    translationTranslatingProgress: (current, total) => `번역 중... ${current}/${total}`,
+    translationTranslating: '번역 중...',
+    translationCompleted: '✅ 번역 완료!',
+    translationFailed: '번역 실패: ',
     // 동적 텍스트
     modelAvailableGroup: '✅ 사용 가능한 모델',
     modelNeedDownloadGroup: '📥 다운로드 필요 (자동 다운로드됨)',
@@ -912,12 +1004,14 @@ const I18N = {
     trDeepL: 'DeepL (월 50만글자, API키 필요)',
     trChatGPT: 'ChatGPT (사용자 API 키 필요)',
     // 큐/버튼/상태
-    qWaiting: '대기 중', qProcessing: '처리 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qUnsupported: '지원되지 않는 형식',
+    qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qUnsupported: '지원되지 않는 형식',
     btnOpen: '열기', btnRemove: '제거',
     // 진행 텍스트
     progressReady: '준비 중...', progressExtracting: '자막 추출 중...', progressTranslating: '번역 중...', progressPreparing: '자막 추출 준비 중...', progressCleaning: '메모리 정리 중...',
     // 완료 텍스트
     allDoneNoTr: '모든 파일 처리 완료!', allDoneWithTr: '모든 파일(추출+번역) 처리 완료! 창을 닫아도 됩니다.',
+    fileCompleteRemaining: (n) => `파일 완료! 대기 중인 파일 ${n}개가 있습니다. 처리 시작 버튼을 눌러주세요.`,
+    processingNext: (n) => `다음 파일 처리 중... (남은 파일: ${n}개)`,
     statusLabel: '상태',
     runBtnCount: (n) => `${n}개 파일 처리 시작`,
     toastOpenFolder: '폴더 열기',
@@ -951,10 +1045,31 @@ const I18N = {
     labelDevice: 'Processing Device',
     labelTranslation: 'Translation',
     runBtn: 'Start Extraction',
+    runBtnProcessing: 'Processing...',
+    clearQueueWaiting: 'Remove waiting files',
+    clearQueueAll: 'Clear all queue',
     apiBtn: 'API Keys',
     selectFileBtn: 'Select Files',
     stopBtn: 'Stop',
     logTitle: 'Logs',
+    cannotRemoveProcessing: 'Cannot remove file currently being processed.',
+    removedFromQueue: (name) => `Removed from queue: ${name}`,
+    queueCleared: 'Queue cleared.',
+    pendingFilesRemoved: (n) => `${n} pending file(s) removed.`,
+    stopRequested: 'Stop requested. Will stop after current file completes.',
+    userStopped: 'User stopped processing.',
+    unsupportedFormat: (name) => `Unsupported file format: ${name}`,
+    processingFile: (idx, total, name) => `[${idx}/${total}] Processing: ${name}`,
+    extractionComplete: (idx, total, name) => `[${idx}/${total}] Extraction complete: ${name}`,
+    cleaningMemory: 'Cleaning memory...',
+    fileProcessed: (name) => `File processed: ${name}`,
+    allTasksComplete: (success, error, stopped) => `🎉 All tasks complete! (Success: ${success}, Failed: ${error}, Stopped: ${stopped})`,
+    translationProgress: 'Translation progress: ',
+    translationStarting: 'Starting translation...',
+    translationTranslatingProgress: (current, total) => `Translating... ${current}/${total}`,
+    translationTranslating: 'Translating...',
+    translationCompleted: '✅ Translation completed!',
+    translationFailed: 'Translation failed: ',
     modelAvailableGroup: '✅ Available Models',
     modelNeedDownloadGroup: '📥 Download Required (auto-download)',
     modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
@@ -971,10 +1086,12 @@ const I18N = {
     trMyMemory: 'MyMemory (Free ~50K/day)',
     trDeepL: 'DeepL (Free 500K/month with API key)',
     trChatGPT: 'ChatGPT (Requires API key)',
-    qWaiting: 'Waiting', qProcessing: 'Processing', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qUnsupported: 'Unsupported format',
+    qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qUnsupported: 'Unsupported format',
     btnOpen: 'Open', btnRemove: 'Remove',
     progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...',
     allDoneNoTr: 'All files completed!', allDoneWithTr: 'All files (extract+translate) completed! You may close the window.',
+    fileCompleteRemaining: (n) => `File completed! ${n} file(s) remaining in queue. Please click Start button.`,
+    processingNext: (n) => `Processing next file... (${n} remaining)`,
     statusLabel: 'Status',
     runBtnCount: (n) => `Start processing ${n} files`,
     toastOpenFolder: 'Open folder',
@@ -1008,10 +1125,31 @@ const I18N = {
     labelDevice: '処理デバイス',
     labelTranslation: '翻訳設定',
     runBtn: '抽出開始',
+    runBtnProcessing: '処理中...',
+    clearQueueWaiting: '待機ファイルを削除',
+    clearQueueAll: 'キュー全体を削除',
     apiBtn: 'APIキー設定',
     selectFileBtn: 'ファイルを選択',
     stopBtn: '停止',
     logTitle: '処理ログ',
+    cannotRemoveProcessing: '処理中のファイルは削除できません。',
+    removedFromQueue: (name) => `キューから削除: ${name}`,
+    queueCleared: 'キューをクリアしました。',
+    pendingFilesRemoved: (n) => `待機中の${n}件のファイルを削除しました。`,
+    stopRequested: '停止要求を受けました。現在のファイル終了後に停止します。',
+    userStopped: 'ユーザーが処理を停止しました。',
+    unsupportedFormat: (name) => `未対応のファイル形式: ${name}`,
+    processingFile: (idx, total, name) => `[${idx}/${total}] 処理中: ${name}`,
+    extractionComplete: (idx, total, name) => `[${idx}/${total}] 抽出完了: ${name}`,
+    cleaningMemory: 'メモリを整理中...',
+    fileProcessed: (name) => `ファイル処理完了: ${name}`,
+    allTasksComplete: (success, error, stopped) => `🎉 全作業完了！ (成功: ${success}件, 失敗: ${error}件, 停止: ${stopped}件)`,
+    translationProgress: '翻訳進行: ',
+    translationStarting: '翻訳を開始中...',
+    translationTranslatingProgress: (current, total) => `翻訳中... ${current}/${total}`,
+    translationTranslating: '翻訳中...',
+    translationCompleted: '✅ 翻訳完了！',
+    translationFailed: '翻訳失敗: ',
     modelAvailableGroup: '✅ 利用可能なモデル',
     modelNeedDownloadGroup: '📥 ダウンロードが必要（自動ダウンロード）',
     modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます` ,
@@ -1028,10 +1166,12 @@ const I18N = {
     trMyMemory: 'MyMemory（無料 約5万/日）',
     trDeepL: 'DeepL（月50万/無料APIキー）',
     trChatGPT: 'ChatGPT（APIキー必要）',
-    qWaiting: '待機中', qProcessing: '処理中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qUnsupported: '未対応の形式',
+    qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qUnsupported: '未対応の形式',
     btnOpen: '開く', btnRemove: '削除',
     progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...',
     allDoneNoTr: 'すべて完了！', allDoneWithTr: 'すべて完了（抽出＋翻訳）！ウィンドウを閉じても大丈夫です。',
+    fileCompleteRemaining: (n) => `ファイル完了！待機中のファイル${n}件があります。処理開始ボタンを押してください。`,
+    processingNext: (n) => `次のファイルを処理中... (残り${n}件)`,
     statusLabel: '状態',
     runBtnCount: (n) => `${n}件のファイルを処理開始`,
     toastOpenFolder: 'フォルダを開く',
@@ -1065,10 +1205,31 @@ const I18N = {
     labelDevice: '处理设备',
     labelTranslation: '翻译设置',
     runBtn: '开始提取',
+    runBtnProcessing: '处理中...',
+    clearQueueWaiting: '删除等待文件',
+    clearQueueAll: '清空全部队列',
     apiBtn: 'API 密钥设置',
     selectFileBtn: '选择文件',
     stopBtn: '停止',
     logTitle: '处理日志',
+    cannotRemoveProcessing: '无法删除正在处理的文件。',
+    removedFromQueue: (name) => `已从队列中删除: ${name}`,
+    queueCleared: '队列已清空。',
+    pendingFilesRemoved: (n) => `已删除${n}个等待中的文件。`,
+    stopRequested: '已请求停止。当前文件完成后停止。',
+    userStopped: '用户停止了处理。',
+    unsupportedFormat: (name) => `不支持的文件格式: ${name}`,
+    processingFile: (idx, total, name) => `[${idx}/${total}] 处理中: ${name}`,
+    extractionComplete: (idx, total, name) => `[${idx}/${total}] 提取完成: ${name}`,
+    cleaningMemory: '清理内存中...',
+    fileProcessed: (name) => `文件处理完成: ${name}`,
+    allTasksComplete: (success, error, stopped) => `🎉 全部任务完成！ (成功: ${success}个, 失败: ${error}个, 停止: ${stopped}个)`,
+    translationProgress: '翻译进行: ',
+    translationStarting: '开始翻译中...',
+    translationTranslatingProgress: (current, total) => `翻译中... ${current}/${total}`,
+    translationTranslating: '翻译中...',
+    translationCompleted: '✅ 翻译完成！',
+    translationFailed: '翻译失败: ',
     modelAvailableGroup: '✅ 可用模型',
     modelNeedDownloadGroup: '📥 需要下载（自动）',
     modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载` ,
@@ -1085,10 +1246,12 @@ const I18N = {
     trMyMemory: 'MyMemory（免费 约5万/天）',
     trDeepL: 'DeepL（每月50万/需API密钥）',
     trChatGPT: 'ChatGPT（需API密钥）',
-    qWaiting: '等待中', qProcessing: '处理中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qUnsupported: '不支持的格式',
+    qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qUnsupported: '不支持的格式',
     btnOpen: '打开', btnRemove: '移除',
     progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...',
     allDoneNoTr: '全部完成！', allDoneWithTr: '全部完成（提取+翻译）！可以关闭窗口。',
+    fileCompleteRemaining: (n) => `文件完成！队列中还有 ${n} 个文件。请点击开始按钮。`,
+    processingNext: (n) => `正在处理下一个文件... (剩余${n}个)`,
     statusLabel: '状态',
     runBtnCount: (n) => `开始处理 ${n} 个文件`,
     toastOpenFolder: '打开文件夹',
@@ -1152,10 +1315,10 @@ const MODEL_I18N = {
 
 // 언어 이름 현지화 (대상/소스 공통 표시용)
 const LANG_NAMES_I18N = {
-  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어' },
-  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian' },
-  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語' },
-  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语' },
+  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', hu: '헝가리어', ar: '아랍어' },
+  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', hu: 'Hungarian', ar: 'Arabic' },
+  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語', hu: 'ハンガリー語', ar: 'アラビア語' },
+  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语', hu: '匈牙利语', ar: '阿拉伯语' },
 };
 
 // 장치/번역 메서드 옵션 현지화
@@ -1176,7 +1339,7 @@ function rebuildLanguageSelectOptions(lang) {
   const sel = document.getElementById('languageSelect');
   if (!sel) return;
   const originalValue = sel.value;
-  const codes = ['auto','ko','en','ja','zh','es','fr','de','it','pt','ru'];
+  const codes = ['auto','ko','en','ja','zh','es','fr','de','it','pt','ru','hu','ar'];
   sel.innerHTML = '';
   codes.forEach(code => {
     const opt = document.createElement('option');
@@ -1289,6 +1452,7 @@ function applyI18n(lang) {
   updateProgressInitial(currentUiLang);
 
   updateModelSelect();
+  updateQueueDisplay(); // 언어 변경 시 큐 표시도 즉시 업데이트
 }
 
 // updateModelSelect를 현지화 지원하도록 보강
@@ -1491,39 +1655,97 @@ if (window?.electronAPI) {
     window.electronAPI.onTranslationProgress((data) => {
       const methodNow = document.getElementById('translationSelect')?.value;
       if (!methodNow || methodNow === 'none') return; // 번역 비활성 시 무시
-      if (!translationSessionActive) return; // 완료 이후 추가 이벤트 무시
-      const msg = data?.message || '';
-      addOutputLocalized(`번역 진행: ${msg}\n`);
+
+      // completed 단계는 항상 처리해야 함 (자동 처리 로직 실행을 위해)
+      if (!translationSessionActive && data?.stage !== 'completed') return; // 완료 이후 추가 이벤트 무시
+
+      // 메시지를 I18N으로 생성
+      let msg = '';
+      if (data?.stage === 'starting') {
+        msg = I18N[currentUiLang].translationStarting;
+      } else if (data?.stage === 'translating') {
+        if (data?.current && data?.total) {
+          msg = I18N[currentUiLang].translationTranslatingProgress(data.current, data.total);
+        } else {
+          msg = I18N[currentUiLang].translationTranslating;
+        }
+      } else if (data?.stage === 'completed') {
+        msg = I18N[currentUiLang].translationCompleted;
+      } else if (data?.stage === 'error') {
+        msg = I18N[currentUiLang].translationFailed + (data?.errorMessage || '');
+      }
+
+      if (msg) {
+        addOutput(`${I18N[currentUiLang].translationProgress}${msg}\n`);
+      }
       // 진행률 갱신
       if (typeof data?.progress === 'number') {
         const pct = Math.max(0, Math.min(99, data.progress));
         setProgressTarget(Math.max(lastProgress, pct), I18N[currentUiLang].progressTranslating);
       }
-      if (data?.stage === 'completed') {
+      if (data?.stage === 'completed' || data?.stage === 'error') {
+        const isErrorStage = data?.stage === 'error';
         // 번역 완료: 99%로 고정 후 세션 종료
         stopIndeterminate();
         translationSessionActive = false;
-        setProgressTarget(Math.max(lastProgress, 99), data?.message || I18N[currentUiLang].progressTranslating);
-        
-        // 번역 완료 후 처리 상태 초기화
-        isProcessing = false;
-        currentProcessingIndex = -1;
-        shouldStop = false;
-        
-        // UI 상태 업데이트
-        updateQueueDisplay();
-        
-        // 대기 중인 파일이 더 있는지 확인하여 사용자에게 알림
-        const remainingFiles = fileQueue.filter(f => f.status !== 'completed' && f.status !== 'error' && f.status !== 'stopped').length;
-        if (remainingFiles > 0) {
-          addOutput(`✅ 파일 완료! 대기 중인 파일 ${remainingFiles}개가 있습니다. 처리 시작 버튼을 눌러주세요.\n`);
+        const stageProgressTarget = isErrorStage ? 95 : 99;
+        setProgressTarget(Math.max(lastProgress, stageProgressTarget), data?.message || I18N[currentUiLang].progressTranslating);
+
+        // 현재 처리 중인 파일을 completed로 마킹
+        if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
+          fileQueue[currentProcessingIndex].status = isErrorStage ? 'error' : 'completed';
+          fileQueue[currentProcessingIndex].progress = isErrorStage ? 0 : 100;
+          console.log(`[onTranslationProgress] 파일 상태 ${isErrorStage ? 'error' : 'completed'}로 변경, index:`, currentProcessingIndex);
         }
-        
-        // UX: 짧은 지연 후 100%로 마무리
-        setTimeout(() => {
-          setProgressTarget(100, I18N[currentUiLang].allDoneWithTr);
-          try { playCompletionSound(); } catch {}
-        }, 400);
+
+        // 단일 파일 처리 완료 후 잠시 대기 (메모리 정리 시간 확보)
+        setTimeout(async () => {
+          try {
+            console.log('[onTranslationProgress] completed setTimeout executing, isProcessing:', isProcessing);
+            updateQueueDisplay();
+
+            // 대기 중인 파일이 더 있는지 확인
+            const remainingFiles = fileQueue.filter(f =>
+              f.status !== 'completed' &&
+              f.status !== 'error' &&
+              f.status !== 'stopped' &&
+              f.status !== 'translating'
+            ).length;
+            console.log('[onTranslationProgress] remainingFiles:', remainingFiles, 'shouldStop:', shouldStop);
+
+            if (remainingFiles > 0 && !shouldStop) {
+              addOutput(`${I18N[currentUiLang].processingNext(remainingFiles)}\n\n`);
+
+              // 다음 파일 처리 시작
+              await continueProcessing();
+            } else {
+              // 모든 파일 완료 또는 중지됨
+              isProcessing = false;
+              currentProcessingIndex = -1;
+              shouldStop = false;
+              updateQueueDisplay();
+
+              const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+              const errorCount = fileQueue.filter(f => f.status === 'error').length;
+              const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+
+              // UX: 짧은 지연 후 100%로 마무리
+              setTimeout(() => {
+                setProgressTarget(100, I18N[currentUiLang].allDoneWithTr);
+                showToast(I18N[currentUiLang].allDoneWithTr, { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+                try {
+                  playCompletionSound();
+                } catch (error) {
+                  console.log('[Audio] Failed to play completion sound:', error.message);
+                }
+                addOutput(`\n${I18N[currentUiLang].allTasksComplete(completedCount, errorCount, stoppedCount)}\n`);
+              }, 400);
+            }
+          } catch (error) {
+            console.error('[onTranslationProgress] autoProcessNext 에러:', error);
+            addOutput(`자동 처리 중 오류: ${error.message}\n`);
+          }
+        }, 2000);
       }
     });
   }
@@ -1584,10 +1806,26 @@ function initTranslationSelect() {
 
 // 전역 초기화
 function initApp() {
-  try { initUiLanguageDropdown(); } catch {}
-  try { checkModelStatus(); } catch {}
-  try { updateQueueDisplay(); } catch {}
-  try { initTranslationSelect(); } catch {}
+  try {
+    initUiLanguageDropdown();
+  } catch (error) {
+    console.error('[Init] Failed to initialize UI language dropdown:', error.message);
+  }
+  try {
+    checkModelStatus();
+  } catch (error) {
+    console.error('[Init] Failed to check model status:', error.message);
+  }
+  try {
+    updateQueueDisplay();
+  } catch (error) {
+    console.error('[Init] Failed to update queue display:', error.message);
+  }
+  try {
+    initTranslationSelect();
+  } catch (error) {
+    console.error('[Init] Failed to initialize translation select:', error.message);
+  }
 }
 
 // initApp은 첫 번째 DOMContentLoaded에서 호출됨
@@ -1595,11 +1833,11 @@ function initApp() {
 async function playCompletionSound() {
   try {
     // 우선 WAV 파일 재생 시도 (앱 루트에 존재하는 경우)
-    const audio = new Audio('nya.wav');
+    const audio = new Audio('./nya.wav');
     audio.volume = 0.6;
     await audio.play();
     return;
-  } catch (_) {
+  } catch (error) {
     // 폴백: WebAudio로 간단한 3음 비프
   }
   try {
@@ -1689,28 +1927,38 @@ async function saveApiKeys() {
 
 async function testApiKeys() {
   const status = document.getElementById('apiKeyStatus');
+
+  // Checking message (확인 중 메시지)
+  const checkingMsg = {
+    ko: '🔍 API 키를 확인하는 중...',
+    en: '🔍 Checking API keys...',
+    ja: '🔍 APIキーを確認中...',
+    zh: '🔍 正在检查API密钥...'
+  };
+
   if (status) {
     status.style.display = 'block';
     status.style.background = '#fff3cd';
     status.style.border = '1px solid #ffeeba';
     status.style.color = '#856404';
-    status.textContent = '🔍 API 키를 확인하는 중...';
+    status.textContent = checkingMsg[currentUiLang] || checkingMsg.ko;
   }
+
   try {
     // 현재 입력된 키들 수집
     const tempKeys = {};
     const deeplKey = document.getElementById('deeplApiKey')?.value?.trim();
     const openaiKey = document.getElementById('openaiApiKey')?.value?.trim();
-    
+
     if (deeplKey) tempKeys.deepl = deeplKey;
     if (openaiKey) tempKeys.openai = openaiKey;
-    
-    console.log('[Frontend] Collected temp keys:', { 
+
+    console.log('[Frontend] Collected temp keys:', {
       hasDeepL: !!deeplKey,
       hasOpenAI: !!openaiKey,
       keysToTest: Object.keys(tempKeys)
     });
-    
+
     // 입력된 키가 없으면 안내 메시지
     if (Object.keys(tempKeys).length === 0) {
       if (status) {
@@ -1728,50 +1976,102 @@ async function testApiKeys() {
       }
       return;
     }
-    
+
     const res = await window.electronAPI.validateApiKeys(tempKeys);
-    if (!res || !res.success) throw new Error(res?.error || '검증 실패');
+    if (!res || !res.success) throw new Error(res?.error || 'Validation failed');
     const { results } = res;
     const deeplOk = results?.deepl === true;
     const openaiOk = results?.openai === true;
+
+    // Success/Failure messages (성공/실패 메시지)
+    const successMsg = {
+      ko: '연결 성공',
+      en: 'Connected',
+      ja: '接続成功',
+      zh: '连接成功'
+    };
+
+    const failMsg = {
+      ko: '연결 실패',
+      en: 'Connection failed',
+      ja: '接続失敗',
+      zh: '连接失败'
+    };
+
     // 입력된 키가 있는 서비스만 표시
     const messages = [];
-    
+    let successCount = 0;
+    let totalCount = 0;
+
     // DeepL 키가 입력되어 있으면 결과 표시
     const deeplInput = document.getElementById('deeplApiKey')?.value?.trim();
     if (deeplInput) {
-      const deeplMsg = deeplOk ? 'DeepL - 연결 성공' : `DeepL - ${results?.errors?.deepl || '연결 실패'}`;
+      totalCount++;
+      if (deeplOk) successCount++;
+      const deeplMsg = deeplOk
+        ? `DeepL - ${successMsg[currentUiLang]}`
+        : `DeepL - ${results?.errors?.deepl || failMsg[currentUiLang]}`;
       messages.push(deeplMsg);
     }
-    
-    // OpenAI 키가 입력되어 있으면 결과 표시  
+
+    // OpenAI 키가 입력되어 있으면 결과 표시
     const openaiInput = document.getElementById('openaiApiKey')?.value?.trim();
     if (openaiInput) {
-      const openaiMsg = openaiOk ? 'ChatGPT - 연결 성공' : `ChatGPT - ${results?.errors?.openai || '연결 실패'}`;
+      totalCount++;
+      if (openaiOk) successCount++;
+      const openaiMsg = openaiOk
+        ? `ChatGPT - ${successMsg[currentUiLang]}`
+        : `ChatGPT - ${results?.errors?.openai || failMsg[currentUiLang]}`;
       messages.push(openaiMsg);
     }
-    
+
     if (status && messages.length > 0) {
-      const hasSuccess = deeplOk || openaiOk;
+      // All success: green, All fail: red, Mixed: yellow
+      const allSuccess = successCount === totalCount;
+      const allFail = successCount === 0;
+
       status.style.display = 'block';
-      status.style.background = hasSuccess ? '#d4edda' : '#f8d7da';
-      status.style.border = hasSuccess ? '1px solid #c3e6cb' : '1px solid #f5c6cb';
-      status.style.color = hasSuccess ? '#155724' : '#721c24';
+      if (allSuccess) {
+        status.style.background = '#d4edda';
+        status.style.border = '1px solid #c3e6cb';
+        status.style.color = '#155724';
+      } else if (allFail) {
+        status.style.background = '#f8d7da';
+        status.style.border = '1px solid #f5c6cb';
+        status.style.color = '#721c24';
+      } else {
+        // Mixed results - yellow
+        status.style.background = '#fff3cd';
+        status.style.border = '1px solid #ffeeba';
+        status.style.color = '#856404';
+      }
       status.innerHTML = messages.join('<br>');
     } else if (status) {
+      const pleaseEnterMsg = {
+        ko: '테스트할 API 키를 입력해주세요.',
+        en: 'Please enter API keys to test.',
+        ja: 'テストするAPIキーを入力してください。',
+        zh: '请输入要测试的API密钥。'
+      };
       status.style.display = 'block';
       status.style.background = '#fff3cd';
       status.style.border = '1px solid #ffeeba';
       status.style.color = '#856404';
-      status.textContent = '테스트할 API 키를 입력해주세요.';
+      status.textContent = pleaseEnterMsg[currentUiLang] || pleaseEnterMsg.ko;
     }
   } catch (e) {
     if (status) {
+      const errorMsg = {
+        ko: '오류',
+        en: 'Error',
+        ja: 'エラー',
+        zh: '错误'
+      };
       status.style.display = 'block';
       status.style.background = '#f8d7da';
       status.style.border = '1px solid #f5c6cb';
       status.style.color = '#721c24';
-      status.textContent = `오류: ${e.message || e}`;
+      status.textContent = `${errorMsg[currentUiLang]}: ${e.message || e}`;
     }
   }
 }

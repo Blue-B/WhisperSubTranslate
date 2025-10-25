@@ -12,7 +12,7 @@
 
 ## 왜 WhisperSubTranslate를 써야 할까요?
 
-모든 처리는 로컬에서 이루어집니다. 영상은 내 PC 밖으로 나가지 않습니다. 계정도 카드도 필요 없습니다. 정확한 SRT를 오프라인으로 만들고, 필요할 때만 번역(무료 MyMemory 또는 내 DeepL/OpenAI 키)을 추가하세요.
+자막 추출은 100% 로컬에서 이루어집니다. 영상은 내 PC 밖으로 나가지 않습니다. 계정도 카드도 필요 없습니다. 정확한 SRT를 오프라인으로 만들고, 번역은 인터넷 연결 필요 (무료 MyMemory 또는 내 DeepL/OpenAI 키).
 
 ### 핵심 가치 한눈에
 
@@ -48,7 +48,7 @@ npm start
 
 ### 사용자: 배포(포터블)로 바로 실행
 
-- Releases에서 최신 포터블 압축 파일: `WhisperSubTranslate v1.0.0.7z`
+- Releases에서 최신 포터블 압축 파일: `WhisperSubTranslate v1.2.0.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 ### Windows 빌드
@@ -81,7 +81,18 @@ npm run build-win
 | DeepL | 월 50만자 무료 | 필요 | 유료 플랜 제공 |
 | ChatGPT(OpenAI) | 유료 | 필요 | 사용량 과금 |
 
-API 키/설정은 `app.getPath('userData')` 아래 `translation-config.json`에 저장되며 Git/배포물에 포함되지 않습니다.
+API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 인코딩을 적용하여 저장됩니다. 파일 탐색기에서 우연히 열어도 평문으로 노출되지 않도록 보호하며, Git이나 배포 파일에는 절대 포함되지 않습니다.
+
+## 언어 지원
+
+### UI 언어
+한국어, 영어, 일본어, 중국어 (4개 언어)
+
+### 번역 대상 언어 (12개)
+한국어 (ko), 영어 (en), 일본어 (ja), 중국어 (zh), 스페인어 (es), 프랑스어 (fr), 독일어 (de), 이탈리아어 (it), 포르투갈어 (pt), 러시아어 (ru), **헝가리어 (hu)**, **아랍어 (ar)**
+
+### 음성 인식 언어
+Faster-Whisper XXL은 100개 이상의 언어를 지원합니다 (영어, 스페인어, 프랑스어, 독일어, 이탈리아어, 포르투갈어, 러시아어, 중국어, 일본어, 한국어, 아랍어, 힌디어, 터키어 등 주요 세계 언어 포함).
 
 ## 모델과 성능
 
