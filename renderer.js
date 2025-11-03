@@ -562,7 +562,7 @@ async function continueProcessing() {
 
             addOutput(`번역 시작 (${translationInfo})...\n`);
 
-            const targetLang = (document.getElementById('targetLangSelect')?.value || 'ko');
+            const targetLang = (document.getElementById('targetLanguageSelect')?.value || 'ko');
             const srtPathFromResult =
               (typeof result?.srtFile === 'string' && result.srtFile) ||
               (Array.isArray(result?.results) && result.results.length > 0 ? result.results[0]?.srtPath : null);
