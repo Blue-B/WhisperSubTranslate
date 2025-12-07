@@ -81,14 +81,16 @@
         #google_translate_element { display: inline-block; }
         #google_translate_element .goog-te-gadget { font-family: inherit !important; font-size: 0 !important; }
         #google_translate_element .goog-te-gadget-simple {
-            background: var(--bg-tertiary) !important;
-            border: 1px solid var(--border) !important;
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             border-radius: 8px !important;
             padding: 0.5rem 0.75rem !important;
             font-size: 0.875rem !important;
+            cursor: pointer !important;
         }
-        #google_translate_element .goog-te-gadget-simple:hover { border-color: var(--border-hover) !important; }
-        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value { color: var(--text-secondary) !important; }
+        #google_translate_element .goog-te-gadget-simple:hover { background: rgba(255, 255, 255, 0.15) !important; border-color: rgba(255, 255, 255, 0.3) !important; }
+        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value { color: #ffffff !important; }
+        #google_translate_element .goog-te-menu-value span { color: #ffffff !important; }
         #google_translate_element img { display: none !important; }
         .goog-te-banner-frame { display: none !important; }
         body { top: 0 !important; }
