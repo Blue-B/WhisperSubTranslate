@@ -583,7 +583,7 @@ async function continueProcessing() {
                 translationInfo = 'DeepL (API 키 확인 중...)';
                 break;
               case 'chatgpt':
-                translationInfo = 'ChatGPT (API 키 확인 중...)';
+                translationInfo = 'GPT-5-nano (API 키 확인 중...)';
                 break;
               case 'offline':
                 translationInfo = 'Offline (오프라인 번역)';
@@ -1033,7 +1033,7 @@ const I18N = {
     translationEnabledHtml: '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
     translationDisabledHtml: '번역을 사용하지 않습니다.',
     translationDeeplHtml: '<strong>DeepL:</strong> 월 50만글자 무료, API키 필요<br><strong>고품질</strong> 번역 서비스',
-    translationChatgptHtml: '<strong>ChatGPT:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
+    translationChatgptHtml: '<strong>GPT-5-nano:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
     // 셀렉트 옵션
     langAutoOption: '자동 감지 (각 파일별로 자동 판별)',
     deviceAuto: '자동 (GPU 있으면 GPU, 없으면 CPU)',
@@ -1042,7 +1042,7 @@ const I18N = {
     trNone: '번역 안함',
     trMyMemory: 'MyMemory (일 5만글자 무료, 추천)',
     trDeepL: 'DeepL (월 50만글자, API키 필요)',
-    trChatGPT: 'ChatGPT (사용자 API 키 필요)',
+    trChatGPT: 'GPT-5-nano (사용자 API 키 필요)',
     // 큐/버튼/상태
     qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qUnsupported: '지원되지 않는 형식',
     btnOpen: '열기', btnRemove: '제거',
@@ -1066,10 +1066,10 @@ const I18N = {
     cancelBtn: '취소',
     mymemoryInfoHtml: 'MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
     openaiLinkText: 'OpenAI API 키 발급 받기',
-    openaiHelpSuffix: ' (유료, 매우 저렴)',
+    openaiHelpSuffix: ' (유료)',
     deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
     deeplHelpHtml: '<strong>무료 가입 방법:</strong><br>1. <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a> 접속<br>2. "API 무료로 시작하기" 클릭<br>3. 이메일 인증 후 API 키 복사<br>4. 월 50만글자 무료 사용!',
-    openaiPlaceholder: 'ChatGPT API 키를 입력하세요',
+    openaiPlaceholder: 'OpenAI API 키를 입력하세요 (GPT-5-nano)',
     queueEmpty: '파일을 드래그하여 추가하세요',
     soundLabel: '알림음',
     soundTest: '테스트',
@@ -1126,7 +1126,7 @@ const I18N = {
     translationEnabledHtml: '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
     translationDisabledHtml: 'Translation is disabled.',
     translationDeeplHtml: '<strong>DeepL:</strong> 500K chars/month free, API key required<br><strong>High quality</strong> translation service',
-    translationChatgptHtml: '<strong>ChatGPT:</strong> User API key required<br><strong>Natural</strong> translation possible',
+    translationChatgptHtml: '<strong>GPT-5-nano:</strong> User API key required<br><strong>Natural</strong> translation possible',
     langAutoOption: 'Auto-detect (per file)',
     deviceAuto: 'Auto (Use GPU if available, otherwise CPU)',
     deviceCuda: 'GPU (CUDA) - Fast',
@@ -1134,7 +1134,7 @@ const I18N = {
     trNone: 'No translation',
     trMyMemory: 'MyMemory (Free ~50K/day)',
     trDeepL: 'DeepL (Free 500K/month with API key)',
-    trChatGPT: 'ChatGPT (Requires API key)',
+    trChatGPT: 'GPT-5-nano (Requires API key)',
     qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qUnsupported: 'Unsupported format',
     btnOpen: 'Open', btnRemove: 'Remove',
     progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...', progressProcessing: 'Processing...', progressComplete: 'Complete!',
@@ -1158,7 +1158,7 @@ const I18N = {
     openaiHelpSuffix: ' (paid, low cost)',
     deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
     deeplHelpHtml: '<strong>How to get free key:</strong><br>1. Visit <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a><br>2. Click "Start for free"<br>3. Verify email and copy API key<br>4. Enjoy 500K chars/month free',
-    openaiPlaceholder: 'Enter ChatGPT/OpenAI API key',
+    openaiPlaceholder: 'Enter OpenAI API key (GPT-5-nano)',
     queueEmpty: 'Drag files here to add',
     soundLabel: 'Sound',
     soundTest: 'Test',
@@ -1215,7 +1215,7 @@ const I18N = {
     translationEnabledHtml: '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳\n<strong>1日約5万文字</strong>（目安）',
     translationDisabledHtml: '翻訳は使用しません。',
     translationDeeplHtml: '<strong>DeepL:</strong> 月50万文字無料、APIキー必要<br><strong>高品質</strong>翻訳サービス',
-    translationChatgptHtml: '<strong>ChatGPT:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
+    translationChatgptHtml: '<strong>GPT-5-nano:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
     langAutoOption: '自動検出（ファイルごと）',
     deviceAuto: '自動（GPUがあればGPU、なければCPU）',
     deviceCuda: 'GPU (CUDA) - 高速',
@@ -1223,7 +1223,7 @@ const I18N = {
     trNone: '翻訳しない',
     trMyMemory: 'MyMemory（無料 約5万/日）',
     trDeepL: 'DeepL（月50万/無料APIキー）',
-    trChatGPT: 'ChatGPT（APIキー必要）',
+    trChatGPT: 'GPT-5-nano（APIキー必要）',
     qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qUnsupported: '未対応の形式',
     btnOpen: '開く', btnRemove: '削除',
     progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...', progressProcessing: '処理中...', progressComplete: '完了！',
@@ -1247,7 +1247,7 @@ const I18N = {
     openaiHelpSuffix: '（有料・低コスト）',
     deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
     deeplHelpHtml: '<strong>無料登録手順:</strong><br>1. <a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>にアクセス<br>2. 「無料で開始」をクリック<br>3. メール認証後、API キーをコピー<br>4. 月 50 万文字まで無料',
-    openaiPlaceholder: 'ChatGPT/OpenAI の API キーを入力',
+    openaiPlaceholder: 'OpenAI API キーを入力 (GPT-5-nano)',
     queueEmpty: 'ファイルをドラッグして追加',
     soundLabel: '通知音',
     soundTest: 'テスト',
@@ -1304,7 +1304,7 @@ const I18N = {
     translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定\n<strong>约5万字/天</strong>（参考）',
     translationDisabledHtml: '不使用翻译。',
     translationDeeplHtml: '<strong>DeepL:</strong> 每月50万字免费，需API密钥<br><strong>高质量</strong>翻译服务',
-    translationChatgptHtml: '<strong>ChatGPT:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
+    translationChatgptHtml: '<strong>GPT-5-nano:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
     langAutoOption: '自动检测（每个文件）',
     deviceAuto: '自动（有 GPU 用 GPU，否则 CPU）',
     deviceCuda: 'GPU (CUDA) - 快速',
@@ -1312,7 +1312,7 @@ const I18N = {
     trNone: '不翻译',
     trMyMemory: 'MyMemory（免费 约5万/天）',
     trDeepL: 'DeepL（每月50万/需API密钥）',
-    trChatGPT: 'ChatGPT（需API密钥）',
+    trChatGPT: 'GPT-5-nano（需API密钥）',
     qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qUnsupported: '不支持的格式',
     btnOpen: '打开', btnRemove: '移除',
     progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...', progressProcessing: '处理中...', progressComplete: '完成！',
@@ -1336,7 +1336,7 @@ const I18N = {
     openaiHelpSuffix: '（付费，成本低）',
     deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
     deeplHelpHtml: '<strong>免费获取方式：</strong><br>1. 访问 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a><br>2. 点击"免费开始"<br>3. 邮箱验证后复制密钥<br>4. 每月 50 万字符免费',
-    openaiPlaceholder: '输入 ChatGPT/OpenAI API 密钥',
+    openaiPlaceholder: '输入 OpenAI API 密钥 (GPT-5-nano)',
     queueEmpty: '拖拽文件添加',
     soundLabel: '提示音',
     soundTest: '测试',
@@ -2377,8 +2377,8 @@ async function testApiKeys() {
       totalCount++;
       if (openaiOk) successCount++;
       const openaiMsg = openaiOk
-        ? `✓ ChatGPT ${successMsg[currentUiLang]}`
-        : `✗ ChatGPT ${failMsg[currentUiLang]}`;
+        ? `✓ GPT-5-nano ${successMsg[currentUiLang]}`
+        : `✗ GPT-5-nano ${failMsg[currentUiLang]}`;
       messages.push(openaiMsg);
     }
 

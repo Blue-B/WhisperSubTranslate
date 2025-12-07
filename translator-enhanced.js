@@ -438,7 +438,9 @@ class EnhancedSubtitleTranslator {
     }
   }
 
-  // OpenAI 번역 (GPT-4o-mini - 빠르고 저렴한 최신 모델)
+  // OpenAI 번역 (GPT-5-nano - 2025년 최신 모델, 고처리량/저비용)
+  // 참고: https://platform.openai.com/docs/models
+  // GPT-5 모델은 temperature, top_p 파라미터를 지원하지 않음
   async translateWithChatGPT(text, targetLang = '한국어') {
     if (!this.apiKeys.openai) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
@@ -447,22 +449,23 @@ class EnhancedSubtitleTranslator {
     // 캐시 확인
     const cached = this.getCachedTranslation(text, 'chatgpt', targetLang);
     if (cached) {
-      console.log('[GPT-4o-mini Cache Hit]', {
+      console.log('[GPT-5-nano Cache Hit]', {
         text: text.substring(0, 30) + '...',
         cached: true
       });
       return cached;
     }
 
-    console.log(`[GPT-4o-mini] "${text.substring(0, 40)}..." → ${targetLang}`);
+    console.log(`[GPT-5-nano] "${text.substring(0, 40)}..." → ${targetLang}`);
 
     await this.throttleRequest();
 
     try {
       const startTime = Date.now();
 
+      // GPT-5 모델: Chat Completions API 사용
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           {
             role: 'system',
@@ -505,8 +508,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
           }
         ],
-        temperature: 0.3,
-        max_tokens: Math.min(1500, text.length * 3)
+        max_completion_tokens: Math.min(1500, text.length * 3)
       }, {
         headers: {
           'Authorization': `Bearer ${this.apiKeys.openai}`,
@@ -515,6 +517,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         timeout: 30000
       });
 
+      // Chat Completions API: choices[0].message.content로 응답 받음
       let translation = response.data.choices[0].message.content.trim();
 
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
@@ -522,7 +525,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
       const duration = Date.now() - startTime;
 
-      console.log('[GPT-4o-mini OK]', {
+      console.log('[GPT-5-nano OK]', {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
         time: `${duration}ms`
@@ -532,8 +535,8 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       this.setCachedTranslation(text, 'chatgpt', targetLang, translation);
       return translation;
     } catch (error) {
-      console.error('[GPT-4o-mini Error]', error.message);
-      this.logError('GPT-4o-mini 번역 실패', error);
+      console.error('[GPT-5-nano Error]', error.message);
+      this.logError('GPT-5-nano 번역 실패', error);
       throw error;
     }
   }
@@ -617,7 +620,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   }
 
   mapToHumanLang(targetLang) {
-    // ChatGPT에 사람이 읽는 언어명 전달 (더 명확한 지시)
+    // GPT-5-nano에 사람이 읽는 언어명 전달 (더 명확한 지시)
     const map = {
       ko: 'Korean (한국어)',
       en: 'English',
@@ -938,13 +941,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       results.errors.deepl = errorMsg.noApiKey;
     }
 
-    // OpenAI 검사 (GPT-4o Mini)
+    // OpenAI 검사 (GPT-5-nano - 2025년 최신 모델)
+    // GPT-5 모델: Chat Completions API 지원, max_completion_tokens 사용
     if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
       try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-          model: 'gpt-4o-mini',
+          model: 'gpt-5-nano',
           messages: [{ role: 'user', content: 'hi' }],
-          max_tokens: 5
+          max_completion_tokens: 5
         }, {
           headers: {
             'Authorization': `Bearer ${this.apiKeys.openai.trim()}`,
@@ -954,6 +958,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         });
         results.openai = true;
       } catch (error) {
+        console.error('[OpenAI Validation] 실패:', error.response?.data || error.message);
         results.errors.openai = this.classifyError(error, 'openai', 'ko');
       }
     } else {

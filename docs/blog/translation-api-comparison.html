@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Compare translation APIs: DeepL vs MyMemory vs ChatGPT. Quality, pricing, and limits analysis for subtitle translation.">
-    <meta name="keywords" content="DeepL, MyMemory, ChatGPT, translation API, subtitle translation, API comparison">
-    <title>Translation API Comparison: DeepL vs MyMemory vs ChatGPT - WhisperSubTranslate Blog</title>
+    <meta name="description" content="Compare translation APIs: DeepL vs MyMemory vs GPT-5-nano. Quality, pricing, and limits analysis for subtitle translation.">
+    <meta name="keywords" content="DeepL, MyMemory, GPT-5-nano, OpenAI, translation API, subtitle translation, API comparison">
+    <title>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano - WhisperSubTranslate Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -29,10 +29,28 @@
         .nav-links { display: flex; align-items: center; gap: 2rem; }
         .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
         .nav-links a:hover { color: var(--text-primary); }
-        #google_translate_element .goog-te-gadget { font-size: 0 !important; }
-        #google_translate_element .goog-te-gadget-simple { background: var(--bg-tertiary) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; padding: 0.5rem 0.75rem !important; }
+        /* Custom Language Selector */
+        .lang-selector { position: relative; }
+        .lang-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px; padding: 0.5rem 0.75rem; color: #ffffff;
+            font-size: 0.875rem; font-family: 'Geist', sans-serif; cursor: pointer; transition: all 0.2s;
+        }
+        .lang-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); }
+        .lang-btn svg { width: 16px; height: 16px; }
+        .lang-dropdown {
+            position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+            background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px; padding: 0.5rem 0; min-width: 140px;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .lang-dropdown a { display: block; padding: 0.5rem 1rem; color: #a1a1a1; text-decoration: none; font-size: 0.875rem; transition: all 0.15s; }
+        .lang-dropdown a:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
         .goog-te-banner-frame { display: none !important; }
         body { top: 0 !important; }
+        #google_translate_element { display: none; }
         article { max-width: 800px; margin: 0 auto; padding: 7rem 2rem 4rem; }
         .article-header { margin-bottom: 3rem; }
         .category { display: inline-block; background: var(--accent-glow); color: var(--accent); padding: 0.25rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 1rem; }
@@ -70,7 +88,26 @@
                 <a href="../">Home</a>
                 <a href="../docs/">Docs</a>
                 <a href="./">Blog</a>
-                <div class="translate-widget"><div id="google_translate_element"></div></div>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
             </div>
         </div>
     </nav>
@@ -83,8 +120,8 @@
 
         <header class="article-header">
             <span class="category">Comparison</span>
-            <h1>Translation API Comparison: DeepL vs MyMemory vs ChatGPT</h1>
-            <p class="meta">August 2024 &bull; 7 min read</p>
+            <h1>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano</h1>
+            <p class="meta">December 2025 &bull; 7 min read</p>
         </header>
 
         <div class="content">
@@ -96,13 +133,13 @@
                     <th>Feature</th>
                     <th>MyMemory</th>
                     <th>DeepL</th>
-                    <th>ChatGPT</th>
+                    <th>GPT-5-nano</th>
                 </tr>
                 <tr>
                     <td>Free Tier</td>
                     <td>50,000 chars/day</td>
                     <td>500,000 chars/month</td>
-                    <td>Pay per use</td>
+                    <td>Pay per use ($0.05/1M input)</td>
                 </tr>
                 <tr>
                     <td>API Key Required</td>
@@ -120,7 +157,7 @@
                     <td>Speed</td>
                     <td>Fast</td>
                     <td>Fast</td>
-                    <td>Moderate</td>
+                    <td>Very Fast</td>
                 </tr>
                 <tr>
                     <td>Context Awareness</td>
@@ -183,25 +220,25 @@
             </div>
 
             <div class="service-card">
-                <h3>ChatGPT</h3>
-                <p>AI-powered translation with the best context understanding. Ideal for nuanced content.</p>
+                <h3>GPT-5-nano <span class="badge">FAST & CHEAP</span></h3>
+                <p>OpenAI's fastest and most affordable GPT-5 model. Optimized for high-throughput tasks like subtitle translation with excellent quality.</p>
                 <div class="pros-cons">
                     <div class="pros">
                         <h4>Pros</h4>
                         <ul>
-                            <li>Best context awareness</li>
-                            <li>Handles slang/idioms</li>
-                            <li>Creative translations</li>
-                            <li>Many languages</li>
+                            <li>Very fast processing</li>
+                            <li>Lowest cost ($0.05/1M input)</li>
+                            <li>Great context awareness</li>
+                            <li>100+ languages supported</li>
                         </ul>
                     </div>
                     <div class="cons">
                         <h4>Cons</h4>
                         <ul>
                             <li>Pay per use only</li>
-                            <li>Slower processing</li>
-                            <li>Can be expensive</li>
-                            <li>Occasional errors</li>
+                            <li>API key required</li>
+                            <li>Less reasoning depth</li>
+                            <li>OpenAI account needed</li>
                         </ul>
                     </div>
                 </div>
@@ -216,10 +253,10 @@
             <p><strong>Recommended: DeepL</strong> - Professional quality at a reasonable cost. The free tier is usually sufficient for most creators.</p>
 
             <h3>Professional/Commercial</h3>
-            <p><strong>Recommended: DeepL or ChatGPT</strong> - Both offer excellent quality. DeepL for efficiency, ChatGPT for nuanced content.</p>
+            <p><strong>Recommended: DeepL or GPT-5-nano</strong> - Both offer excellent quality. DeepL for European languages, GPT-5-nano for speed and Asian languages.</p>
 
             <h3>Movies/TV Shows</h3>
-            <p><strong>Recommended: ChatGPT</strong> - Best at handling context, slang, and cultural references common in entertainment.</p>
+            <p><strong>Recommended: GPT-5-nano</strong> - Fast processing with good context awareness. Very cost-effective for large subtitle files.</p>
 
             <div class="info-box">
                 <p><strong>Pro Tip:</strong> Start with MyMemory to test your workflow, then upgrade to DeepL for production content. The quality difference is noticeable but MyMemory is great for drafts.</p>
@@ -238,21 +275,48 @@
                 <li>Paste it in WhisperSubTranslate settings</li>
             </ol>
 
-            <h3>ChatGPT</h3>
+            <h3>GPT-5-nano (OpenAI)</h3>
             <ol>
-                <li>Visit <a href="https://platform.openai.com" style="color: var(--accent);">platform.openai.com</a></li>
+                <li>Visit <a href="https://platform.openai.com/api-keys" style="color: var(--accent);">platform.openai.com/api-keys</a></li>
                 <li>Create an account and add payment method</li>
-                <li>Generate an API key</li>
+                <li>Generate an API key (starts with <code>sk-proj-</code> or <code>sk-</code>)</li>
                 <li>Paste it in WhisperSubTranslate settings</li>
             </ol>
+
+            <div class="info-box">
+                <p><strong>Why GPT-5-nano?</strong> It's the fastest and cheapest model in OpenAI's GPT-5 family. Perfect for subtitle translation: $0.05 per 1M input tokens, $0.40 per 1M output tokens. A typical 2-hour movie subtitle costs less than $0.01 to translate!</p>
+            </div>
         </div>
     </article>
 
-    <footer><p>&copy; 2024 WhisperSubTranslate. MIT License.</p></footer>
+    <footer><p>&copy; 2025 WhisperSubTranslate. MIT License.</p></footer>
 
+    <!-- Google Translate -->
     <script type="text/javascript">
         function googleTranslateElementInit() {
-            new google.translate.TranslateElement({ pageLanguage: 'en', includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru', layout: google.translate.TranslateElement.InlineLayout.SIMPLE, autoDisplay: false }, 'google_translate_element');
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
         }
     </script>
     <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>

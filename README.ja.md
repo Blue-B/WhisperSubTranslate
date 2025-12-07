@@ -2,7 +2,7 @@
 
 [English](./README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md)
 
-動画の音声を文字起こし（SRT）し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は MyMemory（無料）/DeepL/ChatGPT（OpenAI）を選択できます。
+動画の音声を文字起こし（SRT）し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は MyMemory（無料）/DeepL/GPT-5-nano（OpenAI）を選択できます。
 
 > 重要: 本アプリは whisper.cpp で動画の音声から新規に SRT 字幕を生成します。既存の埋め込み字幕トラックや画面上の文字（OCR）を抽出するツールではありません。
 
@@ -64,7 +64,7 @@ npm run build-win
 | パッケージング | electron-builder |
 | ネットワーク | axios |
 | 音声→テキスト | whisper.cpp (GGMLモデル) |
-| 翻訳（任意） | DeepL API, OpenAI（ChatGPT）, MyMemory |
+| 翻訳（任意） | DeepL API, OpenAI（GPT-5-nano）, MyMemory |
 
 ## 翻訳エンジン
 
@@ -72,7 +72,7 @@ npm run build-win
 | --- | --- | --- | --- |
 | MyMemory | 無料 | 不要 | 1 IP あたり約 5万/日 |
 | DeepL | 月 50万無料 | 必要 | 有料プランあり |
-| ChatGPT（OpenAI） | 有料 | 必要 | 従量課金 |
+| GPT-5-nano（OpenAI） | 有料 | 必要 | 低コスト ($0.05/1M 入力) |
 
 APIキーと設定は、ユーザーPCの `app.getPath('userData')` パスに基本的なエンコーディングを適用して保存されます。ファイルエクスプローラーで誤って開いても平文で表示されないように保護され、Gitや配布ファイルには一切含まれません。
 

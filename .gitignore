@@ -47,3 +47,4 @@ tmp/
 settings.local*
 .claude/
 DEV_NOTES.md
+GPT-API-GUIDE.md

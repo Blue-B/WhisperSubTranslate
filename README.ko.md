@@ -2,7 +2,7 @@
 
 [English](./README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md)
 
-로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 MyMemory(무료), DeepL, ChatGPT(OpenAI)를 선택할 수 있습니다.
+로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 MyMemory(무료), DeepL, GPT-5-nano(OpenAI)를 선택할 수 있습니다.
 
 > 중요: 이 앱은 동영상의 소리를 whisper.cpp로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
 
@@ -64,7 +64,7 @@ npm run build-win
 | 패키징 | electron-builder |
 | 네트워킹 | axios |
 | 음성→텍스트 | whisper.cpp (GGML 모델) |
-| 번역(선택) | DeepL API, OpenAI(ChatGPT), MyMemory |
+| 번역(선택) | DeepL API, OpenAI(GPT-5-nano), MyMemory |
 
 ## 번역 엔진
 
@@ -72,7 +72,7 @@ npm run build-win
 | --- | --- | --- | --- |
 | MyMemory | 무료 | 불필요 | IP당 일 약 5만자 |
 | DeepL | 월 50만자 무료 | 필요 | 유료 플랜 제공 |
-| ChatGPT(OpenAI) | 유료 | 필요 | 사용량 과금 |
+| GPT-5-nano(OpenAI) | 유료 | 필요 | 매우 저렴 ($0.05/1M 입력) |
 
 API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 인코딩을 적용하여 저장됩니다. 파일 탐색기에서 우연히 열어도 평문으로 노출되지 않도록 보호하며, Git이나 배포 파일에는 절대 포함되지 않습니다.
 
