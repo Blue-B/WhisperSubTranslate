@@ -65,61 +65,8 @@ async function checkModelStatus() {
   }
 }
 
-function updateModelSelect() {
-  const modelSelect = document.getElementById('modelSelect');
-  const modelStatus = document.getElementById('modelStatus');
-  
-  modelSelect.innerHTML = '';
-  
-  const models = [
-    { id: 'tiny', name: 'tiny (39MB) - 가장 빠름, 낮은 정확도' },
-    { id: 'base', name: 'base (74MB) - 빠름, 기본 정확도' },
-    { id: 'small', name: 'small (244MB) - 빠른 처리' },
-    { id: 'medium', name: 'medium (769MB) - 균형잡힌 성능' },
-    { id: 'large-v3-turbo', name: 'large-v3-turbo (809MB) - 빠르고 정확함 ⭐추천' },
-    { id: 'large', name: 'large (1550MB) - 느림, 높은 정확도' },
-    { id: 'large-v2', name: 'large-v2 (1550MB) - 개선된 정확도' },
-    { id: 'large-v3', name: 'large-v3 (1550MB) - 최고 정확도' }
-  ];
-  
-  // Available models (사용 가능한 모델)
-  const availableGroup = document.createElement('optgroup');
-  availableGroup.label = '[OK] 사용 가능한 모델';
-  
-  // Models that need download (다운로드 필요한 모델)
-  const needDownloadGroup = document.createElement('optgroup');
-  needDownloadGroup.label = '[DL] 다운로드 필요 (자동 다운로드됨)';
-  
-  let hasAvailable = false;
-  let hasNeedDownload = false;
-  
-  models.forEach(model => {
-    const option = document.createElement('option');
-    option.value = model.id;
-    option.textContent = model.name;
-    
-    if (availableModels[model.id]) {
-      availableGroup.appendChild(option);
-      hasAvailable = true;
-      if (model.id === 'medium') option.selected = true; // 기본 선택
-    } else {
-      needDownloadGroup.appendChild(option);
-      hasNeedDownload = true;
-    }
-  });
-  
-  if (hasAvailable) modelSelect.appendChild(availableGroup);
-  if (hasNeedDownload) modelSelect.appendChild(needDownloadGroup);
-  
-  // 상태 메시지 업데이트
-  const availableCount = Object.keys(availableModels).length;
-  modelStatus.innerHTML = `
-    <span style="color: #28a745;">${availableCount}개 모델 사용 가능</span> | 
-    <span style="color: #ffc107;">부족한 모델은 자동 다운로드됩니다</span>
-  `;
-}
-
 // Update queue UI (대기열 UI 업데이트)
+// Note: updateModelSelect is defined in the i18n section below (line ~1543)
 function updateQueueDisplay() {
   const queueContainer = document.getElementById('queueContainer');
   const queueList = document.getElementById('queueList');
@@ -1357,6 +1304,7 @@ const MODEL_I18N = {
     base: 'base (74MB) - 빠름, 기본 정확도',
     small: 'small (244MB) - 빠른 처리',
     medium: 'medium (769MB) - 균형잡힌 성능',
+    'large-v3-turbo': 'large-v3-turbo (809MB) - 빠르고 정확함 ⭐추천',
     large: 'large (1550MB) - 느림, 높은 정확도',
     'large-v2': 'large-v2 (1550MB) - 개선된 정확도',
     'large-v3': 'large-v3 (1550MB) - 최신 버전',
@@ -1366,6 +1314,7 @@ const MODEL_I18N = {
     base: 'base (74MB) - Fast, basic accuracy',
     small: 'small (244MB) - Fast processing',
     medium: 'medium (769MB) - Balanced',
+    'large-v3-turbo': 'large-v3-turbo (809MB) - Fast & accurate ⭐Recommended',
     large: 'large (1550MB) - Slow, high accuracy',
     'large-v2': 'large-v2 (1550MB) - Improved accuracy',
     'large-v3': 'large-v3 (1550MB) - Latest version',
@@ -1375,6 +1324,7 @@ const MODEL_I18N = {
     base: 'base (74MB) - 高速、基本精度',
     small: 'small (244MB) - 高速処理',
     medium: 'medium (769MB) - バランス型',
+    'large-v3-turbo': 'large-v3-turbo (809MB) - 高速高精度 ⭐推奨',
     large: 'large (1550MB) - 低速、高精度',
     'large-v2': 'large-v2 (1550MB) - 精度向上',
     'large-v3': 'large-v3 (1550MB) - 最新版',
@@ -1384,6 +1334,7 @@ const MODEL_I18N = {
     base: 'base (74MB) - 快，基础精度',
     small: 'small (244MB) - 处理快速',
     medium: 'medium (769MB) - 平衡',
+    'large-v3-turbo': 'large-v3-turbo (809MB) - 快速精准 ⭐推荐',
     large: 'large (1550MB) - 慢，精度高',
     'large-v2': 'large-v2 (1550MB) - 精度提升',
     'large-v3': 'large-v3 (1550MB) - 最新版本',
@@ -1546,7 +1497,7 @@ function updateModelSelect() {
   
   modelSelect.innerHTML = '';
   
-  const ids = ['tiny','base','small','medium','large','large-v2','large-v3'];
+  const ids = ['tiny','base','small','medium','large-v3-turbo','large','large-v2','large-v3'];
   const models = ids.map(id => ({ id, name: getModelDisplayName(currentUiLang, id) }));
   
   const availableGroup = document.createElement('optgroup');
@@ -1597,7 +1548,8 @@ function updateModelRequirements(modelId) {
     'medium': { vram: '~3GB', ram: '~6GB', speed: '★★☆☆☆' },
     'large': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
     'large-v2': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
-    'large-v3': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' }
+    'large-v3': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v3-turbo': { vram: '~3GB', ram: '~6GB', speed: '★★★☆☆' }
   };
 
   const req = requirements[modelId];
