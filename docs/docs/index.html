@@ -76,44 +76,23 @@
         .nav-link:hover { color: var(--accent); }
         .nav-link.active { color: var(--accent); }
 
-        .lang-selector { position: relative; }
-        .lang-btn {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.85rem;
-            font-family: inherit;
-            transition: border-color 0.2s;
+        /* Google Translate Widget Styles */
+        .translate-widget { display: flex; align-items: center; }
+        #google_translate_element { display: inline-block; }
+        #google_translate_element .goog-te-gadget { font-family: inherit !important; font-size: 0 !important; }
+        #google_translate_element .goog-te-gadget-simple {
+            background: var(--bg-tertiary) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.875rem !important;
         }
-        .lang-btn:hover { border-color: var(--border-hover); }
-        .lang-btn svg { width: 14px; height: 14px; }
-        .lang-dropdown {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            margin-top: 0.5rem;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            overflow: hidden;
-            display: none;
-            min-width: 120px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
-        .lang-dropdown.active { display: block; }
-        .lang-option {
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: background 0.2s;
-        }
-        .lang-option:hover { background: var(--bg-tertiary); }
+        #google_translate_element .goog-te-gadget-simple:hover { border-color: var(--border-hover) !important; }
+        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value { color: var(--text-secondary) !important; }
+        #google_translate_element img { display: none !important; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        .skiptranslate { display: none !important; }
 
         .container {
             max-width: 1400px;
@@ -345,25 +324,9 @@
             <div class="nav-links">
                 <a href="../" class="nav-link" data-i18n="nav.home">Home</a>
                 <a href="../blog/" class="nav-link" data-i18n="nav.blog">Blog</a>
-                <a href="./" class="nav-link active" data-i18n="nav.docs">Docs</a>
-                <div class="lang-selector">
-                    <button class="lang-btn" onclick="toggleLangDropdown()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                        </svg>
-                        <span id="current-lang">EN</span>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
-                            <path d="M6 9l6 6 6-6"/>
-                        </svg>
-                    </button>
-                    <div class="lang-dropdown" id="lang-dropdown">
-                        <div class="lang-option" onclick="setLanguage('en')">English</div>
-                        <div class="lang-option" onclick="setLanguage('ko')">한국어</div>
-                        <div class="lang-option" onclick="setLanguage('ja')">日本語</div>
-                        <div class="lang-option" onclick="setLanguage('zh')">中文</div>
-                        <div class="lang-option" onclick="setLanguage('es')">Español</div>
-                    </div>
+                <a href="./" class="nav-link active">Docs</a>
+                <div class="translate-widget">
+                    <div id="google_translate_element"></div>
                 </div>
             </div>
         </div>
@@ -550,13 +513,11 @@
                     </svg>
                     <span data-i18n="docs.formats.title">Output Formats</span>
                 </h2>
-                <p data-i18n="docs.formats.intro">WhisperSubTranslate supports multiple subtitle formats:</p>
+                <p data-i18n="docs.formats.intro">WhisperSubTranslate generates subtitles in the most compatible format:</p>
                 <ul>
-                    <li><strong>SRT</strong> - <span data-i18n="docs.formats.srt">Most widely compatible format, works with most video players</span></li>
-                    <li><strong>VTT</strong> - <span data-i18n="docs.formats.vtt">Web-friendly format for HTML5 video</span></li>
-                    <li><strong>TXT</strong> - <span data-i18n="docs.formats.txt">Plain text without timestamps</span></li>
-                    <li><strong>JSON</strong> - <span data-i18n="docs.formats.json">Structured format with detailed metadata</span></li>
+                    <li><strong>SRT</strong> - <span data-i18n="docs.formats.srt">Most widely compatible format, works with all video players. The app automatically generates SRT files with millisecond-precision timestamps.</span></li>
                 </ul>
+                <p data-i18n="docs.formats.note">Note: The underlying whisper.cpp engine supports additional formats (VTT, TXT, JSON) via command line, but the app interface focuses on SRT for maximum compatibility.</p>
             </section>
 
             <section id="translation">
@@ -627,13 +588,13 @@
                     <span data-i18n="docs.cli.title">Command Line</span>
                 </h2>
                 <p data-i18n="docs.cli.intro">For advanced users, the underlying whisper.cpp can be used directly from the command line:</p>
-                <pre><code>whisper-cli.exe -m models/ggml-small.bin -l auto input.wav</code></pre>
+                <pre><code>whisper-cli.exe -m _models/ggml-small.bin -l auto input.wav</code></pre>
                 <h3 data-i18n="docs.cli.options">Common Options</h3>
                 <ul>
                     <li><code>-m</code> - <span data-i18n="docs.cli.model">Model path</span></li>
                     <li><code>-l</code> - <span data-i18n="docs.cli.language">Source language (auto, en, ko, ja, etc.)</span></li>
                     <li><code>-osrt</code> - <span data-i18n="docs.cli.osrt">Output SRT format</span></li>
-                    <li><code>-ml</code> - <span data-i18n="docs.cli.ml">Minimum segment length in ms</span></li>
+                    <li><code>-ml</code> - <span data-i18n="docs.cli.ml">Maximum segment length in ms</span></li>
                 </ul>
             </section>
 
@@ -672,147 +633,32 @@
         <p>&copy; 2024 WhisperSubTranslate. MIT License.</p>
     </footer>
 
+    <!-- Smooth scroll for sidebar links -->
     <script>
-        const translations = {
-            en: {
-                "nav.home": "Home",
-                "nav.blog": "Blog",
-                "nav.docs": "Docs",
-                "docs.sidebar.getting-started": "Getting Started",
-                "docs.sidebar.installation": "Installation",
-                "docs.sidebar.quickstart": "Quick Start",
-                "docs.sidebar.requirements": "System Requirements",
-                "docs.sidebar.features": "Features",
-                "docs.sidebar.models": "Whisper Models",
-                "docs.sidebar.formats": "Output Formats",
-                "docs.sidebar.translation": "Translation",
-                "docs.sidebar.gpu": "GPU Acceleration",
-                "docs.sidebar.advanced": "Advanced",
-                "docs.sidebar.cli": "Command Line",
-                "docs.sidebar.troubleshooting": "Troubleshooting",
-                "docs.title": "Documentation",
-                "docs.intro": "Complete guide to WhisperSubTranslate - from installation to advanced features."
-            },
-            ko: {
-                "nav.home": "홈",
-                "nav.blog": "블로그",
-                "nav.docs": "문서",
-                "docs.sidebar.getting-started": "시작하기",
-                "docs.sidebar.installation": "설치",
-                "docs.sidebar.quickstart": "빠른 시작",
-                "docs.sidebar.requirements": "시스템 요구사항",
-                "docs.sidebar.features": "기능",
-                "docs.sidebar.models": "Whisper 모델",
-                "docs.sidebar.formats": "출력 형식",
-                "docs.sidebar.translation": "번역",
-                "docs.sidebar.gpu": "GPU 가속",
-                "docs.sidebar.advanced": "고급",
-                "docs.sidebar.cli": "커맨드 라인",
-                "docs.sidebar.troubleshooting": "문제 해결",
-                "docs.title": "문서",
-                "docs.intro": "WhisperSubTranslate 완벽 가이드 - 설치부터 고급 기능까지."
-            },
-            ja: {
-                "nav.home": "ホーム",
-                "nav.blog": "ブログ",
-                "nav.docs": "ドキュメント",
-                "docs.sidebar.getting-started": "はじめに",
-                "docs.sidebar.installation": "インストール",
-                "docs.sidebar.quickstart": "クイックスタート",
-                "docs.sidebar.requirements": "システム要件",
-                "docs.sidebar.features": "機能",
-                "docs.sidebar.models": "Whisperモデル",
-                "docs.sidebar.formats": "出力形式",
-                "docs.sidebar.translation": "翻訳",
-                "docs.sidebar.gpu": "GPUアクセラレーション",
-                "docs.sidebar.advanced": "上級",
-                "docs.sidebar.cli": "コマンドライン",
-                "docs.sidebar.troubleshooting": "トラブルシューティング",
-                "docs.title": "ドキュメント",
-                "docs.intro": "WhisperSubTranslate完全ガイド - インストールから高度な機能まで。"
-            },
-            zh: {
-                "nav.home": "首页",
-                "nav.blog": "博客",
-                "nav.docs": "文档",
-                "docs.sidebar.getting-started": "入门",
-                "docs.sidebar.installation": "安装",
-                "docs.sidebar.quickstart": "快速开始",
-                "docs.sidebar.requirements": "系统要求",
-                "docs.sidebar.features": "功能",
-                "docs.sidebar.models": "Whisper模型",
-                "docs.sidebar.formats": "输出格式",
-                "docs.sidebar.translation": "翻译",
-                "docs.sidebar.gpu": "GPU加速",
-                "docs.sidebar.advanced": "高级",
-                "docs.sidebar.cli": "命令行",
-                "docs.sidebar.troubleshooting": "故障排除",
-                "docs.title": "文档",
-                "docs.intro": "WhisperSubTranslate完整指南 - 从安装到高级功能。"
-            },
-            es: {
-                "nav.home": "Inicio",
-                "nav.blog": "Blog",
-                "nav.docs": "Docs",
-                "docs.sidebar.getting-started": "Comenzar",
-                "docs.sidebar.installation": "Instalación",
-                "docs.sidebar.quickstart": "Inicio Rápido",
-                "docs.sidebar.requirements": "Requisitos del Sistema",
-                "docs.sidebar.features": "Características",
-                "docs.sidebar.models": "Modelos Whisper",
-                "docs.sidebar.formats": "Formatos de Salida",
-                "docs.sidebar.translation": "Traducción",
-                "docs.sidebar.gpu": "Aceleración GPU",
-                "docs.sidebar.advanced": "Avanzado",
-                "docs.sidebar.cli": "Línea de Comandos",
-                "docs.sidebar.troubleshooting": "Solución de Problemas",
-                "docs.title": "Documentación",
-                "docs.intro": "Guía completa de WhisperSubTranslate - desde la instalación hasta las funciones avanzadas."
-            }
-        };
-
-        const langNames = { en: 'EN', ko: '한국어', ja: '日本語', zh: '中文', es: 'ES' };
-
-        function setLanguage(lang) {
-            const t = translations[lang];
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                if (t[key]) el.textContent = t[key];
-            });
-            document.getElementById('current-lang').textContent = langNames[lang];
-            document.getElementById('lang-dropdown').classList.remove('active');
-            localStorage.setItem('lang', lang);
-            document.documentElement.lang = lang;
-        }
-
-        function toggleLangDropdown() {
-            document.getElementById('lang-dropdown').classList.toggle('active');
-        }
-
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.lang-selector')) {
-                document.getElementById('lang-dropdown').classList.remove('active');
-            }
-        });
-
-        // Smooth scroll for sidebar links
         document.querySelectorAll('.sidebar a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function(e) {
                 e.preventDefault();
                 const target = document.querySelector(this.getAttribute('href'));
                 if (target) {
                     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    // Update active state
                     document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
                     this.classList.add('active');
                 }
             });
         });
-
-        const savedLang = localStorage.getItem('lang');
-        const browserLang = navigator.language.split('-')[0];
-        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
-        setLanguage(defaultLang);
     </script>
+
+    <!-- Google Translate Widget -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 </body>
 </html>

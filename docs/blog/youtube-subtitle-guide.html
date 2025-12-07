@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Complete guide to adding subtitles to YouTube videos using WhisperSubTranslate. Step-by-step instructions for uploading SRT files.">
+    <meta name="keywords" content="YouTube subtitles, SRT upload, video captions, WhisperSubTranslate, subtitle guide">
+    <title>Complete Guide to Adding Subtitles to YouTube Videos - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+        .translate-widget { display: flex; align-items: center; }
+        #google_translate_element { display: inline-block; }
+        #google_translate_element .goog-te-gadget { font-size: 0 !important; }
+        #google_translate_element .goog-te-gadget-simple {
+            background: var(--bg-tertiary) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem 0.75rem !important;
+        }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        article {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 7rem 2rem 4rem;
+        }
+        .article-header { margin-bottom: 3rem; }
+        .category {
+            display: inline-block;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+        .meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .content h2 {
+            font-size: 1.5rem;
+            margin: 2.5rem 0 1rem;
+            color: var(--text-primary);
+        }
+        .content h3 {
+            font-size: 1.25rem;
+            margin: 2rem 0 0.75rem;
+            color: var(--text-primary);
+        }
+        .content p {
+            color: var(--text-secondary);
+            margin-bottom: 1.25rem;
+        }
+        .content ul, .content ol {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .content li { margin-bottom: 0.5rem; }
+        .content strong { color: var(--text-primary); }
+        .info-box {
+            background: var(--accent-glow);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+        .info-box p { margin: 0; }
+        .step-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        .step-number {
+            display: inline-block;
+            background: var(--accent);
+            color: var(--bg-primary);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-right: 0.75rem;
+        }
+        .step-box h4 {
+            display: inline;
+            font-size: 1.1rem;
+        }
+        .step-box p {
+            margin-top: 0.75rem;
+            margin-bottom: 0;
+            padding-left: 2.5rem;
+        }
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+        footer a { color: var(--text-secondary); text-decoration: none; }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+        .back-link:hover { text-decoration: underline; }
+        @media (max-width: 640px) {
+            article { padding: 6rem 1.25rem 3rem; }
+            h1 { font-size: 1.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">WhisperSubTranslate</a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../docs/">Docs</a>
+                <a href="./">Blog</a>
+                <div class="translate-widget">
+                    <div id="google_translate_element"></div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <a href="./" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Blog
+        </a>
+
+        <header class="article-header">
+            <span class="category">Guide</span>
+            <h1>Complete Guide to Adding Subtitles to YouTube Videos</h1>
+            <p class="meta">November 2024 &bull; 5 min read</p>
+        </header>
+
+        <div class="content">
+            <p>Adding subtitles to your YouTube videos can significantly increase your audience reach and engagement. This guide walks you through the process of extracting subtitles with WhisperSubTranslate and uploading them to YouTube.</p>
+
+            <h2>Why Add Subtitles to Your Videos?</h2>
+            <ul>
+                <li><strong>Accessibility:</strong> Help deaf and hard-of-hearing viewers enjoy your content</li>
+                <li><strong>SEO Benefits:</strong> YouTube indexes subtitle text, improving discoverability</li>
+                <li><strong>Global Reach:</strong> Viewers can use auto-translate to watch in their language</li>
+                <li><strong>Better Engagement:</strong> Many viewers watch videos on mute</li>
+            </ul>
+
+            <h2>Step-by-Step Process</h2>
+
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <h4>Extract Subtitles with WhisperSubTranslate</h4>
+                <p>Open WhisperSubTranslate, drag your video file, select the appropriate Whisper model (we recommend "small" or "turbo"), and click "Extract Subtitles". Wait for the process to complete.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <h4>Save as SRT Format</h4>
+                <p>WhisperSubTranslate automatically generates SRT files. Make sure the file is saved with the .srt extension. This is the format YouTube accepts.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <h4>Go to YouTube Studio</h4>
+                <p>Navigate to studio.youtube.com, find your video, and click on it to open the video details page.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">4</span>
+                <h4>Open Subtitles Section</h4>
+                <p>In the left sidebar, click on "Subtitles". You'll see options to add subtitles in different languages.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">5</span>
+                <h4>Upload Your SRT File</h4>
+                <p>Click "Add Language", select the language of your subtitles, then choose "Upload file" and select "With timing". Upload your SRT file.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">6</span>
+                <h4>Review and Publish</h4>
+                <p>YouTube will show a preview of your subtitles. Review the timing and text, make any necessary edits, then click "Publish".</p>
+            </div>
+
+            <h2>Tips for Best Results</h2>
+            <ul>
+                <li><strong>Use a larger model</strong> for important videos - "medium" or "large-v3" provides better accuracy</li>
+                <li><strong>Specify the language</strong> instead of using auto-detect for better results</li>
+                <li><strong>Review the output</strong> - AI isn't perfect, so check for errors before uploading</li>
+                <li><strong>Add translations</strong> - Use the translation feature to create subtitles in multiple languages</li>
+            </ul>
+
+            <div class="info-box">
+                <p><strong>Pro Tip:</strong> If you're uploading subtitles in multiple languages, create a consistent naming convention like "video_name_en.srt", "video_name_ko.srt" to stay organized.</p>
+            </div>
+
+            <h2>Troubleshooting Common Issues</h2>
+            <h3>Subtitles are out of sync</h3>
+            <p>This can happen if your video was edited after subtitle extraction. Re-extract the subtitles from the final video version.</p>
+
+            <h3>YouTube rejects the SRT file</h3>
+            <p>Make sure your SRT file uses the correct format with proper timestamps (00:00:00,000 --> 00:00:00,000). WhisperSubTranslate generates correctly formatted files by default.</p>
+
+            <h3>Some words are incorrect</h3>
+            <p>Try using a larger Whisper model for better accuracy. You can also manually edit the SRT file in any text editor before uploading.</p>
+        </div>
+    </article>
+
+    <footer>
+        <p>&copy; 2024 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

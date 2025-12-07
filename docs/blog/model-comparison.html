@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Compare Whisper models from tiny to large-v3. Find the best model for your needs with accuracy, speed, and memory benchmarks.">
+    <meta name="keywords" content="Whisper models, model comparison, tiny, small, medium, large, turbo, accuracy benchmark">
+    <title>Whisper Model Comparison: From tiny to large - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
+        .nav-links a:hover { color: var(--text-primary); }
+        #google_translate_element .goog-te-gadget { font-size: 0 !important; }
+        #google_translate_element .goog-te-gadget-simple { background: var(--bg-tertiary) !important; border: 1px solid var(--border) !important; border-radius: 8px !important; padding: 0.5rem 0.75rem !important; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        article { max-width: 800px; margin: 0 auto; padding: 7rem 2rem 4rem; }
+        .article-header { margin-bottom: 3rem; }
+        .category { display: inline-block; background: var(--accent-glow); color: var(--accent); padding: 0.25rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 1rem; }
+        h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+        .meta { color: var(--text-muted); font-size: 0.9rem; }
+        .content h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; }
+        .content h3 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+        .content p { color: var(--text-secondary); margin-bottom: 1.25rem; }
+        .content ul { color: var(--text-secondary); padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        .content li { margin-bottom: 0.5rem; }
+        .content strong { color: var(--text-primary); }
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        .comparison-table th, .comparison-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .comparison-table th { background: var(--bg-secondary); color: var(--text-primary); font-weight: 600; }
+        .comparison-table td { color: var(--text-secondary); }
+        .model-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0; }
+        .model-card h3 { margin-top: 0; color: var(--accent); }
+        .model-card .specs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1rem; }
+        .model-card .spec { text-align: center; }
+        .model-card .spec-value { font-size: 1.25rem; font-weight: 600; color: var(--text-primary); }
+        .model-card .spec-label { font-size: 0.8rem; color: var(--text-muted); }
+        .recommendation { background: var(--accent-glow); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+        .recommendation p { margin: 0; }
+        footer { text-align: center; padding: 3rem 2rem; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 4rem; font-size: 0.875rem; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--accent); text-decoration: none; font-weight: 500; margin-bottom: 2rem; }
+        @media (max-width: 640px) { article { padding: 6rem 1.25rem 3rem; } h1 { font-size: 1.75rem; } .model-card .specs { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">WhisperSubTranslate</a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../docs/">Docs</a>
+                <a href="./">Blog</a>
+                <div class="translate-widget"><div id="google_translate_element"></div></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <a href="./" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to Blog
+        </a>
+
+        <header class="article-header">
+            <span class="category">Comparison</span>
+            <h1>Whisper Model Comparison: From tiny to large</h1>
+            <p class="meta">September 2024 &bull; 6 min read</p>
+        </header>
+
+        <div class="content">
+            <p>Choosing the right Whisper model is crucial for balancing accuracy and speed. This guide compares all available models with real benchmark data.</p>
+
+            <h2>Quick Comparison</h2>
+            <table class="comparison-table">
+                <tr>
+                    <th>Model</th>
+                    <th>Size</th>
+                    <th>VRAM</th>
+                    <th>Speed</th>
+                    <th>Accuracy</th>
+                </tr>
+                <tr>
+                    <td>tiny</td>
+                    <td>75 MB</td>
+                    <td>~1 GB</td>
+                    <td>32x</td>
+                    <td>Good</td>
+                </tr>
+                <tr>
+                    <td>base</td>
+                    <td>142 MB</td>
+                    <td>~1 GB</td>
+                    <td>16x</td>
+                    <td>Better</td>
+                </tr>
+                <tr>
+                    <td>small</td>
+                    <td>466 MB</td>
+                    <td>~2 GB</td>
+                    <td>6x</td>
+                    <td>Great</td>
+                </tr>
+                <tr>
+                    <td>medium</td>
+                    <td>1.5 GB</td>
+                    <td>~5 GB</td>
+                    <td>2x</td>
+                    <td>Excellent</td>
+                </tr>
+                <tr>
+                    <td>large-v3</td>
+                    <td>3.0 GB</td>
+                    <td>~10 GB</td>
+                    <td>1x</td>
+                    <td>Best</td>
+                </tr>
+                <tr>
+                    <td>turbo</td>
+                    <td>1.5 GB</td>
+                    <td>~6 GB</td>
+                    <td>8x</td>
+                    <td>Excellent</td>
+                </tr>
+            </table>
+
+            <h2>Detailed Model Analysis</h2>
+
+            <div class="model-card">
+                <h3>tiny</h3>
+                <p>The fastest model, ideal for quick drafts or when you need results immediately.</p>
+                <div class="specs">
+                    <div class="spec"><div class="spec-value">75 MB</div><div class="spec-label">Model Size</div></div>
+                    <div class="spec"><div class="spec-value">~1 GB</div><div class="spec-label">VRAM Required</div></div>
+                    <div class="spec"><div class="spec-value">32x</div><div class="spec-label">Relative Speed</div></div>
+                </div>
+                <p style="margin-top: 1rem;"><strong>Best for:</strong> Quick previews, low-resource systems, non-critical content</p>
+            </div>
+
+            <div class="model-card">
+                <h3>small</h3>
+                <p>The sweet spot for most users. Great balance of speed and accuracy.</p>
+                <div class="specs">
+                    <div class="spec"><div class="spec-value">466 MB</div><div class="spec-label">Model Size</div></div>
+                    <div class="spec"><div class="spec-value">~2 GB</div><div class="spec-label">VRAM Required</div></div>
+                    <div class="spec"><div class="spec-value">6x</div><div class="spec-label">Relative Speed</div></div>
+                </div>
+                <p style="margin-top: 1rem;"><strong>Best for:</strong> General use, YouTube videos, podcasts</p>
+            </div>
+
+            <div class="model-card">
+                <h3>turbo</h3>
+                <p>Optimized for speed while maintaining excellent accuracy. Our recommended choice.</p>
+                <div class="specs">
+                    <div class="spec"><div class="spec-value">1.5 GB</div><div class="spec-label">Model Size</div></div>
+                    <div class="spec"><div class="spec-value">~6 GB</div><div class="spec-label">VRAM Required</div></div>
+                    <div class="spec"><div class="spec-value">8x</div><div class="spec-label">Relative Speed</div></div>
+                </div>
+                <p style="margin-top: 1rem;"><strong>Best for:</strong> Professional content, fast processing with high accuracy</p>
+            </div>
+
+            <div class="model-card">
+                <h3>large-v3</h3>
+                <p>Maximum accuracy for critical content where every word matters.</p>
+                <div class="specs">
+                    <div class="spec"><div class="spec-value">3.0 GB</div><div class="spec-label">Model Size</div></div>
+                    <div class="spec"><div class="spec-value">~10 GB</div><div class="spec-label">VRAM Required</div></div>
+                    <div class="spec"><div class="spec-value">1x</div><div class="spec-label">Relative Speed</div></div>
+                </div>
+                <p style="margin-top: 1rem;"><strong>Best for:</strong> Professional broadcasts, legal/medical content, multiple languages</p>
+            </div>
+
+            <h2>Our Recommendations</h2>
+
+            <div class="recommendation">
+                <p><strong>For most users:</strong> Start with <strong>small</strong> or <strong>turbo</strong>. They offer the best balance of speed and accuracy for everyday use.</p>
+            </div>
+
+            <h3>By Use Case</h3>
+            <ul>
+                <li><strong>YouTube/Podcasts:</strong> small or turbo</li>
+                <li><strong>Movies/TV Shows:</strong> medium or large-v3</li>
+                <li><strong>Quick Drafts:</strong> tiny or base</li>
+                <li><strong>Professional/Broadcast:</strong> large-v3</li>
+                <li><strong>Multiple Languages:</strong> medium or large-v3</li>
+            </ul>
+
+            <h3>By Hardware</h3>
+            <ul>
+                <li><strong>4GB VRAM or less:</strong> tiny, base, small</li>
+                <li><strong>6GB VRAM:</strong> small, medium, turbo</li>
+                <li><strong>8GB+ VRAM:</strong> Any model including large-v3</li>
+                <li><strong>CPU only:</strong> tiny or base recommended</li>
+            </ul>
+        </div>
+    </article>
+
+    <footer><p>&copy; 2024 WhisperSubTranslate. MIT License.</p></footer>
+
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({ pageLanguage: 'en', includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru', layout: google.translate.TranslateElement.InlineLayout.SIMPLE, autoDisplay: false }, 'google_translate_element');
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

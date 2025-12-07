@@ -1,8 +1,8 @@
 # GitHub Pages Configuration
 title: WhisperSubTranslate
 description: AI 기반 무료 자막 추출 & 번역 프로그램
-url: "https://whispersubtranslate.github.io"
-baseurl: ""
+url: "https://blue-b.github.io"
+baseurl: "/WhisperSubTranslate"
 
 # Theme
 theme: null
