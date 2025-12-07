@@ -148,6 +148,10 @@
         <div class="content">
             <p>Choosing the right Whisper model is crucial for balancing accuracy and speed. This guide compares all available models with real benchmark data.</p>
 
+            <div class="recommendation" style="margin-bottom: 1.5rem;">
+                <p><strong>Note:</strong> This app uses <a href="https://github.com/ggerganov/whisper.cpp" target="_blank" rel="noopener">whisper.cpp</a>, which requires significantly less VRAM than the original PyTorch Whisper (~10GB for large) due to GGML optimization.</p>
+            </div>
+
             <h2>Quick Comparison</h2>
             <table class="comparison-table">
                 <tr>
@@ -181,20 +185,20 @@
                 <tr>
                     <td>medium</td>
                     <td>1.5 GB</td>
-                    <td>~3 GB</td>
+                    <td>~4 GB</td>
                     <td>2x</td>
                     <td>Excellent</td>
                 </tr>
                 <tr>
                     <td>large-v3</td>
                     <td>3.0 GB</td>
-                    <td>~4 GB</td>
+                    <td>~5 GB</td>
                     <td>1x</td>
                     <td>Best</td>
                 </tr>
                 <tr>
-                    <td>large-v3-turbo</td>
-                    <td>1.5 GB</td>
+                    <td>large-v3-turbo ⭐</td>
+                    <td>809 MB</td>
                     <td>~4 GB</td>
                     <td>8x</td>
                     <td>Excellent</td>
@@ -226,10 +230,10 @@
             </div>
 
             <div class="model-card">
-                <h3>large-v3-turbo</h3>
-                <p>Optimized for speed while maintaining excellent accuracy. Our recommended choice.</p>
+                <h3>large-v3-turbo ⭐ Recommended</h3>
+                <p>Optimized for speed while maintaining excellent accuracy. Our recommended choice for most users.</p>
                 <div class="specs">
-                    <div class="spec"><div class="spec-value">1.5 GB</div><div class="spec-label">Model Size</div></div>
+                    <div class="spec"><div class="spec-value">809 MB</div><div class="spec-label">Model Size</div></div>
                     <div class="spec"><div class="spec-value">~4 GB</div><div class="spec-label">VRAM Required</div></div>
                     <div class="spec"><div class="spec-value">8x</div><div class="spec-label">Relative Speed</div></div>
                 </div>
@@ -241,7 +245,7 @@
                 <p>Maximum accuracy for critical content where every word matters.</p>
                 <div class="specs">
                     <div class="spec"><div class="spec-value">3.0 GB</div><div class="spec-label">Model Size</div></div>
-                    <div class="spec"><div class="spec-value">~4 GB</div><div class="spec-label">VRAM Required</div></div>
+                    <div class="spec"><div class="spec-value">~5 GB</div><div class="spec-label">VRAM Required</div></div>
                     <div class="spec"><div class="spec-value">1x</div><div class="spec-label">Relative Speed</div></div>
                 </div>
                 <p style="margin-top: 1rem;"><strong>Best for:</strong> Professional broadcasts, legal/medical content, multiple languages</p>
@@ -264,9 +268,8 @@
 
             <h3>By Hardware</h3>
             <ul>
-                <li><strong>4GB VRAM or less:</strong> tiny, base, small</li>
-                <li><strong>4-6GB VRAM:</strong> small, medium, large-v3-turbo, large-v3</li>
-                <li><strong>8GB+ VRAM:</strong> Any model comfortably</li>
+                <li><strong>4GB VRAM:</strong> small, medium, large-v3-turbo</li>
+                <li><strong>6GB+ VRAM:</strong> Any model including large-v3</li>
                 <li><strong>CPU only:</strong> tiny or base recommended</li>
             </ul>
         </div>

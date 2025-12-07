@@ -1541,15 +1541,18 @@ function updateModelRequirements(modelId) {
   const requirementsEl = document.getElementById('modelRequirements');
   if (!requirementsEl) return;
 
+  // whisper.cpp uses GGML quantization - requires much less VRAM than PyTorch (~10GB)
+  // Source: https://github.com/ggerganov/whisper.cpp
+  // Tested: large-v3 works on 6GB VRAM GPU
   const requirements = {
     'tiny': { vram: '~1GB', ram: '~2GB', speed: '★★★★★' },
     'base': { vram: '~1GB', ram: '~2GB', speed: '★★★★☆' },
     'small': { vram: '~2GB', ram: '~4GB', speed: '★★★☆☆' },
-    'medium': { vram: '~3GB', ram: '~6GB', speed: '★★☆☆☆' },
-    'large': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
-    'large-v2': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
-    'large-v3': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
-    'large-v3-turbo': { vram: '~3GB', ram: '~6GB', speed: '★★★☆☆' }
+    'medium': { vram: '~4GB', ram: '~5GB', speed: '★★☆☆☆' },
+    'large': { vram: '~5GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v2': { vram: '~5GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v3': { vram: '~5GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v3-turbo': { vram: '~4GB', ram: '~4GB', speed: '★★★☆☆' }
   };
 
   const req = requirements[modelId];
