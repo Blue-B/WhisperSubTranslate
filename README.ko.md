@@ -2,9 +2,9 @@
 
 [English](./README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md)
 
-로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 Faster‑Whisper 실행 파일로 안정적으로 처리되며, 번역은 MyMemory(무료), DeepL, ChatGPT(OpenAI)를 선택할 수 있습니다.
+로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 MyMemory(무료), DeepL, ChatGPT(OpenAI)를 선택할 수 있습니다.
 
-> 중요: 이 앱은 동영상의 소리를 Whisper(Faster‑Whisper)로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
+> 중요: 이 앱은 동영상의 소리를 whisper.cpp로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
 
 ## 미리보기
 
@@ -25,41 +25,34 @@
 | 설치/환경 부담 | 모델 자동 다운로드, 파이썬 불필요 |
 | 진행률/피드백 | 대기열, 매끄러운 진행률, ETA |
 
-> 참고: 온라인 번역 엔진을 사용할 경우, 제공사(M yMemory 등)의 정책/쿼터는 적용될 수 있습니다. 앱 자체는 별도의 사용 제한을 두지 않습니다.
+> 참고: 온라인 번역 엔진을 사용할 경우, 제공사(MyMemory 등)의 정책/쿼터는 적용될 수 있습니다. 앱 자체는 별도의 사용 제한을 두지 않습니다.
 
 ## 시작하기
 
-### 개발자: 로컬에서 실행
+### 사용자: 포터블 배포판 실행
 
-사전 준비(1회, 자막 추출에 필수)
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.2.0-portable.zip`
+- 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
-1) Purfview 릴리스에서 `Faster-Whisper-XXL_r245.4_windows.7z` 다운로드: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) `.bat` 파일을 제외하고 프로젝트 루트(`main.js`와 같은 위치)로 압축 해제. 예시(7‑Zip):
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
+바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(무료 MyMemory 기본 제공, DeepL/OpenAI는 본인 API 키 필요).
 
-그다음 실행:
+### 개발자: 소스에서 실행
+
 ```bash
 npm install
 npm start
 ```
-첫 실행 시 모델이 없으면 `_models/`에 자동 내려받습니다.
+- **whisper-cpp**는 `npm install` 시 자동 다운로드됩니다 (~700MB CUDA 버전)
+- **FFmpeg**는 npm 패키지를 통해 자동 포함됩니다
+- 첫 실행 시 선택한 GGML 모델이 없으면 `_models/`에 자동 다운로드됩니다
 
-### 사용자: 배포(포터블)로 바로 실행
-
-- Releases에서 최신 포터블 압축 파일: `WhisperSubTranslate v1.2.0.zip`
-- 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
+> 자동 다운로드 실패 시, [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases)에서 수동 다운로드 후 `whisper-cpp/` 폴더에 압축 해제하세요.
 
 ### Windows 빌드
 ```bash
 npm run build-win
 ```
-산출물은 `dist/`에 생성됩니다.
-
-## 개발자 설정(로컬 실행/빌드)
-
-이 절은 “시작하기”에 통합되었습니다. 위 사전 준비 단계를 참고하세요.
+산출물은 `dist2/`에 생성됩니다.
 
 ## 기술 스택
 
@@ -68,9 +61,9 @@ npm run build-win
 | 영역 | 설명 |
 | --- | --- |
 | 런타임 | Electron, Node.js, JavaScript |
-| 패키징 | electron‑builder |
+| 패키징 | electron-builder |
 | 네트워킹 | axios |
-| 음성→텍스트 | Faster‑Whisper 실행 파일 |
+| 음성→텍스트 | whisper.cpp (GGML 모델) |
 | 번역(선택) | DeepL API, OpenAI(ChatGPT), MyMemory |
 
 ## 번역 엔진
@@ -92,11 +85,19 @@ API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 
 한국어 (ko), 영어 (en), 일본어 (ja), 중국어 (zh), 스페인어 (es), 프랑스어 (fr), 독일어 (de), 이탈리아어 (it), 포르투갈어 (pt), 러시아어 (ru), **헝가리어 (hu)**, **아랍어 (ar)**
 
 ### 음성 인식 언어
-Faster-Whisper XXL은 100개 이상의 언어를 지원합니다 (영어, 스페인어, 프랑스어, 독일어, 이탈리아어, 포르투갈어, 러시아어, 중국어, 일본어, 한국어, 아랍어, 힌디어, 터키어 등 주요 세계 언어 포함).
+whisper.cpp는 100개 이상의 언어를 지원합니다 (영어, 스페인어, 프랑스어, 독일어, 이탈리아어, 포르투갈어, 러시아어, 중국어, 일본어, 한국어, 아랍어, 힌디어, 터키어 등 주요 세계 언어 포함).
 
 ## 모델과 성능
 
-모델은 `_models/`에 저장되고 필요 시 자동 내려받습니다. 큰 모델일수록 느리지만 더 정확할 수 있습니다. CUDA 가능 시 GPU, 아니면 CPU로 동작합니다.
+모델은 `_models/`에 저장되고 필요 시 자동 다운로드됩니다. 큰 모델일수록 느리지만 더 정확할 수 있습니다. CUDA 가능 시 GPU, 아니면 CPU로 동작합니다.
+
+| 모델 | 크기 | VRAM | 속도 | 품질 |
+| --- | --- | --- | --- | --- |
+| tiny | ~75MB | ~1GB | 가장 빠름 | 기본 |
+| base | ~142MB | ~1GB | 빠름 | 좋음 |
+| small | ~466MB | ~2GB | 보통 | 더 좋음 |
+| medium | ~1.5GB | ~5GB | 느림 | 훌륭함 |
+| large-v3 | ~3GB | ~10GB | 가장 느림 | 최고 |
 
 ## 브랜치(단순 Trunk)
 
@@ -170,14 +171,15 @@ fix: localize target language note
 - 사용처: 버그 수정, 모델 다운로드 안정화, UI 다듬기, 번역 옵션 확장, Windows 빌드/테스트
 - 투명성: 데이터 판매 없음. 후원금은 개발 시간, 릴리스 빌드 인프라, 번역 API 테스트 비용에만 사용합니다.
 - 일시 후원도 스폰서 명단(README/릴리스 노트)에 이름을 표기합니다(비공개 요청 가능).
-- 월 정기 후원($3/mo, GitHub Sponsors 자동결제)은 “Sponsor Request” 이슈 우선 확인(베스트 에포트) 혜택을 추가로 제공합니다.
+- 월 정기 후원($3/mo, GitHub Sponsors 자동결제)은 "Sponsor Request" 이슈 우선 확인(베스트 에포트) 혜택을 추가로 제공합니다.
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/일시후원_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
 
 ## 감사의 말
 
-- Faster‑Whisper 단독 실행 파일을 제공해 주신 프로젝트에 감사드립니다: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- whisper.cpp는 Georgi Gerganov가 개발했습니다: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
 ## 라이선스
 
-ISC. 외부 API/서비스(DeepL, OpenAI 등)는 각 약관을 준수해야 합니다. 
+ISC. 외부 API/서비스(DeepL, OpenAI 등)는 각 약관을 준수해야 합니다.

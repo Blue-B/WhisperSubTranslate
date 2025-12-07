@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate Documentation - Installation, usage guide, and advanced features">
+    <title>Documentation - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --code-bg: #161616;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; color: var(--accent); }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .nav-link:hover { color: var(--accent); }
+        .nav-link.active { color: var(--accent); }
+
+        .lang-selector { position: relative; }
+        .lang-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .lang-btn:hover { border-color: var(--border-hover); }
+        .lang-btn svg { width: 14px; height: 14px; }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            min-width: 120px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .lang-dropdown.active { display: block; }
+        .lang-option {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .lang-option:hover { background: var(--bg-tertiary); }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 6rem 2rem 4rem;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 3rem;
+        }
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 5rem;
+            height: fit-content;
+            max-height: calc(100vh - 6rem);
+            overflow-y: auto;
+        }
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+        .sidebar h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+        .sidebar ul {
+            list-style: none;
+        }
+        .sidebar li { margin-bottom: 0.25rem; }
+        .sidebar a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: block;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .sidebar a:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+        .sidebar a.active {
+            color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        main {
+            min-width: 0;
+        }
+        main h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #a1a1a1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .intro {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-top: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2 svg {
+            width: 24px;
+            height: 24px;
+            color: var(--accent);
+        }
+        h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        ul, ol {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        li { margin-bottom: 0.5rem; }
+        li strong { color: var(--text-primary); }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: var(--accent);
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-secondary);
+        }
+
+        .info-box {
+            background: var(--accent-glow);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .info-box svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .info-box p { margin: 0; }
+
+        .warning-box {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .warning-box svg {
+            width: 20px;
+            height: 20px;
+            color: var(--warning);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .warning-box p { margin: 0; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: var(--bg-secondary);
+        }
+        td {
+            color: var(--text-secondary);
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        a:hover { text-decoration: underline; }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 600px) {
+            nav { padding: 1rem; }
+            .container { padding: 5rem 1rem 2rem; }
+            main h1 { font-size: 2rem; }
+            h2 { font-size: 1.25rem; }
+            .nav-links { gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                WhisperSubTranslate
+            </a>
+            <div class="nav-links">
+                <a href="../" class="nav-link" data-i18n="nav.home">Home</a>
+                <a href="../blog/" class="nav-link" data-i18n="nav.blog">Blog</a>
+                <a href="./" class="nav-link active" data-i18n="nav.docs">Docs</a>
+                <div class="lang-selector">
+                    <button class="lang-btn" onclick="toggleLangDropdown()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="current-lang">EN</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <div class="lang-dropdown" id="lang-dropdown">
+                        <div class="lang-option" onclick="setLanguage('en')">English</div>
+                        <div class="lang-option" onclick="setLanguage('ko')">한국어</div>
+                        <div class="lang-option" onclick="setLanguage('ja')">日本語</div>
+                        <div class="lang-option" onclick="setLanguage('zh')">中文</div>
+                        <div class="lang-option" onclick="setLanguage('es')">Español</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.getting-started">Getting Started</h3>
+                <ul>
+                    <li><a href="#installation" class="active" data-i18n="docs.sidebar.installation">Installation</a></li>
+                    <li><a href="#quickstart" data-i18n="docs.sidebar.quickstart">Quick Start</a></li>
+                    <li><a href="#requirements" data-i18n="docs.sidebar.requirements">System Requirements</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.features">Features</h3>
+                <ul>
+                    <li><a href="#models" data-i18n="docs.sidebar.models">Whisper Models</a></li>
+                    <li><a href="#formats" data-i18n="docs.sidebar.formats">Output Formats</a></li>
+                    <li><a href="#translation" data-i18n="docs.sidebar.translation">Translation</a></li>
+                    <li><a href="#gpu" data-i18n="docs.sidebar.gpu">GPU Acceleration</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.advanced">Advanced</h3>
+                <ul>
+                    <li><a href="#cli" data-i18n="docs.sidebar.cli">Command Line</a></li>
+                    <li><a href="#troubleshooting" data-i18n="docs.sidebar.troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <main>
+            <h1 data-i18n="docs.title">Documentation</h1>
+            <p class="intro" data-i18n="docs.intro">Complete guide to WhisperSubTranslate - from installation to advanced features.</p>
+
+            <section id="installation">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span data-i18n="docs.installation.title">Installation</span>
+                </h2>
+                <h3 data-i18n="docs.installation.windows">Windows</h3>
+                <ol>
+                    <li data-i18n="docs.installation.step1">Download the latest version from GitHub Releases</li>
+                    <li data-i18n="docs.installation.step2">Run the installer (.exe) file</li>
+                    <li data-i18n="docs.installation.step3">Follow the on-screen instructions</li>
+                </ol>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.installation.note">The application includes all necessary components (whisper.cpp, ffmpeg). No additional installation required.</p>
+                </div>
+            </section>
+
+            <section id="quickstart">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span data-i18n="docs.quickstart.title">Quick Start</span>
+                </h2>
+                <ol>
+                    <li data-i18n="docs.quickstart.step1">Launch WhisperSubTranslate</li>
+                    <li data-i18n="docs.quickstart.step2">Drag and drop your video/audio file or click "Select File"</li>
+                    <li data-i18n="docs.quickstart.step3">Select the Whisper model (small recommended for most users)</li>
+                    <li data-i18n="docs.quickstart.step4">Choose the source language (or select "Auto Detect")</li>
+                    <li data-i18n="docs.quickstart.step5">Click "Extract Subtitles" and wait for processing</li>
+                    <li data-i18n="docs.quickstart.step6">Save the generated subtitle file</li>
+                </ol>
+            </section>
+
+            <section id="requirements">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                    </svg>
+                    <span data-i18n="docs.requirements.title">System Requirements</span>
+                </h2>
+                <table>
+                    <tr>
+                        <th data-i18n="docs.requirements.component">Component</th>
+                        <th data-i18n="docs.requirements.minimum">Minimum</th>
+                        <th data-i18n="docs.requirements.recommended">Recommended</th>
+                    </tr>
+                    <tr>
+                        <td>OS</td>
+                        <td>Windows 10</td>
+                        <td>Windows 10/11</td>
+                    </tr>
+                    <tr>
+                        <td>RAM</td>
+                        <td>4GB</td>
+                        <td>8GB+</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.requirements.storage">Storage</td>
+                        <td>2GB</td>
+                        <td>5GB+</td>
+                    </tr>
+                    <tr>
+                        <td>GPU</td>
+                        <td data-i18n="docs.requirements.optional">Optional</td>
+                        <td>NVIDIA GTX 1060+</td>
+                    </tr>
+                </table>
+            </section>
+
+            <section id="models">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    <span data-i18n="docs.models.title">Whisper Models</span>
+                </h2>
+                <p data-i18n="docs.models.intro">WhisperSubTranslate supports various Whisper models with different accuracy and speed trade-offs:</p>
+                <table>
+                    <tr>
+                        <th data-i18n="docs.models.model">Model</th>
+                        <th data-i18n="docs.models.size">Size</th>
+                        <th data-i18n="docs.models.vram">VRAM</th>
+                        <th data-i18n="docs.models.speed">Speed</th>
+                    </tr>
+                    <tr>
+                        <td>tiny</td>
+                        <td>75MB</td>
+                        <td>~1GB</td>
+                        <td data-i18n="docs.models.fastest">Fastest</td>
+                    </tr>
+                    <tr>
+                        <td>base</td>
+                        <td>142MB</td>
+                        <td>~1GB</td>
+                        <td data-i18n="docs.models.fast">Fast</td>
+                    </tr>
+                    <tr>
+                        <td>small</td>
+                        <td>466MB</td>
+                        <td>~2GB</td>
+                        <td data-i18n="docs.models.balanced">Balanced</td>
+                    </tr>
+                    <tr>
+                        <td>medium</td>
+                        <td>1.5GB</td>
+                        <td>~5GB</td>
+                        <td data-i18n="docs.models.accurate">Accurate</td>
+                    </tr>
+                    <tr>
+                        <td>large-v3</td>
+                        <td>3GB</td>
+                        <td>~10GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
+                        <td>turbo</td>
+                        <td>1.5GB</td>
+                        <td>~6GB</td>
+                        <td data-i18n="docs.models.turbo">Fast & Accurate</td>
+                    </tr>
+                </table>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.models.recommendation">For most users, the "small" or "turbo" model provides the best balance of speed and accuracy.</p>
+                </div>
+            </section>
+
+            <section id="formats">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <path d="M14 2v6h6M16 13H8M16 17H8"/>
+                    </svg>
+                    <span data-i18n="docs.formats.title">Output Formats</span>
+                </h2>
+                <p data-i18n="docs.formats.intro">WhisperSubTranslate supports multiple subtitle formats:</p>
+                <ul>
+                    <li><strong>SRT</strong> - <span data-i18n="docs.formats.srt">Most widely compatible format, works with most video players</span></li>
+                    <li><strong>VTT</strong> - <span data-i18n="docs.formats.vtt">Web-friendly format for HTML5 video</span></li>
+                    <li><strong>TXT</strong> - <span data-i18n="docs.formats.txt">Plain text without timestamps</span></li>
+                    <li><strong>JSON</strong> - <span data-i18n="docs.formats.json">Structured format with detailed metadata</span></li>
+                </ul>
+            </section>
+
+            <section id="translation">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span data-i18n="docs.translation.title">Translation</span>
+                </h2>
+                <p data-i18n="docs.translation.intro">WhisperSubTranslate can translate your subtitles using external APIs:</p>
+                <h3>DeepL</h3>
+                <ol>
+                    <li data-i18n="docs.translation.deepl1">Create an account at deepl.com</li>
+                    <li data-i18n="docs.translation.deepl2">Get your API key from the account settings</li>
+                    <li data-i18n="docs.translation.deepl3">Enter the API key in WhisperSubTranslate settings</li>
+                </ol>
+                <h3>MyMemory (Free)</h3>
+                <ol>
+                    <li data-i18n="docs.translation.mymemory1">No API key required for basic usage</li>
+                    <li data-i18n="docs.translation.mymemory2">Select MyMemory as translation service in settings</li>
+                    <li data-i18n="docs.translation.mymemory3">Free tier available with daily limits</li>
+                </ol>
+                <h3>ChatGPT</h3>
+                <ol>
+                    <li data-i18n="docs.translation.chatgpt1">Create an account at openai.com</li>
+                    <li data-i18n="docs.translation.chatgpt2">Get your API key from the API settings</li>
+                    <li data-i18n="docs.translation.chatgpt3">Enter the API key in WhisperSubTranslate settings</li>
+                </ol>
+                <div class="warning-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <p data-i18n="docs.translation.warning">Translation APIs may incur costs based on usage. Check the pricing of each service.</p>
+                </div>
+            </section>
+
+            <section id="gpu">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span data-i18n="docs.gpu.title">GPU Acceleration</span>
+                </h2>
+                <p data-i18n="docs.gpu.intro">GPU acceleration can dramatically speed up subtitle extraction. WhisperSubTranslate supports NVIDIA CUDA.</p>
+                <h3 data-i18n="docs.gpu.requirements">Requirements</h3>
+                <ul>
+                    <li data-i18n="docs.gpu.req1">NVIDIA GPU (GTX 1060 or higher recommended)</li>
+                    <li data-i18n="docs.gpu.req2">Latest NVIDIA drivers</li>
+                    <li data-i18n="docs.gpu.req3">CUDA Toolkit (included with drivers)</li>
+                </ul>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.gpu.note">GPU acceleration can provide 5-10x faster processing compared to CPU-only mode.</p>
+                </div>
+            </section>
+
+            <section id="cli">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"/>
+                        <line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                    <span data-i18n="docs.cli.title">Command Line</span>
+                </h2>
+                <p data-i18n="docs.cli.intro">For advanced users, the underlying whisper.cpp can be used directly from the command line:</p>
+                <pre><code>whisper-cli.exe -m models/ggml-small.bin -l auto input.wav</code></pre>
+                <h3 data-i18n="docs.cli.options">Common Options</h3>
+                <ul>
+                    <li><code>-m</code> - <span data-i18n="docs.cli.model">Model path</span></li>
+                    <li><code>-l</code> - <span data-i18n="docs.cli.language">Source language (auto, en, ko, ja, etc.)</span></li>
+                    <li><code>-osrt</code> - <span data-i18n="docs.cli.osrt">Output SRT format</span></li>
+                    <li><code>-ml</code> - <span data-i18n="docs.cli.ml">Minimum segment length in ms</span></li>
+                </ul>
+            </section>
+
+            <section id="troubleshooting">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span data-i18n="docs.troubleshooting.title">Troubleshooting</span>
+                </h2>
+                <h3 data-i18n="docs.troubleshooting.q1">App won't start</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a1.1">Make sure you have Windows 10 or later</li>
+                    <li data-i18n="docs.troubleshooting.a1.2">Try running as administrator</li>
+                    <li data-i18n="docs.troubleshooting.a1.3">Check if antivirus is blocking the application</li>
+                </ul>
+                <h3 data-i18n="docs.troubleshooting.q2">Poor accuracy</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a2.1">Try a larger model (medium or large-v3)</li>
+                    <li data-i18n="docs.troubleshooting.a2.2">Make sure the audio is clear with minimal background noise</li>
+                    <li data-i18n="docs.troubleshooting.a2.3">Specify the source language instead of using auto-detect</li>
+                </ul>
+                <h3 data-i18n="docs.troubleshooting.q3">GPU not detected</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a3.1">Update NVIDIA drivers to the latest version</li>
+                    <li data-i18n="docs.troubleshooting.a3.2">Verify GPU compatibility (CUDA 11.x support required)</li>
+                    <li data-i18n="docs.troubleshooting.a3.3">Restart the application after driver update</li>
+                </ul>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <script>
+        const translations = {
+            en: {
+                "nav.home": "Home",
+                "nav.blog": "Blog",
+                "nav.docs": "Docs",
+                "docs.sidebar.getting-started": "Getting Started",
+                "docs.sidebar.installation": "Installation",
+                "docs.sidebar.quickstart": "Quick Start",
+                "docs.sidebar.requirements": "System Requirements",
+                "docs.sidebar.features": "Features",
+                "docs.sidebar.models": "Whisper Models",
+                "docs.sidebar.formats": "Output Formats",
+                "docs.sidebar.translation": "Translation",
+                "docs.sidebar.gpu": "GPU Acceleration",
+                "docs.sidebar.advanced": "Advanced",
+                "docs.sidebar.cli": "Command Line",
+                "docs.sidebar.troubleshooting": "Troubleshooting",
+                "docs.title": "Documentation",
+                "docs.intro": "Complete guide to WhisperSubTranslate - from installation to advanced features."
+            },
+            ko: {
+                "nav.home": "홈",
+                "nav.blog": "블로그",
+                "nav.docs": "문서",
+                "docs.sidebar.getting-started": "시작하기",
+                "docs.sidebar.installation": "설치",
+                "docs.sidebar.quickstart": "빠른 시작",
+                "docs.sidebar.requirements": "시스템 요구사항",
+                "docs.sidebar.features": "기능",
+                "docs.sidebar.models": "Whisper 모델",
+                "docs.sidebar.formats": "출력 형식",
+                "docs.sidebar.translation": "번역",
+                "docs.sidebar.gpu": "GPU 가속",
+                "docs.sidebar.advanced": "고급",
+                "docs.sidebar.cli": "커맨드 라인",
+                "docs.sidebar.troubleshooting": "문제 해결",
+                "docs.title": "문서",
+                "docs.intro": "WhisperSubTranslate 완벽 가이드 - 설치부터 고급 기능까지."
+            },
+            ja: {
+                "nav.home": "ホーム",
+                "nav.blog": "ブログ",
+                "nav.docs": "ドキュメント",
+                "docs.sidebar.getting-started": "はじめに",
+                "docs.sidebar.installation": "インストール",
+                "docs.sidebar.quickstart": "クイックスタート",
+                "docs.sidebar.requirements": "システム要件",
+                "docs.sidebar.features": "機能",
+                "docs.sidebar.models": "Whisperモデル",
+                "docs.sidebar.formats": "出力形式",
+                "docs.sidebar.translation": "翻訳",
+                "docs.sidebar.gpu": "GPUアクセラレーション",
+                "docs.sidebar.advanced": "上級",
+                "docs.sidebar.cli": "コマンドライン",
+                "docs.sidebar.troubleshooting": "トラブルシューティング",
+                "docs.title": "ドキュメント",
+                "docs.intro": "WhisperSubTranslate完全ガイド - インストールから高度な機能まで。"
+            },
+            zh: {
+                "nav.home": "首页",
+                "nav.blog": "博客",
+                "nav.docs": "文档",
+                "docs.sidebar.getting-started": "入门",
+                "docs.sidebar.installation": "安装",
+                "docs.sidebar.quickstart": "快速开始",
+                "docs.sidebar.requirements": "系统要求",
+                "docs.sidebar.features": "功能",
+                "docs.sidebar.models": "Whisper模型",
+                "docs.sidebar.formats": "输出格式",
+                "docs.sidebar.translation": "翻译",
+                "docs.sidebar.gpu": "GPU加速",
+                "docs.sidebar.advanced": "高级",
+                "docs.sidebar.cli": "命令行",
+                "docs.sidebar.troubleshooting": "故障排除",
+                "docs.title": "文档",
+                "docs.intro": "WhisperSubTranslate完整指南 - 从安装到高级功能。"
+            },
+            es: {
+                "nav.home": "Inicio",
+                "nav.blog": "Blog",
+                "nav.docs": "Docs",
+                "docs.sidebar.getting-started": "Comenzar",
+                "docs.sidebar.installation": "Instalación",
+                "docs.sidebar.quickstart": "Inicio Rápido",
+                "docs.sidebar.requirements": "Requisitos del Sistema",
+                "docs.sidebar.features": "Características",
+                "docs.sidebar.models": "Modelos Whisper",
+                "docs.sidebar.formats": "Formatos de Salida",
+                "docs.sidebar.translation": "Traducción",
+                "docs.sidebar.gpu": "Aceleración GPU",
+                "docs.sidebar.advanced": "Avanzado",
+                "docs.sidebar.cli": "Línea de Comandos",
+                "docs.sidebar.troubleshooting": "Solución de Problemas",
+                "docs.title": "Documentación",
+                "docs.intro": "Guía completa de WhisperSubTranslate - desde la instalación hasta las funciones avanzadas."
+            }
+        };
+
+        const langNames = { en: 'EN', ko: '한국어', ja: '日本語', zh: '中文', es: 'ES' };
+
+        function setLanguage(lang) {
+            const t = translations[lang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.textContent = t[key];
+            });
+            document.getElementById('current-lang').textContent = langNames[lang];
+            document.getElementById('lang-dropdown').classList.remove('active');
+            localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang;
+        }
+
+        function toggleLangDropdown() {
+            document.getElementById('lang-dropdown').classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.lang-selector')) {
+                document.getElementById('lang-dropdown').classList.remove('active');
+            }
+        });
+
+        // Smooth scroll for sidebar links
+        document.querySelectorAll('.sidebar a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    // Update active state
+                    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        const savedLang = localStorage.getItem('lang');
+        const browserLang = navigator.language.split('-')[0];
+        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
+        setLanguage(defaultLang);
+    </script>
+</body>
+</html>

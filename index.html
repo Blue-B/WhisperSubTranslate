@@ -3,260 +3,1232 @@
 <head>
   <meta charset="UTF-8">
   <title>WhisperSubTranslate</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; }
-    body { 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-      margin: 0; 
-      padding: 15px;
-      background-color: #f2f4f7;
-      color: #212529;
+    :root {
+      --bg-primary: #000000;
+      --bg-secondary: #0a0a0a;
+      --bg-tertiary: #111111;
+      --bg-card: #0f0f0f;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.15);
+      --text-primary: #f0f0f0;
+      --text-secondary: #888888;
+      --text-muted: #555555;
+      --accent: #62DE61;
+      --accent-hover: #80EE64;
+      --accent-dim: rgba(98, 222, 97, 0.12);
+      --accent-glow: rgba(98, 222, 97, 0.25);
+      --warning: #f59e0b;
+      --warning-dim: rgba(245, 158, 11, 0.15);
+      --success: #62DE61;
+      --success-dim: rgba(98, 222, 97, 0.15);
+      --error: #ef4444;
+      --error-dim: rgba(239, 68, 68, 0.15);
     }
-    /* 상단 UI 언어 드롭다운 */
-    .ui-lang-top { position: fixed; top: 8px; right: 12px; z-index: 3000; }
-    .ui-lang-top select { min-width: 100px; padding: 4px 8px; font-size: 12px; border: 1px solid #343a40; border-radius: 4px; background: #ffffff; color: #212529; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .container { 
-      max-width: 1200px; 
-      margin: 48px auto 0;
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 8px 12px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
-    .form-group { margin-bottom: 12px; }
-    .row { display: flex; gap: 15px; align-items: flex-start; }
-    .col { flex: 1; }
-    .col-auto { flex: 0 0 auto; }
-    label { 
-      display: block; 
-      margin-bottom: 5px; 
-      font-weight: 600; 
-      color: #212529;
-      font-size: 13px;
+
+    body {
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+      height: 100vh;
     }
-    select, input, button { 
-      padding: 8px 10px; 
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      font-size: 13px;
-      transition: all 0.2s;
-    }
-    select, input {
-      width: 100%;
-      background: white;
-    }
-    select:focus, input:focus {
-      outline: none;
-      border-color: #007bff;
-      box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
-    }
-    button { 
-      background-color: #007bff; 
-      color: white; 
-      border: none; 
-      cursor: pointer;
-      font-weight: 500;
-      min-width: 120px;
-    }
-    button:hover { background-color: #0056b3; }
-    button:disabled { 
-      background-color: #6c757d; 
-      cursor: not-allowed; 
-      opacity: 0.6;
-    }
-    .btn-success { background-color: #28a745; }
-    .btn-success:hover { background-color: #218838; }
-    .btn-secondary { background-color: #6c757d; }
-    .btn-secondary:hover { background-color: #545b62; }
-    .btn-danger { background-color: #dc3545; }
-    .btn-danger:hover { background-color: #c82333; }
-    .progress-container { margin: 12px 0; }
-    .progress-bar { 
-      width: 100%; 
-      height: 8px; 
-      background-color: #e9ecef; 
-      border-radius: 4px; 
-      overflow: hidden; 
-    }
-    .progress-fill { 
-      height: 100%; 
-      background-color: #007bff; 
-      width: 0%; 
-      transition: width 0.3s ease;
-    }
-    .progress-text { 
-      text-align: center; 
-      margin-top: 8px; 
-      font-size: 14px;
-      color: #212529;
-    }
-    #output { 
-      background-color: #f8f9fa; 
-      padding: 10px; 
-      border-radius: 4px; 
-      max-height: 300px; 
-      overflow-y: auto;
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 12px;
-      line-height: 1.3;
-      border: 1px solid #ced4da;
-    }
-    .status-info {
-      font-size: 12px;
-      color: #495057;
-      margin-top: 5px;
-      line-height: 1.4;
-    }
-    .dropzone {
-      border: 2px dashed #007bff;
-      padding: 20px 15px;
-      text-align: center;
-      border-radius: 6px;
-      background-color: #f8f9ff;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin-bottom: 0;
-      height: 210px;
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+    ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+    /* Header */
+    .header {
       display: flex;
-      flex-direction: column;
-      justify-content: center;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
     }
-    .dropzone:hover {
-      border-color: #0056b3;
-      background-color: #e7f1ff;
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
-    .dropzone.dragover {
-      border-color: #0056b3;
-      background-color: #e7f1ff;
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .logo-text {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .version-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 100px;
+      font-weight: 500;
+    }
+
+    /* 드래그 활성화 시각적 피드백 */
+    .drop-zone.drag-active {
+      border-color: var(--accent) !important;
+      background: var(--accent-dim) !important;
       transform: scale(1.02);
     }
-    .queue-section {
-      background: #f8f9fa;
-      padding: 15px;
+    .drop-zone.drag-active .drop-zone-icon {
+      transform: scale(1.1);
+      color: var(--accent);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    .lang-select {
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      border: 1px solid #dee2e6;
-      height: 220px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .lang-select:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    /* Settings Modal Styles */
+    .settings-section {
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .settings-section:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+
+    .settings-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+    }
+
+    .settings-section-title svg {
+      color: var(--accent);
+    }
+
+    /* Toggle Switch */
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-label input {
+      display: none;
+    }
+
+    .toggle-slider {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.3s;
+    }
+
+    .toggle-slider::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: all 0.3s;
+    }
+
+    .toggle-label input:checked + .toggle-slider {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+    }
+
+    .toggle-label input:checked + .toggle-slider::after {
+      left: 23px;
+      background: var(--accent);
+    }
+
+    .toggle-text {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    /* Sound Volume Row */
+    .sound-settings-row {
+      margin-bottom: 12px;
+    }
+
+    .sound-volume-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+    }
+
+    .volume-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 40px;
+    }
+
+    .volume-slider-modal {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--bg-secondary);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .volume-slider-modal::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .volume-slider-modal::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .volume-value-modal {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .btn-test-sound {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-test-sound:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .sound-volume-row.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    /* Main Layout */
+    .main-container {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      height: calc(100vh - 53px);
+      overflow: hidden;
+    }
+
+    /* Left Panel */
+    .left-panel {
       display: flex;
       flex-direction: column;
-    }
-    .queue-list {
-      flex: 1;
+      padding: 20px;
       overflow-y: auto;
-      margin-bottom: 10px;
-      max-height: 150px;
+      gap: 16px;
+      min-height: 0;
     }
-    .queue-item {
-      background: white;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      padding: 6px 8px;
-      margin-bottom: 4px;
+
+    /* Drop Zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      padding: 32px 20px;
+      text-align: center;
+      background: var(--bg-card);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .dropzone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, var(--accent-dim) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .dropzone:hover {
+      border-color: var(--accent);
+      background: var(--bg-tertiary);
+    }
+
+    .dropzone:hover::before {
+      opacity: 1;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--bg-tertiary);
+      transform: scale(1.01);
+    }
+
+    .dropzone.dragover::before {
+      opacity: 1;
+    }
+
+    .drop-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 12px;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      min-height: 32px;
+      justify-content: center;
+      background: var(--accent-dim);
+      border-radius: 12px;
+      position: relative;
+      z-index: 1;
+      flex-shrink: 0;
     }
-    .queue-item.processing {
-      border-color: #ffc107;
-      background-color: #fff3cd;
+
+    .drop-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--accent);
     }
-    .queue-item.completed {
-      border-color: #28a745;
-      background-color: #d4edda;
+
+    .drop-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+      position: relative;
+      z-index: 1;
     }
-    .queue-item.error {
-      border-color: #dc3545;
-      background-color: #f8d7da;
+
+    .drop-hint {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      position: relative;
+      z-index: 1;
     }
-    .file-info {
+
+    .drop-formats {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-select-file {
+      margin-top: 12px;
+      padding: 8px 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-select-file:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    /* Settings Grid */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .setting-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      transition: all 0.2s;
+    }
+
+    .setting-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .setting-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .setting-label svg {
+      width: 12px;
+      height: 12px;
+      color: var(--accent);
+    }
+
+    .setting-select {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+
+    .setting-select:hover {
+      border-color: var(--border-hover);
+    }
+
+    .setting-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .setting-select option:disabled {
+      color: var(--text-muted);
+      background: var(--bg-secondary);
+    }
+
+    .setting-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    /* Action Bar */
+    .action-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .btn-primary {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+
+    .btn-primary:disabled {
+      background: var(--text-muted);
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .btn-success {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px var(--accent-glow);
+    }
+
+    .btn-success:disabled {
+      background: var(--text-muted);
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .btn-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 16px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
       flex: 1;
     }
-    .file-name {
-      font-weight: 600;
-      color: #495057;
-      margin-bottom: 2px;
-      font-size: 13px;
+
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
     }
-    .file-path {
-      font-size: 10px;
-      color: #6c757d;
-      word-break: break-all;
-      max-width: 300px;
+
+    .btn-secondary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn-control {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-control:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+
+    .btn-control svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-sm:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      background: var(--bg-card);
+    }
+
+    /* Right Panel - Queue */
+    .right-panel {
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
-    .file-status {
-      font-size: 10px;
-      color: #6c757d;
-      margin-top: 1px;
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
     }
-    .btn-group {
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .panel-title svg {
+      width: 16px;
+      height: 16px;
+      color: var(--accent);
+    }
+
+    .queue-count {
+      font-size: 11px;
+      padding: 2px 8px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 100px;
+      font-weight: 500;
+    }
+
+    .queue-actions {
       display: flex;
       gap: 8px;
     }
-    .btn-sm {
-      padding: 6px 12px;
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
     }
-    .btn-xs { padding: 4px 8px; font-size: 11px; }
-    .gap-4 { gap: 4px; }
+
+    .btn-icon:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    .btn-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Queue List */
+    .queue-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .queue-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .queue-empty svg {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+
+    .queue-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+
+    .queue-item:hover {
+      border-color: var(--border-hover);
+    }
+
+    .queue-item.processing {
+      border-color: var(--warning);
+      background: var(--warning-dim);
+    }
+
+    .queue-item.completed {
+      border-color: var(--success);
+      background: var(--success-dim);
+    }
+
+    .queue-item.error {
+      border-color: var(--error);
+      background: var(--error-dim);
+    }
+
+    .queue-item-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .queue-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      word-break: break-all;
+      line-height: 1.3;
+    }
+
+    .queue-item-remove {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .queue-item-remove:hover {
+      background: var(--error-dim);
+      color: var(--error);
+    }
+
+    .queue-item-remove svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .queue-item-status {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .queue-item.processing .queue-item-status {
+      color: var(--warning);
+    }
+
+    .queue-item.completed .queue-item-status {
+      color: var(--success);
+    }
+
+    .queue-item.error .queue-item-status {
+      color: var(--error);
+    }
+
+    /* Progress Section */
+    .progress-section {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .progress-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .progress-percent {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+      width: 0%;
+      transition: width 0.3s ease;
+      border-radius: 3px;
+    }
+
+    .progress-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      text-align: center;
+    }
+
+    /* Log Panel */
+    .log-panel {
+      border-top: 1px solid var(--border);
+      max-height: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: var(--bg-tertiary);
+      cursor: pointer;
+    }
+
+    .log-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .log-title svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .log-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      background: var(--bg-primary);
+    }
+
+    .log-line {
+      margin-bottom: 2px;
+    }
+
+    .log-line.success { color: var(--success); }
+    .log-line.error { color: var(--error); }
+    .log-line.warning { color: var(--warning); }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 480px;
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 24px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .form-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    .form-hint a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .form-hint a:hover {
+      text-decoration: underline;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .btn-modal {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-modal-primary {
+      background: var(--accent);
+      color: #000;
+      border: none;
+    }
+
+    .btn-modal-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-modal-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-modal-secondary:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    /* Status Messages */
+    .api-status {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      display: none;
+    }
+
+    .api-status.success {
+      display: block;
+      background: var(--success-dim);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .api-status.error {
+      display: block;
+      background: var(--error-dim);
+      color: var(--error);
+      border: 1px solid var(--error);
+    }
   </style>
 </head>
 <body>
-  <!-- 상단 고정: 인터페이스 언어 드롭다운 -->
-  <div class="ui-lang-top">
-    <select id="uiLanguageSelect" title="UI Language">
-      <option value="ko" selected>한국어</option>
-      <option value="en">English</option>
-      <option value="ja">日本語</option>
-      <option value="zh">中文</option>
-    </select>
-  </div>
-
-  <div class="container">
-    <!-- 헤더 타이틀 제거로 세로 공간 절약 -->
-
-    <!-- 파일 선택 및 대기열을 한 줄로 배치 -->
-    <div class="row form-group">
-      <!-- 파일 드래그앤드롭 영역 -->
-      <div class="col">
-        <div id="dropZone" class="dropzone">
-          <h4 id="dropTitle" style="margin: 0 0 8px 0; color: #007bff; font-weight: 600; font-size: 14px;">파일 드래그 & 드롭</h4>
-          <p id="dropHint1" style="margin: 8px 0; font-size: 14px; color: #6c757d;">동영상 파일을 여기에 드래그하세요</p>
-          <p id="dropHint2" style="margin: 5px 0; font-size: 12px; color: #6c757d;">지원 형식: MP4, AVI, MKV, MOV, WMV</p>
-          <button id="selectFileBtn" class="btn-success" style="margin-top: 10px;">파일 선택</button>
-        </div>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <svg viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="#0f0f0f"/>
+          <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+        </svg>
+        <span class="logo-text">WhisperSubTranslate</span>
       </div>
-      
-      <!-- 대기열 표시 -->
-      <div class="col" id="queueContainer" style="display: none;">
-        <div class="queue-section">
-          <h4 id="queueTitle" style="margin: 0 0 8px 0; font-weight: 600; font-size: 14px; color: #495057;">처리 대기열</h4>
-          <div id="queueList" class="queue-list">
-            <!-- 대기열 항목들이 여기에 표시됩니다 -->
-          </div>
-          <div class="btn-group">
-            <button id="stopBtn" class="btn-secondary btn-sm" style="display: none;">중지</button>
-            <button id="clearQueueBtn" class="btn-secondary btn-sm">대기열 삭제</button>
-            <button id="openFolderBtn" class="btn-secondary btn-sm">출력 폴더</button>
-          </div>
-        </div>
-      </div>
+      <span class="version-badge">v1.2.0</span>
     </div>
+    <div class="header-right">
+      <select id="uiLanguageSelect" class="lang-select" title="UI Language">
+        <option value="ko" selected>한국어</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="zh">中文</option>
+      </select>
+    </div>
+  </header>
 
-    <!-- 모델 선택과 언어 선택을 한 행에 배치 -->
-    <div class="row form-group">
-      <div class="col">
-        <label for="modelSelect" id="labelModel">모델 선택</label>
-        <select id="modelSelect"></select>
-        <div id="modelStatus" class="status-info">모델 상태를 확인하는 중...</div>
+  <!-- Main Content -->
+  <main class="main-container">
+    <!-- Left Panel - Settings -->
+    <section class="left-panel">
+      <!-- Drop Zone -->
+      <div id="dropZone" class="dropzone">
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <h3 id="dropTitle" class="drop-title">파일 드래그 & 드롭</h3>
+        <p id="dropHint1" class="drop-hint">동영상 파일을 여기에 드래그하세요</p>
+        <p class="drop-formats">MP4, AVI, MKV, MOV, WMV, WEBM</p>
+        <button id="selectFileBtn" class="btn-select-file">파일 선택</button>
       </div>
-      <div class="col">
-        <label for="languageSelect" id="labelLanguage">언어 선택</label>
-        <select id="languageSelect">
-          <option value="auto" selected>자동 감지 (각 파일별로 자동 판별)</option>
-          <option value="ko">한국어</option>
+
+      <!-- Settings -->
+      <div class="settings-grid">
+        <!-- Model Selection -->
+        <div class="setting-card">
+          <label class="setting-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+            </svg>
+            <span id="labelModel">모델</span>
+          </label>
+          <select id="modelSelect" class="setting-select"></select>
+          <div id="modelStatus" class="setting-hint">모델 상태 확인 중...</div>
+          <div id="modelRequirements" class="setting-hint" style="margin-top: 4px; color: var(--text-muted);"></div>
+        </div>
+
+        <!-- Language Selection -->
+        <div class="setting-card">
+          <label class="setting-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span id="labelLanguage">언어</span>
+          </label>
+          <select id="languageSelect" class="setting-select">
+            <option value="auto" selected>자동 감지</option>
+            <option value="ko">한국어</option>
+            <option value="en">영어</option>
+            <option value="ja">일본어</option>
+            <option value="zh">중국어</option>
+            <option value="es">스페인어</option>
+            <option value="fr">프랑스어</option>
+            <option value="de">독일어</option>
+            <option value="it">이탈리아어</option>
+            <option value="pt">포르투갈어</option>
+            <option value="ru">러시아어</option>
+            <option value="hu">헝가리어</option>
+            <option value="ar">아랍어</option>
+          </select>
+          <div id="langStatusInfo" class="setting-hint"></div>
+        </div>
+
+        <!-- Device Selection -->
+        <div class="setting-card">
+          <label class="setting-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+              <line x1="9" y1="1" x2="9" y2="4"/>
+              <line x1="15" y1="1" x2="15" y2="4"/>
+              <line x1="9" y1="20" x2="9" y2="23"/>
+              <line x1="15" y1="20" x2="15" y2="23"/>
+              <line x1="20" y1="9" x2="23" y2="9"/>
+              <line x1="20" y1="14" x2="23" y2="14"/>
+              <line x1="1" y1="9" x2="4" y2="9"/>
+              <line x1="1" y1="14" x2="4" y2="14"/>
+            </svg>
+            <span id="labelDevice">처리 장치</span>
+          </label>
+          <select id="deviceSelect" class="setting-select">
+            <option value="auto" selected>자동 (GPU/CPU)</option>
+            <option value="cuda">GPU (CUDA)</option>
+            <option value="cpu">CPU</option>
+          </select>
+          <div id="deviceStatus" class="setting-hint"></div>
+        </div>
+
+        <!-- Translation -->
+        <div class="setting-card">
+          <label class="setting-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 8l6 6"/>
+              <path d="M4 14l6-6 2-3"/>
+              <path d="M2 5h12"/>
+              <path d="M7 2v3"/>
+              <path d="M22 22l-5-10-5 10"/>
+              <path d="M14 18h6"/>
+            </svg>
+            <span id="labelTranslation">번역</span>
+          </label>
+          <select id="translationSelect" class="setting-select">
+            <option value="none" selected>번역 안함</option>
+            <option value="mymemory">MyMemory (무료)</option>
+            <option value="deepl">DeepL (API 키 필요)</option>
+            <option value="chatgpt">ChatGPT (API 키 필요)</option>
+          </select>
+          <div id="translationStatus" class="setting-hint"></div>
+        </div>
+
+        <!-- Target Language (shown when translation selected) -->
+        <div class="setting-card" id="targetLanguageGroup" style="display: none;">
+        <label class="setting-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+          <span id="labelTargetLanguage">번역 대상 언어</span>
+        </label>
+        <select id="targetLanguageSelect" class="setting-select">
+          <option value="ko" selected>한국어</option>
           <option value="en">영어</option>
           <option value="ja">일본어</option>
           <option value="zh">중국어</option>
@@ -269,116 +1241,164 @@
           <option value="hu">헝가리어</option>
           <option value="ar">아랍어</option>
         </select>
-        <div id="langStatusInfo" class="status-info">
-          <strong>자동 감지 권장:</strong> 각 동영상의 언어를 자동으로 판별합니다<br>
-          <strong>고정 언어:</strong> 모든 파일을 동일한 언어로 처리합니다
+        <div id="targetLangNote" class="setting-hint"></div>
         </div>
       </div>
-    </div>
 
-    <!-- 디바이스 선택 -->
-    <div class="row form-group">
-      <div class="col">
-        <label for="deviceSelect" id="labelDevice">처리 장치 선택</label>
-        <select id="deviceSelect">
-          <option value="auto" selected>자동 (GPU 있으면 GPU, 없으면 CPU)</option>
-          <option value="cuda">GPU (CUDA) - 빠른 처리</option>
-          <option value="cpu">CPU - 안정적 처리</option>
-        </select>
-        <div id="deviceStatus" class="status-info">
-          <strong>GPU 권장:</strong> NVIDIA GPU가 있으면 훨씬 빠른 처리 가능<br>
-          <strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적
-        </div>
+      <!-- Action Buttons -->
+      <div class="action-bar">
+        <button id="runBtn" class="btn-primary">자막 추출 시작</button>
+        <button id="pauseBtn" class="btn-control" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="4" width="4" height="16"/>
+            <rect x="14" y="4" width="4" height="16"/>
+          </svg>
+        </button>
+        <button id="stopBtn" class="btn-control" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="6" width="12" height="12"/>
+          </svg>
+        </button>
+        <button id="settingsBtn" class="btn-secondary" style="flex: 0 0 auto;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span id="settingsBtnText">설정</span>
+        </button>
       </div>
-      <div class="col">
-        <label for="translationSelect" id="labelTranslation">번역 설정</label>
-        <select id="translationSelect">
-          <option value="none" selected>번역 안함</option>
-          <option value="mymemory">MyMemory (일 5만글자 무료, 추천)</option>
-          <option value="deepl">DeepL (월 50만글자, API키 필요)</option>
-          <option value="chatgpt">ChatGPT (사용자 API 키 필요)</option>
-        </select>
-        <div id="translationStatus" class="status-info">
-          <strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br>
-          <strong>일일 5만글자</strong> 무료 (약 5시간 분량)
-        </div>
-        <!-- 인터페이스 언어 드롭다운은 상단 고정 영역으로 이동 -->
-        <div class="form-group" style="margin-top:8px;" id="targetLanguageGroup">
-          <label id="labelTargetLanguage" for="targetLanguageSelect">번역 대상 언어</label>
-          <select id="targetLanguageSelect">
-            <option value="ko" selected>한국어 (ko)</option>
-            <option value="en">영어 (en)</option>
-            <option value="ja">일본어 (ja)</option>
-            <option value="zh">중국어 (zh)</option>
-            <option value="es">스페인어 (es)</option>
-            <option value="fr">프랑스어 (fr)</option>
-            <option value="de">독일어 (de)</option>
-            <option value="it">이탈리아어 (it)</option>
-            <option value="pt">포르투갈어 (pt)</option>
-            <option value="ru">러시아어 (ru)</option>
-            <option value="hu">헝가리어 (hu)</option>
-            <option value="ar">아랍어 (ar)</option>
-          </select>
-          <div id="targetLangNote" class="status-info">번역을 사용할 때만 적용됩니다.</div>
-        </div>
-      </div>
-    </div>
+    </section>
 
-    <!-- API 키 설정 버튼 -->
-    <div class="form-group">
-      <div class="row">
-        <div class="col">
-          <button id="runBtn" class="btn-success" style="font-size: 16px; padding: 12px 30px;">자막 추출 시작</button>
+    <!-- Right Panel - Queue & Log -->
+    <aside id="queueContainer" class="right-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/>
+            <line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <span id="queueTitle">처리 대기열</span>
+          <span id="queueCount" class="queue-count">0</span>
         </div>
-        <div class="col-auto">
-          <button id="apiSettingsBtn" class="btn-secondary" style="padding: 12px 20px;">API 키 설정</button>
+        <div class="queue-actions">
+          <button id="openFolderBtn" class="btn-sm" title="출력 폴더 열기">출력 폴더</button>
+          <button id="clearQueueBtn" class="btn-sm" title="대기열 삭제">대기열 삭제</button>
         </div>
       </div>
-    </div>
 
-    <div class="progress-container" id="progressContainer" style="display: none;">
-      <div class="progress-bar">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
-      <div class="progress-text" id="progressText">준비 중...</div>
-    </div>
-
-    <h3 id="logTitle">처리 로그</h3>
-    <pre id="output"></pre>
-  </div>
-
-  <!-- API 키 설정 모달 -->
-  <div id="apiModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; width: 500px; max-width: 90vw;">
-      <h3 id="apiModalTitle" style="margin-top: 0; color: #495057;">번역 API 키 설정</h3>
-      
-      <div class="form-group">
-        <label id="labelDeeplKey" for="deeplApiKey">DeepL API 키 (선택사항)</label>
-        <input type="password" id="deeplApiKey" placeholder="DeepL API 키를 입력하세요 (무료 50만글자/월)">
-        <div id="deeplHelp" class="status-info">
-          <strong>무료 가입 방법:</strong><br>
-          1. <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a> 접속<br>
-          2. "API 무료로 시작하기" 클릭<br>
-          3. 이메일 인증 후 API 키 복사<br>
-          4. 월 50만글자 무료 사용!
+      <!-- Queue List -->
+      <div id="queueList" class="queue-list">
+        <div class="queue-empty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>파일을 드래그하여 추가하세요</span>
         </div>
       </div>
-      
-      <div class="form-group">
-        <label id="labelOpenaiKey" for="openaiApiKey">OpenAI API 키 (선택사항)</label>
-        <input type="password" id="openaiApiKey" placeholder="ChatGPT API 키를 입력하세요">
-        <div class="status-info">
-          <a id="openaiLink" href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급 받기</a>
-          <span id="openaiHelpSuffix"> (유료, 매우 저렴)</span>
+
+      <!-- Progress -->
+      <div id="progressContainer" class="progress-section" style="display: none;">
+        <div class="progress-header">
+          <span id="progressTitle" class="progress-title">처리 중...</span>
+          <span id="progressPercent" class="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+        <div id="progressText" class="progress-status">준비 중...</div>
+      </div>
+
+      <!-- Log Panel -->
+      <div class="log-panel">
+        <div class="log-header">
+          <div class="log-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+              <polyline points="13 2 13 9 20 9"/>
+            </svg>
+            <span id="logTitle">처리 로그</span>
+          </div>
+        </div>
+        <div id="output" class="log-content"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Unified Settings Modal -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="settingsModalTitle" class="modal-title">설정</h3>
+        <button id="closeSettingsBtn" class="modal-close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Sound Settings Section -->
+        <div class="settings-section">
+          <h4 id="soundSectionTitle" class="settings-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+            알림음
+          </h4>
+          <div class="sound-settings-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="soundEnabledCheckbox" checked>
+              <span class="toggle-slider"></span>
+              <span id="soundEnabledLabel" class="toggle-text">알림음 사용</span>
+            </label>
+          </div>
+          <div class="sound-volume-row" id="soundVolumeRow">
+            <span id="soundVolumeLabelModal" class="volume-label">볼륨</span>
+            <input type="range" id="soundVolumeSliderModal" min="0" max="100" value="60" class="volume-slider-modal">
+            <span id="soundVolumeValueModal" class="volume-value-modal">60%</span>
+            <button id="soundTestBtnModal" class="btn-test-sound">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <span id="soundTestLabelModal">테스트</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- API Keys Section -->
+        <div class="settings-section">
+          <h4 id="apiSectionTitle" class="settings-section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+            번역 API 키
+          </h4>
+          <div class="form-group">
+            <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
+            <input type="password" id="deeplApiKey" class="form-input" placeholder="DeepL API 키를 입력하세요">
+            <p id="deeplHelp" class="form-hint">
+              <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 무료로 발급받을 수 있습니다. (월 50만글자 무료)
+            </p>
+          </div>
+          <div class="form-group">
+            <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
+            <input type="password" id="openaiApiKey" class="form-input" placeholder="OpenAI API 키를 입력하세요">
+            <p class="form-hint">
+              <a id="openaiLink" href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급받기</a><span id="openaiHelpSuffix"> (유료, 매우 저렴)</span>
+            </p>
+          </div>
+          <div id="apiKeyStatus" class="api-status"></div>
         </div>
       </div>
-      
-      <div id="apiKeyStatus" style="margin: 15px 0; padding: 10px; border-radius: 4px; display: none;"></div>
-      
-      <div style="text-align: right; margin-top: 20px;">
-        <button id="testApiKeysBtn" class="btn-secondary" style="margin-right: 10px;">연결 테스트</button>
-        <button id="saveApiKeysBtn" class="btn-success" style="margin-right: 10px;">저장</button>
-        <button id="cancelApiBtn" class="btn-secondary">취소</button>
+      <div class="modal-footer">
+        <button id="testApiKeysBtn" class="btn-modal btn-modal-secondary">연결 테스트</button>
+        <button id="saveSettingsBtn" class="btn-modal btn-modal-primary">저장</button>
       </div>
     </div>
   </div>

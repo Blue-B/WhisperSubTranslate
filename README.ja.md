@@ -2,9 +2,9 @@
 
 [English](./README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md)
 
-動画の音声を文字起こし（SRT）し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は Faster‑Whisper 実行ファイルで安定稼働し、翻訳は MyMemory（無料）/DeepL/ChatGPT（OpenAI）を選択できます。
+動画の音声を文字起こし（SRT）し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は MyMemory（無料）/DeepL/ChatGPT（OpenAI）を選択できます。
 
-> 重要: 本アプリは Whisper（Faster‑Whisper）で動画の音声から新規に SRT 字幕を生成します。既存の埋め込み字幕トラックや画面上の文字（OCR）を抽出するツールではありません。
+> 重要: 本アプリは whisper.cpp で動画の音声から新規に SRT 字幕を生成します。既存の埋め込み字幕トラックや画面上の文字（OCR）を抽出するツールではありません。
 
 ## プレビュー
 
@@ -29,33 +29,30 @@
 
 ## はじめに
 
-### 開発者: ローカルで実行
+### 一般ユーザー: ポータブル版で実行
 
-事前準備（初回のみ、抽出に必須）
+- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.2.0-portable.zip`
+- 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
-1) Purfview のリリースから `Faster-Whisper-XXL_r245.4_windows.7z` をダウンロード: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) `.bat` を除外してプロジェクトルート（`main.js` と同じ場所）へ展開。例（7‑Zip）:
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
+すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション（無料MyMemoryがデフォルト、DeepL/OpenAIは自分のAPIキーが必要）。
 
-その後、実行:
+### 開発者: ソースから実行
+
 ```bash
 npm install
 npm start
 ```
-初回は、モデルが無ければ `_models/` に自動ダウンロードします。
+- **whisper-cpp**は`npm install`時に自動ダウンロードされます（~700MB CUDA版）
+- **FFmpeg**はnpmパッケージで自動的に含まれます
+- 初回は、選択したGGMLモデルが無ければ `_models/` に自動ダウンロードします
 
-### 一般ユーザー: 配布（ポータブル）で実行
-
-- Releases から最新のポータブルアーカイブ：`WhisperSubTranslate v1.2.0.zip`
-- 展開後のフォルダで `WhisperSubTranslate.exe` を実行
+> 自動ダウンロード失敗時は、[whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases)から手動でダウンロードし、`whisper-cpp/`フォルダに展開してください。
 
 ### Windows 用ビルド
 ```bash
 npm run build-win
 ```
-成果物は `dist/` に出力されます。
+成果物は `dist2/` に出力されます。
 
 ## 技術スタック
 
@@ -64,9 +61,9 @@ npm run build-win
 | 項目 | 詳細 |
 | --- | --- |
 | ランタイム | Electron, Node.js, JavaScript |
-| パッケージング | electron‑builder |
+| パッケージング | electron-builder |
 | ネットワーク | axios |
-| 音声→テキスト | Faster‑Whisper 実行ファイル |
+| 音声→テキスト | whisper.cpp (GGMLモデル) |
 | 翻訳（任意） | DeepL API, OpenAI（ChatGPT）, MyMemory |
 
 ## 翻訳エンジン
@@ -88,11 +85,19 @@ APIキーと設定は、ユーザーPCの `app.getPath('userData')` パスに基
 韓国語 (ko)、英語 (en)、日本語 (ja)、中国語 (zh)、スペイン語 (es)、フランス語 (fr)、ドイツ語 (de)、イタリア語 (it)、ポルトガル語 (pt)、ロシア語 (ru)、**ハンガリー語 (hu)**、**アラビア語 (ar)**
 
 ### 音声認識言語
-Faster-Whisper XXLは100以上の言語をサポートしています（英語、スペイン語、フランス語、ドイツ語、イタリア語、ポルトガル語、ロシア語、中国語、日本語、韓国語、アラビア語、ヒンディー語、トルコ語など主要な世界言語を含む）。
+whisper.cppは100以上の言語をサポートしています（英語、スペイン語、フランス語、ドイツ語、イタリア語、ポルトガル語、ロシア語、中国語、日本語、韓国語、アラビア語、ヒンディー語、トルコ語など主要な世界言語を含む）。
 
-## 開発者向けセットアップ（ローカル実行/ビルド）
+## モデルとパフォーマンス
 
-この内容は「はじめに」に統合しました。上の事前準備をご参照ください。
+モデルは `_models/` に保存され、必要に応じて自動ダウンロードされます。大きいモデルほど遅いですが、より正確になる可能性があります。CUDA対応時はGPU、そうでなければCPUで動作します。
+
+| モデル | サイズ | VRAM | 速度 | 品質 |
+| --- | --- | --- | --- | --- |
+| tiny | ~75MB | ~1GB | 最速 | 基本 |
+| base | ~142MB | ~1GB | 速い | 良好 |
+| small | ~466MB | ~2GB | 中程度 | より良い |
+| medium | ~1.5GB | ~5GB | 遅い | 素晴らしい |
+| large-v3 | ~3GB | ~10GB | 最も遅い | 最高 |
 
 ## ブランチ（シンプル Trunk）
 
@@ -166,14 +171,15 @@ fix: localize target language note
 - 使途：バグ修正、モデルDLの安定化、UI磨き、翻訳オプション拡充、Windowsビルド/テスト
 - 透明性：データ販売なし。支援金は開発時間、リリース用インフラ、翻訳APIテスト費用にのみ使用します。
 - 一度の支援でも README/リリースノートのスポンサー欄にお名前を掲載（非公開希望可）。
-- 月額支援（$3/mo, GitHub Sponsors自動課金）は “Sponsor Request” イシューの優先トリアージ（ベストエフォート）を追加特典として付与。
+- 月額支援（$3/mo, GitHub Sponsors自動課金）は "Sponsor Request" イシューの優先トリアージ（ベストエフォート）を追加特典として付与。
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/One‑time_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
 
 ## 謝辞
 
-- Faster‑Whisper スタンドアロン実行ファイルの提供に感謝します： [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- whisper.cppはGeorgi Gerganovによって開発されました： [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
 ## ライセンス
 
-ISC。外部サービス（DeepL, OpenAI など）の規約に従ってください。 
+ISC。外部サービス（DeepL, OpenAI など）の規約に従ってください。

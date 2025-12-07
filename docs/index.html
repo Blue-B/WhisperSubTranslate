@@ -1,0 +1,1756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate - Free subtitle extraction and translation tool. Local subtitle generation with privacy-focused design.">
+    <meta name="keywords" content="subtitle extraction, transcription, subtitle translation, video subtitles, free subtitle software">
+    <meta name="author" content="GTPS Team">
+    <meta name="robots" content="index, follow">
+
+    <meta property="og:title" content="WhisperSubTranslate - Subtitle Extraction & Translation">
+    <meta property="og:description" content="Free local subtitle extraction with optional translation. Privacy-focused design.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://whispersubtranslate.github.io">
+    <meta property="og:image" content="./assets/og-image.png">
+
+    <title>WhisperSubTranslate - Free Subtitle Extraction & Translation</title>
+
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230a0a0a'/%3E%3Cpath d='M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z' fill='%2362DE61'/%3E%3C/svg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-tertiary: #111111;
+            --bg-card: #0f0f0f;
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-hover: rgba(255, 255, 255, 0.12);
+            --text-primary: #f0f0f0;
+            --text-secondary: #888888;
+            --text-tertiary: #555555;
+            --accent: #62DE61;
+            --accent-hover: #80EE64;
+            --accent-dim: rgba(98, 222, 97, 0.15);
+            --accent-glow: rgba(98, 222, 97, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+        }
+
+        ::selection {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--text-tertiary);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .nav-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: -0.02em;
+        }
+
+        .logo svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .nav-links a {
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .lang-selector {
+            position: relative;
+        }
+
+        .lang-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .lang-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+
+        .lang-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            min-width: 120px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 4px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: all 0.2s;
+        }
+
+        .lang-selector:hover .lang-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .lang-option {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.15s;
+        }
+
+        .lang-option:hover {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .lang-option.active {
+            color: var(--accent);
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--accent);
+            color: #000;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--border-hover);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 120px 24px 80px;
+            position: relative;
+        }
+
+        .hero-glow {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse, var(--accent-dim) 0%, transparent 70%);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 100px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .hero-badge .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .hero h1 {
+            font-size: clamp(40px, 8vw, 72px);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            max-width: 900px;
+        }
+
+        .hero h1 span {
+            color: var(--accent);
+        }
+
+        .hero-desc {
+            font-size: 18px;
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin: 0 auto 40px;
+            line-height: 1.7;
+            text-align: center;
+            word-break: keep-all;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .hero-visual {
+            margin-top: 80px;
+            max-width: 1000px;
+            width: 100%;
+            position: relative;
+        }
+
+        .hero-visual img {
+            width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+        }
+
+        .hero-visual::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 12px;
+            padding: 1px;
+            background: linear-gradient(180deg, var(--border-hover) 0%, transparent 50%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        /* Stats Section */
+        .stats {
+            padding: 60px 0;
+            border-top: 1px solid var(--border-subtle);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 32px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Features Section */
+        .features {
+            padding: 120px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+
+        .section-label {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .section-desc {
+            font-size: 17px;
+            color: var(--text-secondary);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent-dim);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon svg {
+            width: 24px;
+            height: 24px;
+            color: var(--accent);
+        }
+
+        .feature-card h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: -0.01em;
+        }
+
+        .feature-card p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* How it Works */
+        .how-it-works {
+            padding: 120px 0;
+            background: var(--bg-secondary);
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 48px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .step {
+            text-align: center;
+            position: relative;
+        }
+
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 32px;
+            left: calc(50% + 48px);
+            width: calc(100% - 48px);
+            height: 1px;
+            background: linear-gradient(90deg, var(--border-hover), transparent);
+        }
+
+        .step:last-child::after {
+            display: none;
+        }
+
+        .step-number {
+            width: 64px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--accent);
+        }
+
+        .step h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .step p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* Comparison */
+        .comparison {
+            padding: 120px 0;
+        }
+
+        .comparison-table {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .comparison-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 16px 24px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .comparison-table th {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .comparison-table th:first-child {
+            color: var(--accent);
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .comparison-table td {
+            font-size: 14px;
+        }
+
+        .comparison-table td:first-child {
+            font-weight: 500;
+        }
+
+        .check {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .cross {
+            color: var(--text-tertiary);
+        }
+
+        /* Languages */
+        .languages {
+            padding: 120px 0;
+            background: var(--bg-secondary);
+        }
+
+        .lang-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .lang-tag {
+            padding: 10px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 100px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .lang-tag:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 120px 0;
+        }
+
+        .cta-box {
+            max-width: 700px;
+            margin: 0 auto;
+            text-align: center;
+            padding: 64px 48px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+        }
+
+        .cta-box h2 {
+            font-size: clamp(28px, 4vw, 40px);
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .cta-box p {
+            font-size: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .cta-version {
+            margin-top: 24px;
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        /* Footer */
+        footer {
+            padding: 64px 0 32px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 48px;
+            margin-bottom: 48px;
+        }
+
+        .footer-brand p {
+            font-size: 14px;
+            color: var(--text-tertiary);
+            margin-top: 16px;
+            line-height: 1.6;
+        }
+
+        .footer-col h4 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 16px;
+        }
+
+        .footer-col ul {
+            list-style: none;
+        }
+
+        .footer-col li {
+            margin-bottom: 10px;
+        }
+
+        .footer-col a {
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+
+        .footer-col a:hover {
+            color: var(--text-primary);
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .footer-bottom span {
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .social-links a {
+            color: var(--text-tertiary);
+            transition: color 0.2s;
+        }
+
+        .social-links a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Mobile Menu */
+        .mobile-menu-btn {
+            display: none;
+            padding: 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        /* Animations */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.6s ease-out;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Mobile Menu Overlay */
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+        }
+        .mobile-menu.active {
+            display: flex;
+        }
+        .mobile-menu a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 20px;
+            font-weight: 500;
+            padding: 12px 24px;
+            transition: color 0.2s;
+        }
+        .mobile-menu a:hover {
+            color: var(--accent);
+        }
+        .mobile-menu-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .hero h1 {
+                font-size: 36px;
+            }
+
+            .hero-desc {
+                font-size: 16px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .steps {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+
+            .step::after {
+                display: none;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0 16px;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .hero-buttons a {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cta-box {
+                padding: 40px 24px;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container nav-content">
+            <a href="/" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+
+            <div class="nav-links">
+                <a href="#features" data-i18n="nav.features">Features</a>
+                <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
+                <a href="./docs/" data-i18n="nav.docs">Docs</a>
+                <a href="./blog/" data-i18n="nav.blog">Blog</a>
+            </div>
+
+            <div class="nav-right">
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="current-lang">EN</span>
+                    </button>
+                    <div class="lang-dropdown">
+                        <button class="lang-option active" data-lang-code="en">English</button>
+                        <button class="lang-option" data-lang-code="ko">한국어</button>
+                        <button class="lang-option" data-lang-code="ja">日本語</button>
+                        <button class="lang-option" data-lang-code="zh">中文</button>
+                        <button class="lang-option" data-lang-code="es">Español</button>
+                    </div>
+                </div>
+                <a href="#download" class="btn-primary" data-i18n="nav.download">Download</a>
+            </div>
+
+            <button class="mobile-menu-btn" aria-label="Open menu">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu" id="mobileMenu">
+        <button class="mobile-menu-close" aria-label="Close menu">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#how-it-works" data-i18n="nav.how">How it works</a>
+        <a href="./blog/" data-i18n="nav.blog">Blog</a>
+        <a href="#download" data-i18n="nav.download">Download</a>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-glow"></div>
+        <div class="container" style="position: relative; z-index: 1;">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                <span data-i18n="hero.badge">High-performance local engine</span>
+            </div>
+
+            <h1 data-i18n="hero.title">Subtitles extracted locally.<br><span>Translated instantly.</span></h1>
+
+            <p class="hero-desc" data-i18n="hero.desc">
+                Open-source subtitle tool with professional-grade speech recognition. Runs entirely on your machine. No uploads, no subscriptions, no limits.
+            </p>
+
+            <div class="hero-buttons">
+                <a href="#download" class="btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span data-i18n="hero.cta.download">Download for Windows</span>
+                </a>
+                <a href="https://github.com/Blue-B/WhisperSubTranslate" class="btn-secondary" target="_blank">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    <span data-i18n="hero.cta.github">View on GitHub</span>
+                </a>
+            </div>
+
+            <div class="hero-visual fade-in">
+                <img src="./assets/screenshot.png" alt="WhisperSubTranslate interface" loading="lazy">
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-item fade-in">
+                    <div class="stat-value">3</div>
+                    <div class="stat-label" data-i18n="stats.translators">Translation APIs</div>
+                </div>
+                <div class="stat-item fade-in">
+                    <div class="stat-value">✓</div>
+                    <div class="stat-label" data-i18n="stats.offline">Local Extraction</div>
+                </div>
+                <div class="stat-item fade-in">
+                    <div class="stat-value">5-10x</div>
+                    <div class="stat-label" data-i18n="stats.faster">Faster with GPU</div>
+                </div>
+                <div class="stat-item fade-in">
+                    <div class="stat-value">$0</div>
+                    <div class="stat-label" data-i18n="stats.free">App is Free*</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header fade-in">
+                <span class="section-label" data-i18n="features.label">Features</span>
+                <h2 class="section-title" data-i18n="features.title">Everything you need for subtitle work</h2>
+                <p class="section-desc" data-i18n="features.desc">Professional-grade transcription and translation without the complexity.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.privacy.title">Complete Privacy</h3>
+                    <p data-i18n="features.privacy.desc">Speech recognition runs locally. Your files never leave your computer. Translation (optional) uses online APIs.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.gpu.title">GPU Acceleration</h3>
+                    <p data-i18n="features.gpu.desc">CUDA support for NVIDIA GPUs. Process videos 5-10x faster than CPU-only.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.translation.title">Multi-language Translation</h3>
+                    <p data-i18n="features.translation.desc">Free translation with MyMemory (no API key). DeepL/ChatGPT available with your own API keys.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.batch.title">Batch Processing</h3>
+                    <p data-i18n="features.batch.desc">Queue multiple files and process them sequentially. Set it and forget it.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.timestamp.title">Millisecond Timestamps</h3>
+                    <p data-i18n="features.timestamp.desc">Precise timing for music videos, karaoke, and live captions.</p>
+                </div>
+
+                <div class="feature-card fade-in">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h3 data-i18n="features.accuracy.title">High Accuracy</h3>
+                    <p data-i18n="features.accuracy.desc">Industry-leading speech recognition technology. Accurately transcribes speech in any environment.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-header fade-in">
+                <span class="section-label" data-i18n="howItWorks.label">How it works</span>
+                <h2 class="section-title" data-i18n="howItWorks.title">Three steps to subtitles</h2>
+                <p class="section-desc" data-i18n="howItWorks.desc">No complicated setup. Just drag, drop, and done.</p>
+            </div>
+
+            <div class="steps">
+                <div class="step fade-in">
+                    <div class="step-number">01</div>
+                    <h3 data-i18n="howItWorks.step1.title">Drop your file</h3>
+                    <p data-i18n="howItWorks.step1.desc">Drag any video or audio file into the app. Supports MP4, MKV, MP3, and more.</p>
+                </div>
+
+                <div class="step fade-in">
+                    <div class="step-number">02</div>
+                    <h3 data-i18n="howItWorks.step2.title">Extract subtitles</h3>
+                    <p data-i18n="howItWorks.step2.desc">Speech recognition runs locally on your computer. Watch the progress in real-time.</p>
+                </div>
+
+                <div class="step fade-in">
+                    <div class="step-number">03</div>
+                    <h3 data-i18n="howItWorks.step3.title">Translate (optional)</h3>
+                    <p data-i18n="howItWorks.step3.desc">One click to translate into any language. SRT file saved automatically.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison -->
+    <section class="comparison" id="comparison">
+        <div class="container">
+            <div class="section-header fade-in">
+                <span class="section-label" data-i18n="comparison.label">Comparison</span>
+                <h2 class="section-title" data-i18n="comparison.title">Why choose us</h2>
+            </div>
+
+            <div class="comparison-table fade-in">
+                <table>
+                    <thead>
+                        <tr>
+                            <th data-i18n="comparison.feature">Feature</th>
+                            <th>WhisperSubTranslate</th>
+                            <th data-i18n="comparison.cloudServices">Cloud Services</th>
+                            <th data-i18n="comparison.otherTools">Other Tools</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td data-i18n="comparison.price">Price</td>
+                            <td class="check">Free</td>
+                            <td>$10-50/mo</td>
+                            <td>Limited free</td>
+                        </tr>
+                        <tr>
+                            <td data-i18n="comparison.privacyRow">Privacy</td>
+                            <td class="check">Local only</td>
+                            <td class="cross">Server upload</td>
+                            <td class="cross">Server upload</td>
+                        </tr>
+                        <tr>
+                            <td data-i18n="comparison.offline">Offline extraction</td>
+                            <td class="check">Yes</td>
+                            <td class="cross">No</td>
+                            <td class="cross">No</td>
+                        </tr>
+                        <tr>
+                            <td data-i18n="comparison.gpuAccel">GPU acceleration</td>
+                            <td class="check">CUDA</td>
+                            <td>Server-side</td>
+                            <td class="cross">CPU only</td>
+                        </tr>
+                        <tr>
+                            <td data-i18n="comparison.msTimestamp">Millisecond timestamps</td>
+                            <td class="check">Yes</td>
+                            <td>Limited</td>
+                            <td class="cross">No</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Languages -->
+    <section class="languages">
+        <div class="container">
+            <div class="section-header fade-in">
+                <span class="section-label" data-i18n="languages.label">Languages</span>
+                <h2 class="section-title" data-i18n="languages.title">UI-Supported Languages</h2>
+                <p class="section-desc" data-i18n="languages.desc">Select source and target languages directly in the app interface. Auto-detection supports 99+ languages.</p>
+            </div>
+
+            <div class="lang-tags fade-in">
+                <span class="lang-tag">English</span>
+                <span class="lang-tag">한국어</span>
+                <span class="lang-tag">日本語</span>
+                <span class="lang-tag">中文</span>
+                <span class="lang-tag">Español</span>
+                <span class="lang-tag">Français</span>
+                <span class="lang-tag">Deutsch</span>
+                <span class="lang-tag">Italiano</span>
+                <span class="lang-tag">Português</span>
+                <span class="lang-tag">Русский</span>
+                <span class="lang-tag">Magyar</span>
+                <span class="lang-tag">العربية</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta" id="download">
+        <div class="container">
+            <div class="cta-box fade-in">
+                <h2 data-i18n="cta.title">Ready to start?</h2>
+                <p data-i18n="cta.desc">Download now and create your first subtitle in minutes.</p>
+
+                <div class="cta-buttons">
+                    <a href="https://github.com/Blue-B/WhisperSubTranslate/releases/latest" class="btn-primary">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        <span data-i18n="cta.downloadBtn">Download for Windows</span>
+                    </a>
+                    <a href="https://github.com/Blue-B/WhisperSubTranslate" class="btn-secondary" target="_blank">
+                        <span data-i18n="cta.sourceBtn">View source code</span>
+                    </a>
+                </div>
+
+                <p class="cta-version" data-i18n="cta.version">Windows 10+ · 8GB RAM recommended</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="/" class="logo">
+                        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+                            <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                            <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                            <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                        </svg>
+                        <span>WhisperSubTranslate</span>
+                    </a>
+                    <p data-i18n="footer.desc">Free, open-source subtitle extraction and translation. Privacy-first, runs locally.</p>
+                </div>
+
+                <div class="footer-col">
+                    <h4 data-i18n="footer.product">Product</h4>
+                    <ul>
+                        <li><a href="#features" data-i18n="footer.features">Features</a></li>
+                        <li><a href="#download" data-i18n="footer.download">Download</a></li>
+                        <li><a href="./docs/" data-i18n="footer.docs">Documentation</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h4 data-i18n="footer.resources">Resources</h4>
+                    <ul>
+                        <li><a href="./blog/" data-i18n="footer.blog">Blog</a></li>
+                        <li><a href="https://github.com/Blue-B/WhisperSubTranslate/issues/new" data-i18n="footer.issues">🐛 버그 제보</a></li>
+                        <li><a href="https://github.com/Blue-B/WhisperSubTranslate/issues/new?labels=enhancement&template=feature_request.md" data-i18n="footer.feature">💡 기능 요청</a></li>
+                        <li><a href="https://github.com/Blue-B/WhisperSubTranslate/discussions" data-i18n="footer.community">💬 커뮤니티</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-col">
+                    <h4 data-i18n="footer.legal">Legal</h4>
+                    <ul>
+                        <li><a href="./privacy.html" data-i18n="footer.privacy">Privacy Policy</a></li>
+                        <li><a href="./terms.html" data-i18n="footer.terms">Terms of Service</a></li>
+                        <li><a href="./about.html" data-i18n="footer.about">About</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <span>&copy; 2024 WhisperSubTranslate. MIT License.</span>
+                <div class="social-links">
+                    <a href="https://github.com/Blue-B/WhisperSubTranslate" target="_blank">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Translations
+        const translations = {
+            en: {
+                "nav.features": "Features",
+                "nav.howItWorks": "How it works",
+                "nav.docs": "Docs",
+                "nav.blog": "Blog",
+                "nav.download": "Download",
+                "hero.badge": "High-performance local engine",
+                "hero.title": "Subtitles extracted locally.<br><span>Translated instantly.</span>",
+                "hero.desc": "Open-source subtitle tool with professional-grade speech recognition. Runs entirely on your machine. No uploads, no subscriptions, no limits.",
+                "hero.cta.download": "Download for Windows",
+                "hero.cta.github": "View on GitHub",
+                "stats.translators": "Translation APIs",
+                "stats.offline": "Local Extraction",
+                "stats.faster": "Faster with GPU",
+                "stats.free": "App is Free*",
+                "features.label": "Features",
+                "features.title": "Everything you need for subtitle work",
+                "features.desc": "Professional-grade transcription and translation without the complexity.",
+                "features.privacy.title": "Complete Privacy",
+                "features.privacy.desc": "Speech recognition runs locally. Your files never leave your computer. Translation (optional) uses online APIs.",
+                "features.gpu.title": "GPU Acceleration",
+                "features.gpu.desc": "CUDA support for NVIDIA GPUs. Process videos 5-10x faster than CPU-only.",
+                "features.translation.title": "Multi-language Translation",
+                "features.translation.desc": "Free translation with MyMemory (no API key). DeepL/ChatGPT available with your own API keys.",
+                "features.batch.title": "Batch Processing",
+                "features.batch.desc": "Queue multiple files and process them sequentially. Set it and forget it.",
+                "features.timestamp.title": "Millisecond Timestamps",
+                "features.timestamp.desc": "Precise timing for music videos, karaoke, and live captions.",
+                "features.accuracy.title": "High Accuracy",
+                "features.accuracy.desc": "Industry-leading speech recognition technology. Accurately transcribes speech in any environment.",
+                "howItWorks.label": "How it works",
+                "howItWorks.title": "Three steps to subtitles",
+                "howItWorks.desc": "No complicated setup. Just drag, drop, and done.",
+                "howItWorks.step1.title": "Drop your file",
+                "howItWorks.step1.desc": "Drag any video or audio file into the app. Supports MP4, MKV, MP3, and more.",
+                "howItWorks.step2.title": "Extract subtitles",
+                "howItWorks.step2.desc": "Speech recognition runs locally on your computer. Watch the progress in real-time.",
+                "howItWorks.step3.title": "Translate (optional)",
+                "howItWorks.step3.desc": "One click to translate into any language. SRT file saved automatically.",
+                "comparison.label": "Comparison",
+                "comparison.title": "Why choose us",
+                "comparison.feature": "Feature",
+                "comparison.cloudServices": "Cloud Services",
+                "comparison.otherTools": "Other Tools",
+                "comparison.price": "Price",
+                "comparison.privacyRow": "Privacy",
+                "comparison.offline": "Offline extraction",
+                "comparison.gpuAccel": "GPU acceleration",
+                "comparison.msTimestamp": "Millisecond timestamps",
+                "languages.label": "Languages",
+                "languages.title": "UI-Supported Languages",
+                "languages.desc": "Select source and target languages directly in the app interface. Auto-detection supports 99+ languages.",
+                "cta.title": "Ready to start?",
+                "cta.desc": "Download now and create your first subtitle in minutes.",
+                "cta.downloadBtn": "Download for Windows",
+                "cta.sourceBtn": "View source code",
+                "cta.version": "Windows 10+ · 8GB RAM recommended",
+                "footer.desc": "Free, open-source subtitle extraction and translation. Privacy-first, runs locally.",
+                "footer.product": "Product",
+                "footer.features": "Features",
+                "footer.download": "Download",
+                "footer.docs": "Documentation",
+                "footer.resources": "Resources",
+                "footer.blog": "Blog",
+                "footer.issues": "Report Bug",
+                "footer.feature": "Feature Request",
+                "footer.community": "Community",
+                "footer.legal": "Legal",
+                "footer.privacy": "Privacy Policy",
+                "footer.terms": "Terms of Service",
+                "footer.about": "About"
+            },
+            ko: {
+                "nav.features": "기능",
+                "nav.howItWorks": "사용법",
+                "nav.docs": "문서",
+                "nav.blog": "블로그",
+                "nav.download": "다운로드",
+                "hero.badge": "고성능 로컬 엔진 탑재",
+                "hero.title": "내 PC에서 자막 추출,<br><span>바로 번역까지</span>",
+                "hero.desc": "오픈소스 자막 도구. 전문가 수준의 음성 인식으로 내 컴퓨터에서 직접 처리하니까 업로드도 구독도 필요 없어요.",
+                "hero.cta.download": "Windows용 다운로드",
+                "hero.cta.github": "GitHub에서 보기",
+                "stats.translators": "번역 API",
+                "stats.offline": "로컬 추출",
+                "stats.faster": "GPU 가속",
+                "stats.free": "앱 무료*",
+                "features.label": "기능",
+                "features.title": "자막 작업, 이것 하나면 충분해요",
+                "features.desc": "복잡한 설정 없이 전문가 수준의 자막을 뽑아보세요.",
+                "features.privacy.title": "내 파일은 내 PC에서만",
+                "features.privacy.desc": "음성 인식은 100% 로컬에서 처리돼요. 파일이 어디론가 전송되는 일은 없어요. 번역 기능을 쓸 때만 API를 사용합니다.",
+                "features.gpu.title": "GPU 가속 지원",
+                "features.gpu.desc": "NVIDIA 그래픽카드가 있다면 CPU보다 5~10배 빠르게 처리할 수 있어요.",
+                "features.translation.title": "다국어 번역",
+                "features.translation.desc": "MyMemory로 무료 번역 (API 키 불필요). DeepL/ChatGPT는 본인 API 키로 사용 가능.",
+                "features.batch.title": "여러 파일 한번에",
+                "features.batch.desc": "파일을 대기열에 넣어두면 순서대로 알아서 처리해 드려요.",
+                "features.timestamp.title": "정밀한 타이밍",
+                "features.timestamp.desc": "밀리초 단위 타임스탬프로 뮤비, 노래방 자막도 완벽하게.",
+                "features.accuracy.title": "높은 정확도",
+                "features.accuracy.desc": "업계 최고 수준의 음성 인식 기술. 어떤 환경에서도 정확하게 음성을 텍스트로 변환해요.",
+                "howItWorks.label": "사용법",
+                "howItWorks.title": "3단계면 끝",
+                "howItWorks.desc": "복잡한 설정? 그런 거 없어요. 드래그 앤 드롭이면 끝.",
+                "howItWorks.step1.title": "파일 넣기",
+                "howItWorks.step1.desc": "영상이나 오디오 파일을 앱에 드래그하세요. MP4, MKV, MP3 등 다 돼요.",
+                "howItWorks.step2.title": "자막 추출",
+                "howItWorks.step2.desc": "음성 인식 엔진이 내 컴퓨터에서 바로 처리해요. 진행 상황도 실시간으로 확인 가능.",
+                "howItWorks.step3.title": "번역하기",
+                "howItWorks.step3.desc": "클릭 한 번이면 원하는 언어로 번역 완료. SRT 파일은 자동 저장됩니다.",
+                "comparison.label": "비교",
+                "comparison.title": "왜 이 앱일까요?",
+                "comparison.feature": "기능",
+                "comparison.cloudServices": "클라우드 서비스",
+                "comparison.otherTools": "다른 도구",
+                "comparison.price": "가격",
+                "comparison.privacyRow": "개인정보",
+                "comparison.offline": "오프라인 추출",
+                "comparison.gpuAccel": "GPU 가속",
+                "comparison.msTimestamp": "밀리초 타임스탬프",
+                "languages.label": "언어",
+                "languages.title": "앱 지원 언어",
+                "languages.desc": "앱에서 바로 입력/출력 언어를 선택할 수 있어요. 자동 감지 모드로 99개 이상의 언어를 인식해요.",
+                "cta.title": "지금 바로 시작하세요",
+                "cta.desc": "다운로드하고 몇 분 안에 첫 자막을 만들어 보세요.",
+                "cta.downloadBtn": "Windows용 다운로드",
+                "cta.sourceBtn": "소스 코드 보기",
+                "cta.version": "Windows 10 이상 · RAM 8GB 권장",
+                "footer.desc": "무료 오픈소스 자막 추출 & 번역 도구. 프라이버시 우선, 로컬 실행.",
+                "footer.product": "제품",
+                "footer.features": "기능",
+                "footer.download": "다운로드",
+                "footer.docs": "문서",
+                "footer.resources": "자료",
+                "footer.blog": "블로그",
+                "footer.issues": "버그 신고",
+                "footer.feature": "기능 요청",
+                "footer.community": "커뮤니티",
+                "footer.legal": "법적 고지",
+                "footer.privacy": "개인정보처리방침",
+                "footer.terms": "이용약관",
+                "footer.about": "소개"
+            },
+            ja: {
+                "nav.features": "機能",
+                "nav.howItWorks": "使い方",
+                "nav.docs": "ドキュメント",
+                "nav.blog": "ブログ",
+                "nav.download": "ダウンロード",
+                "hero.badge": "高性能ローカルエンジン搭載",
+                "hero.title": "自分のPCで字幕抽出、<br><span>そのまま翻訳</span>",
+                "hero.desc": "オープンソースの字幕ツール。プロ仕様の音声認識を搭載し、すべてローカルで完結するからアップロードもサブスクも不要です。",
+                "hero.cta.download": "Windows版をダウンロード",
+                "hero.cta.github": "GitHubで見る",
+                "stats.translators": "翻訳API",
+                "stats.offline": "ローカル処理",
+                "stats.faster": "GPU高速化",
+                "stats.free": "アプリ無料*",
+                "features.label": "機能",
+                "features.title": "字幕作成に必要なものが全部揃ってます",
+                "features.desc": "面倒な設定なしで、プロ品質の字幕を作成できます。",
+                "features.privacy.title": "ファイルは外に出ません",
+                "features.privacy.desc": "音声認識は100%ローカル処理。ファイルがどこかに送られることはありません。翻訳機能を使う時だけAPIに接続します。",
+                "features.gpu.title": "GPU対応で爆速",
+                "features.gpu.desc": "NVIDIAのグラフィックボードがあれば、CPUの5〜10倍速く処理できます。",
+                "features.translation.title": "多言語翻訳",
+                "features.translation.desc": "MyMemoryで無料翻訳（APIキー不要）。DeepL/ChatGPTは自分のAPIキーで利用可能。",
+                "features.batch.title": "まとめて処理",
+                "features.batch.desc": "複数ファイルをキューに入れておけば、順番に自動で処理してくれます。",
+                "features.timestamp.title": "ミリ秒単位の精度",
+                "features.timestamp.desc": "MV、カラオケ、ライブ配信の字幕にも対応できる精密なタイミング。",
+                "features.accuracy.title": "高い認識精度",
+                "features.accuracy.desc": "業界トップクラスの音声認識技術を搭載。どんな環境でも正確に文字起こしできます。",
+                "howItWorks.label": "使い方",
+                "howItWorks.title": "たった3ステップ",
+                "howItWorks.desc": "面倒な設定は一切なし。ドラッグ＆ドロップで完了。",
+                "howItWorks.step1.title": "ファイルを入れる",
+                "howItWorks.step1.desc": "動画や音声ファイルをアプリにドラッグするだけ。MP4、MKV、MP3など対応。",
+                "howItWorks.step2.title": "字幕を抽出",
+                "howItWorks.step2.desc": "音声認識エンジンがローカルで処理。進捗はリアルタイムで確認できます。",
+                "howItWorks.step3.title": "翻訳する",
+                "howItWorks.step3.desc": "ワンクリックで好きな言語に翻訳。SRTファイルは自動で保存されます。",
+                "comparison.label": "比較",
+                "comparison.title": "なぜこのアプリ？",
+                "comparison.feature": "機能",
+                "comparison.cloudServices": "クラウドサービス",
+                "comparison.otherTools": "他のツール",
+                "comparison.price": "価格",
+                "comparison.privacyRow": "プライバシー",
+                "comparison.offline": "オフライン抽出",
+                "comparison.gpuAccel": "GPU高速化",
+                "comparison.msTimestamp": "ミリ秒タイムスタンプ",
+                "languages.label": "言語",
+                "languages.title": "対応言語",
+                "languages.desc": "アプリ内で入力・出力言語を選べます。自動検出モードで99以上の言語に対応しています。",
+                "cta.title": "今すぐ始めよう",
+                "cta.desc": "ダウンロードして、数分で最初の字幕を作ってみましょう。",
+                "cta.downloadBtn": "Windows版をダウンロード",
+                "cta.sourceBtn": "ソースコードを見る",
+                "cta.version": "Windows 10以上 · RAM 8GB推奨",
+                "footer.desc": "無料のオープンソース字幕ツール。プライバシー重視、ローカル処理。",
+                "footer.product": "製品",
+                "footer.features": "機能",
+                "footer.download": "ダウンロード",
+                "footer.docs": "ドキュメント",
+                "footer.resources": "リソース",
+                "footer.blog": "ブログ",
+                "footer.issues": "バグ報告",
+                "footer.feature": "機能リクエスト",
+                "footer.community": "コミュニティ",
+                "footer.legal": "法的情報",
+                "footer.privacy": "プライバシーポリシー",
+                "footer.terms": "利用規約",
+                "footer.about": "このアプリについて"
+            },
+            zh: {
+                "nav.features": "功能",
+                "nav.howItWorks": "使用方法",
+                "nav.docs": "文档",
+                "nav.blog": "博客",
+                "nav.download": "下载",
+                "hero.badge": "高性能本地引擎",
+                "hero.title": "在本地提取字幕，<br><span>一键翻译</span>",
+                "hero.desc": "开源字幕工具，采用专业级语音识别技术，全部在你的电脑上完成。无需上传文件，无需订阅，没有任何限制。",
+                "hero.cta.download": "下载 Windows 版",
+                "hero.cta.github": "在 GitHub 查看",
+                "stats.translators": "翻译 API",
+                "stats.offline": "本地处理",
+                "stats.faster": "GPU 加速",
+                "stats.free": "应用免费*",
+                "features.label": "功能",
+                "features.title": "字幕制作，一站搞定",
+                "features.desc": "无需复杂设置，轻松获得专业级字幕。",
+                "features.privacy.title": "文件不会外传",
+                "features.privacy.desc": "语音识别 100% 在本地运行，文件不会被上传到任何地方。只有使用翻译功能时才会连接 API。",
+                "features.gpu.title": "GPU 加速",
+                "features.gpu.desc": "支持 NVIDIA 显卡，处理速度比 CPU 快 5-10 倍。",
+                "features.translation.title": "多语言翻译",
+                "features.translation.desc": "MyMemory 免费翻译（无需 API 密钥）。DeepL/ChatGPT 需要使用您自己的 API 密钥。",
+                "features.batch.title": "批量处理",
+                "features.batch.desc": "把多个文件添加到队列，程序会自动依次处理。",
+                "features.timestamp.title": "毫秒级精度",
+                "features.timestamp.desc": "精确的时间戳，适合 MV、卡拉 OK 和直播字幕。",
+                "features.accuracy.title": "高识别率",
+                "features.accuracy.desc": "采用业界领先的语音识别技术，在各种环境下都能准确转录语音。",
+                "howItWorks.label": "使用方法",
+                "howItWorks.title": "三步搞定",
+                "howItWorks.desc": "不需要复杂设置，拖放文件就能开始。",
+                "howItWorks.step1.title": "添加文件",
+                "howItWorks.step1.desc": "把视频或音频文件拖进应用，支持 MP4、MKV、MP3 等格式。",
+                "howItWorks.step2.title": "提取字幕",
+                "howItWorks.step2.desc": "语音识别引擎在你的电脑上处理音频，可以实时查看进度。",
+                "howItWorks.step3.title": "翻译字幕",
+                "howItWorks.step3.desc": "点一下就能翻译成任意语言，SRT 文件自动保存。",
+                "comparison.label": "对比",
+                "comparison.title": "我们的优势",
+                "comparison.feature": "功能",
+                "comparison.cloudServices": "云服务",
+                "comparison.otherTools": "其他工具",
+                "comparison.price": "价格",
+                "comparison.privacyRow": "隐私保护",
+                "comparison.offline": "离线提取",
+                "comparison.gpuAccel": "GPU 加速",
+                "comparison.msTimestamp": "毫秒时间戳",
+                "languages.label": "语言",
+                "languages.title": "支持的语言",
+                "languages.desc": "在应用内直接选择输入和输出语言。自动检测模式可识别 99 种以上的语言。",
+                "cta.title": "现在就开始",
+                "cta.desc": "立即下载，几分钟内就能制作你的第一个字幕。",
+                "cta.downloadBtn": "下载 Windows 版",
+                "cta.sourceBtn": "查看源代码",
+                "cta.version": "Windows 10+ · 建议 8GB 内存",
+                "footer.desc": "免费开源的字幕提取和翻译工具，隐私优先，本地运行。",
+                "footer.product": "产品",
+                "footer.features": "功能",
+                "footer.download": "下载",
+                "footer.docs": "文档",
+                "footer.resources": "资源",
+                "footer.blog": "博客",
+                "footer.issues": "报告Bug",
+                "footer.feature": "功能建议",
+                "footer.community": "社区",
+                "footer.legal": "法律信息",
+                "footer.privacy": "隐私政策",
+                "footer.terms": "服务条款",
+                "footer.about": "关于我们"
+            },
+            es: {
+                "nav.features": "Funciones",
+                "nav.howItWorks": "Cómo funciona",
+                "nav.docs": "Docs",
+                "nav.blog": "Blog",
+                "nav.download": "Descargar",
+                "hero.badge": "Motor local de alto rendimiento",
+                "hero.title": "Extrae subtítulos en tu PC,<br><span>traduce al instante</span>",
+                "hero.desc": "Herramienta de subtítulos de código abierto con reconocimiento de voz de nivel profesional. Todo se procesa en tu equipo, sin subir archivos, sin suscripciones ni límites.",
+                "hero.cta.download": "Descargar para Windows",
+                "hero.cta.github": "Ver en GitHub",
+                "stats.translators": "APIs de traducción",
+                "stats.offline": "Procesamiento local",
+                "stats.faster": "Aceleración GPU",
+                "stats.free": "App gratis*",
+                "features.label": "Funciones",
+                "features.title": "Todo lo que necesitas para tus subtítulos",
+                "features.desc": "Transcripción y traducción profesional sin complicaciones.",
+                "features.privacy.title": "Tus archivos no salen de tu PC",
+                "features.privacy.desc": "El reconocimiento de voz funciona 100% en local. Tus archivos nunca se suben a ningún servidor. Solo se conecta a internet cuando usas la traducción.",
+                "features.gpu.title": "Aceleración GPU",
+                "features.gpu.desc": "Con una tarjeta NVIDIA, el procesamiento es 5-10 veces más rápido que con CPU.",
+                "features.translation.title": "Traducción multilingüe",
+                "features.translation.desc": "Traducción gratis con MyMemory (sin API key). DeepL/ChatGPT disponibles con tu propia API key.",
+                "features.batch.title": "Procesamiento por lotes",
+                "features.batch.desc": "Añade varios archivos a la cola y el programa los procesa automáticamente.",
+                "features.timestamp.title": "Precisión milimétrica",
+                "features.timestamp.desc": "Marcas de tiempo en milisegundos, perfectas para videoclips, karaoke y subtítulos en directo.",
+                "features.accuracy.title": "Alta precisión",
+                "features.accuracy.desc": "Tecnología de reconocimiento de voz líder en el sector. Transcribe con precisión en cualquier entorno.",
+                "howItWorks.label": "Cómo funciona",
+                "howItWorks.title": "Solo tres pasos",
+                "howItWorks.desc": "Sin configuraciones complicadas. Arrastra, suelta y listo.",
+                "howItWorks.step1.title": "Añade tu archivo",
+                "howItWorks.step1.desc": "Arrastra cualquier video o audio a la app. Soporta MP4, MKV, MP3 y más.",
+                "howItWorks.step2.title": "Extrae subtítulos",
+                "howItWorks.step2.desc": "El motor de reconocimiento de voz procesa el audio en tu equipo. Puedes ver el progreso en tiempo real.",
+                "howItWorks.step3.title": "Traduce",
+                "howItWorks.step3.desc": "Con un clic traduces a cualquier idioma. El archivo SRT se guarda automáticamente.",
+                "comparison.label": "Comparación",
+                "comparison.title": "¿Por qué esta app?",
+                "comparison.feature": "Función",
+                "comparison.cloudServices": "Servicios en la nube",
+                "comparison.otherTools": "Otras herramientas",
+                "comparison.price": "Precio",
+                "comparison.privacyRow": "Privacidad",
+                "comparison.offline": "Extracción offline",
+                "comparison.gpuAccel": "Aceleración GPU",
+                "comparison.msTimestamp": "Timestamps en ms",
+                "languages.label": "Idiomas",
+                "languages.title": "Idiomas disponibles",
+                "languages.desc": "Selecciona los idiomas de entrada y salida directamente en la app. La detección automática soporta más de 99 idiomas.",
+                "cta.title": "Empieza ahora",
+                "cta.desc": "Descarga la app y crea tu primer subtítulo en minutos.",
+                "cta.downloadBtn": "Descargar para Windows",
+                "cta.sourceBtn": "Ver código fuente",
+                "cta.version": "Windows 10+ · 8GB RAM recomendado",
+                "footer.desc": "Herramienta gratuita y de código abierto para extraer y traducir subtítulos. Privacidad ante todo, ejecución local.",
+                "footer.product": "Producto",
+                "footer.features": "Funciones",
+                "footer.download": "Descargar",
+                "footer.docs": "Documentación",
+                "footer.resources": "Recursos",
+                "footer.blog": "Blog",
+                "footer.issues": "Reportar Bug",
+                "footer.feature": "Solicitar función",
+                "footer.community": "Comunidad",
+                "footer.legal": "Legal",
+                "footer.privacy": "Política de privacidad",
+                "footer.terms": "Términos de servicio",
+                "footer.about": "Acerca de"
+            }
+        };
+
+        const langNames = {
+            en: 'EN',
+            ko: 'KO',
+            ja: 'JA',
+            zh: 'ZH',
+            es: 'ES'
+        };
+
+        // Language switching
+        function setLanguage(lang) {
+            const t = translations[lang];
+            if (!t) return;
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) {
+                    if (el.tagName === 'H1' && t[key].includes('<br>')) {
+                        el.innerHTML = t[key];
+                    } else {
+                        el.textContent = t[key];
+                    }
+                }
+            });
+
+            document.getElementById('current-lang').textContent = langNames[lang];
+            document.documentElement.lang = lang;
+
+            // Update active state
+            document.querySelectorAll('.lang-option').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.langCode === lang);
+            });
+
+            // Save preference
+            localStorage.setItem('lang', lang);
+        }
+
+        // Initialize
+        document.querySelectorAll('.lang-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setLanguage(btn.dataset.langCode);
+            });
+        });
+
+        // Load saved language or detect
+        const savedLang = localStorage.getItem('lang');
+        const browserLang = navigator.language.split('-')[0];
+        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
+        setLanguage(defaultLang);
+
+        // Mobile Menu
+        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const mobileMenuClose = document.querySelector('.mobile-menu-close');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            });
+
+            mobileMenuClose.addEventListener('click', () => {
+                mobileMenu.classList.remove('active');
+                document.body.style.overflow = '';
+            });
+
+            // Close menu when clicking a link
+            mobileMenu.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => {
+                    mobileMenu.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+            });
+        }
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Fade in animation
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.fade-in').forEach(el => {
+            observer.observe(el);
+        });
+    </script>
+</body>
+</html>

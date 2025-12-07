@@ -12,6 +12,15 @@ let indeterminateTimer = null; // pseudo progress timer (의사 진행률 타이
 let currentPhase = null; // 'extract' | 'translate' | null
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 
+// UI 업데이트 디바운스 (UI freeze 방지)
+let updateQueueDisplayTimer = null;
+let lastQueueUpdateTime = 0;
+const MIN_QUEUE_UPDATE_INTERVAL = 200; // 최소 200ms 간격으로 UI 업데이트
+
+// Sound settings (알림음 설정)
+let soundVolume = parseFloat(localStorage.getItem('soundVolume') ?? '0.6');
+let soundMuted = localStorage.getItem('soundMuted') === 'true';
+
 // Utility: sleep function for delays (지연용 sleep 함수)
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -74,11 +83,11 @@ function updateModelSelect() {
   
   // Available models (사용 가능한 모델)
   const availableGroup = document.createElement('optgroup');
-  availableGroup.label = '✅ 사용 가능한 모델';
+  availableGroup.label = '[OK] 사용 가능한 모델';
   
   // Models that need download (다운로드 필요한 모델)
   const needDownloadGroup = document.createElement('optgroup');
-  needDownloadGroup.label = '📥 다운로드 필요 (자동 다운로드됨)';
+  needDownloadGroup.label = '[DL] 다운로드 필요 (자동 다운로드됨)';
   
   let hasAvailable = false;
   let hasNeedDownload = false;
@@ -118,16 +127,26 @@ function updateQueueDisplay() {
   const stopBtn = document.getElementById('stopBtn');
   const clearQueueBtn = document.getElementById('clearQueueBtn');
   
+  // queueCount 업데이트
+  const queueCount = document.getElementById('queueCount');
+  if (queueCount) queueCount.textContent = fileQueue.length;
+
   if (fileQueue.length === 0) {
-    queueContainer.style.display = 'none';
+    // queueContainer는 항상 표시, queueList만 빈 상태 표시
     runBtn.disabled = true;
     runBtn.textContent = I18N[currentUiLang].runBtn;
     pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
+    // 빈 상태 메시지 표시
+    queueList.innerHTML = `<div class="queue-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span>${I18N[currentUiLang].queueEmpty || '파일을 드래그하여 추가하세요'}</span>
+    </div>`;
     return;
   }
-
-  queueContainer.style.display = 'block';
 
   if (isProcessing) {
     runBtn.textContent = I18N[currentUiLang].runBtnProcessing;
@@ -145,30 +164,31 @@ function updateQueueDisplay() {
     clearQueueBtn.textContent = I18N[currentUiLang].clearQueueAll;
   }
   
+  const d = I18N[currentUiLang] || I18N.ko;
   queueList.innerHTML = fileQueue.map((file, index) => {
     const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
     const isValid = isVideoFile(file.path);
 
-    let statusText = I18N[currentUiLang].qWaiting;
+    let statusText = d.qWaiting;
     let itemClass = 'queue-item';
 
     if (file.status === 'completed') {
-      statusText = I18N[currentUiLang].qCompleted;
+      statusText = d.qCompleted;
       itemClass = 'queue-item completed';
     } else if (file.status === 'processing') {
-      statusText = I18N[currentUiLang].qProcessing;
+      statusText = d.qProcessing;
       itemClass = 'queue-item processing';
     } else if (file.status === 'translating') {
-      statusText = I18N[currentUiLang].qTranslating;
+      statusText = d.qTranslating;
       itemClass = 'queue-item processing';
     } else if (file.status === 'stopped') {
-      statusText = I18N[currentUiLang].qStopped;
+      statusText = d.qStopped;
       itemClass = 'queue-item error';
     } else if (file.status === 'error') {
-      statusText = I18N[currentUiLang].qError;
+      statusText = d.qError;
       itemClass = 'queue-item error';
     } else if (!isValid) {
-      statusText = I18N[currentUiLang].qUnsupported;
+      statusText = d.qUnsupported;
       itemClass = 'queue-item error';
     }
     
@@ -187,12 +207,12 @@ function updateQueueDisplay() {
         </div>
         <div>
           ${file.status === 'completed' ?
-            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">열기</button>` :
+            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">${d.btnOpen}</button>` :
             file.status === 'processing' || file.status === 'translating' ?
-            `<span style="color: #ffc107; font-size: 12px; font-weight: 600;">처리 중</span>` :
+            `<span style="color: #ffc107; font-size: 12px; font-weight: 600;">${statusText}</span>` :
             (file.status === 'error' || file.status === 'stopped') ?
-            `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">제거</button>` :
-            `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">제거</button>`
+            `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">${d.btnRemove}</button>` :
+            `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">${d.btnRemove}</button>`
           }
         </div>
       </div>
@@ -204,7 +224,9 @@ function updateProgress(progress, text) {
   const progressContainer = document.getElementById('progressContainer');
   const progressFill = document.getElementById('progressFill');
   const progressText = document.getElementById('progressText');
-  
+  const progressPercent = document.getElementById('progressPercent');
+  const progressTitle = document.getElementById('progressTitle');
+
   // Reset ETA (ETA 초기화)
   if (progress === 0 || etaStartTime === null) {
     etaStartTime = Date.now();
@@ -212,15 +234,38 @@ function updateProgress(progress, text) {
   } else {
     etaLastUpdate = Date.now();
   }
-  
+
   // Keep visible during processing; update width only on numeric (항상 표시 유지, 숫자일 때만 폭 업데이트)
   progressContainer.style.display = 'block';
   if (typeof progress === 'number' && !isNaN(progress)) {
     lastProgress = Math.max(0, Math.min(100, progress));
     progressFill.style.width = lastProgress + '%';
   }
-  // ETA 표시 제거 - 부정확하므로 진행률과 텍스트만 표시
-  progressText.textContent = (text || `${lastProgress}%`);
+  // 진행률 퍼센트와 텍스트를 함께 표시 (예: "25% - 번역 중...")
+  const pctStr = `${Math.round(lastProgress)}%`;
+
+  // 오른쪽 상단 퍼센트 표시 업데이트
+  if (progressPercent) {
+    progressPercent.textContent = pctStr;
+  }
+
+  // 상단 타이틀도 상태에 맞게 업데이트
+  if (progressTitle) {
+    const d = I18N[currentUiLang];
+    if (lastProgress >= 100) {
+      progressTitle.textContent = d.progressComplete || '완료!';
+    } else if (lastProgress > 0) {
+      progressTitle.textContent = d.progressProcessing || '처리 중...';
+    } else {
+      progressTitle.textContent = d.progressPreparing || '준비 중...';
+    }
+  }
+
+  if (text && text.trim()) {
+    progressText.textContent = `${pctStr} - ${text}`;
+  } else {
+    progressText.textContent = pctStr;
+  }
 }
 
 function startProgressAnimation() {
@@ -256,17 +301,7 @@ function setProgressTarget(progress, text) {
   startProgressAnimation();
 }
 
-function startIndeterminate(maxCap, label) {
-  // Pseudo progress: +1% periodically; hold at ceiling (의사 진행률)
-  stopIndeterminate();
-  currentPhase = label;
-  indeterminateTimer = setInterval(() => {
-    const cap = Math.max(0, Math.min(100, maxCap));
-    if (lastProgress < cap) {
-      setProgressTarget(Math.min(cap, lastProgress + 1), label);
-    }
-  }, 400);
-}
+// startIndeterminate는 하단에 i18n 버전으로 정의됨 (1728줄)
 
 function stopIndeterminate() {
   if (indeterminateTimer) {
@@ -275,17 +310,7 @@ function stopIndeterminate() {
   }
 }
 
-function resetProgress(text) {
-  // Fully reset progress state before next file (다음 파일 시작 전 초기화)
-  stopIndeterminate();
-  stopProgressAnimation();
-  lastProgress = 0;
-  targetProgress = 0;
-  targetText = text || '';
-  etaStartTime = null;
-  etaLastUpdate = null;
-  updateProgress(0, targetText);
-}
+// resetProgress는 하단에 i18n 버전으로 정의됨 (1751줄)
 
 function addOutput(text) {
   const output = document.getElementById('output');
@@ -508,8 +533,11 @@ async function continueProcessing() {
         updateModelSelect();
       }
 
-      // 자막 추출 단계 의사 진행률 시작(최대 90%)
-      startIndeterminate(90, 'extract');
+      // 자막 추출 단계 의사 진행률 시작
+      // 번역 포함 시 추출 0-50%, 번역 50-100% / 추출만 시 0-95%
+      const hasTranslation = methodAtStart && methodAtStart !== 'none';
+      const extractionMaxProgress = hasTranslation ? 50 : 95;
+      startIndeterminate(extractionMaxProgress, 'extract');
 
       console.log('[continueProcessing] extractSubtitles 호출 시작');
       const result = await window.electronAPI.extractSubtitles({
@@ -519,8 +547,10 @@ async function continueProcessing() {
         device: device
       });
 
-      // 추출 단계 종료 → 의사 진행률 중지
+      // 추출 단계 종료 → 의사 진행률 중지하고 현재 진행률 고정
       stopIndeterminate();
+      // 추출 완료 시 해당 단계 최대값으로 설정
+      setProgressTarget(extractionMaxProgress, I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName));
 
       if (result.userStopped) {
         file.status = 'stopped';
@@ -540,6 +570,8 @@ async function continueProcessing() {
           file.status = 'translating';
           file.progress = 90;
           translationSessionActive = true;
+          // 프로그레스바도 90%로 업데이트 (파일 큐와 동기화)
+          setProgressTarget(90, I18N[currentUiLang].translationStarting || '번역 시작 중...');
           try {
             // 번역 방식에 따른 안내 메시지
             let translationInfo = '';
@@ -580,9 +612,9 @@ async function continueProcessing() {
             // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
 
             if (translationResult.success) {
-              addOutput(`✅ 번역 완료: ${fileName}_${targetLang}.srt\n`);
+              addOutput(`번역 완료: ${fileName}_${targetLang}.srt\n`);
             } else {
-              addOutput(`❌ 번역 실패: ${translationResult.error}\n`);
+              addOutput(`번역 실패: ${translationResult.error}\n`);
             }
           } catch (error) {
             console.error('[continueProcessing] Translation error:', error);
@@ -604,6 +636,8 @@ async function continueProcessing() {
           console.log('[continueProcessing] No translation, marking as completed');
           file.status = 'completed';
           file.progress = 100;
+          // 추출만 하는 경우 진행률 100%로 설정
+          setProgressTarget(100, I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName));
         }
       }
 
@@ -668,6 +702,15 @@ async function continueProcessing() {
 
 // Drag & drop handling (드래그앤드롭 처리)
 document.addEventListener('DOMContentLoaded', () => {
+  // 외부 링크를 기본 브라우저에서 열기
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="http"]');
+    if (link) {
+      e.preventDefault();
+      window.electronAPI.openExternal(link.href);
+    }
+  });
+
   const dropZone = document.getElementById('dropZone');
   const runBtn = document.getElementById('runBtn');
   const clearBtn = document.getElementById('clearBtn');
@@ -711,13 +754,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Method 1: direct file.path access (방법 1)
         if (file.path && typeof file.path === 'string' && file.path.trim()) {
           extractedPath = file.path;
-          console.log('✅ 방법 1 성공 (file.path):', extractedPath);
+          console.log('[OK] 방법 1 성공 (file.path):', extractedPath);
         }
         // Method 2: use webUtils (방법 2)
         else {
           try {
             extractedPath = window.electronAPI.getFilePathFromFile(file);
-            console.log('✅ 방법 2 시도 (webUtils):', extractedPath);
+            console.log('[OK] 방법 2 시도 (webUtils):', extractedPath);
           } catch (error) {
             console.error('방법 2 실패:', error);
           }
@@ -761,7 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const warm = await window.electronAPI.warmupOfflineModel();
         if (warm?.success) {
-          addOutput(`✅ 오프라인 모델 준비 완료\n`);
+          addOutput(`오프라인 모델 준비 완료\n`);
         } else {
           addOutput(`오프라인 모델 준비 실패: ${warm?.error || '알 수 없는 오류'}\n`);
         }
@@ -793,10 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clearQueueBtn').onclick = clearQueue;
   document.getElementById('openFolderBtn').onclick = openOutputFolder;
   
-  // 번역 관련 버튼들
-  document.getElementById('apiSettingsBtn').onclick = showApiModal;
-  document.getElementById('saveApiKeysBtn').onclick = saveApiKeys;
-  document.getElementById('cancelApiBtn').onclick = hideApiModal;
+  // API 키 테스트 버튼 (설정 모달 내에서 사용)
   document.getElementById('testApiKeysBtn').onclick = testApiKeys;
   
   // 초기 설정
@@ -978,16 +1018,16 @@ const I18N = {
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 자막 추출 완료: ${name}`,
     cleaningMemory: '메모리 정리 중...',
     fileProcessed: (name) => `파일 처리 완료: ${name}`,
-    allTasksComplete: (success, error, stopped) => `🎉 전체 작업 완료! (성공: ${success}개, 실패: ${error}개, 중지: ${stopped}개)`,
+    allTasksComplete: (success, error, stopped) => `전체 작업 완료! (성공: ${success}개, 실패: ${error}개, 중지: ${stopped}개)`,
     translationProgress: '번역 진행: ',
     translationStarting: '번역 시작 중...',
     translationTranslatingProgress: (current, total) => `번역 중... ${current}/${total}`,
     translationTranslating: '번역 중...',
-    translationCompleted: '✅ 번역 완료!',
+    translationCompleted: '번역 완료!',
     translationFailed: '번역 실패: ',
     // 동적 텍스트
-    modelAvailableGroup: '✅ 사용 가능한 모델',
-    modelNeedDownloadGroup: '📥 다운로드 필요 (자동 다운로드됨)',
+    modelAvailableGroup: '사용 가능한 모델',
+    modelNeedDownloadGroup: '다운로드 필요 (자동 다운로드됨)',
     modelStatusText: (count) => `${count}개 모델 사용 가능 | 부족한 모델은 자동 다운로드됩니다`,
     deviceStatusHtml: '<strong>GPU 권장:</strong> NVIDIA GPU가 있으면 훨씬 빠른 처리 가능<br><strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적',
     translationEnabledHtml: '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
@@ -1007,7 +1047,7 @@ const I18N = {
     qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qUnsupported: '지원되지 않는 형식',
     btnOpen: '열기', btnRemove: '제거',
     // 진행 텍스트
-    progressReady: '준비 중...', progressExtracting: '자막 추출 중...', progressTranslating: '번역 중...', progressPreparing: '자막 추출 준비 중...', progressCleaning: '메모리 정리 중...',
+    progressReady: '준비 중...', progressExtracting: '자막 추출 중...', progressTranslating: '번역 중...', progressPreparing: '자막 추출 준비 중...', progressCleaning: '메모리 정리 중...', progressProcessing: '처리 중...', progressComplete: '완료!',
     // 완료 텍스트
     allDoneNoTr: '모든 파일 처리 완료!', allDoneWithTr: '모든 파일(추출+번역) 처리 완료! 창을 닫아도 됩니다.',
     fileCompleteRemaining: (n) => `파일 완료! 대기 중인 파일 ${n}개가 있습니다. 처리 시작 버튼을 눌러주세요.`,
@@ -1024,12 +1064,21 @@ const I18N = {
     testConnBtn: '연결 테스트',
     saveBtn: '저장',
     cancelBtn: '취소',
-    mymemoryInfoHtml: '✅ MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>📝 사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
+    mymemoryInfoHtml: 'MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
     openaiLinkText: 'OpenAI API 키 발급 받기',
     openaiHelpSuffix: ' (유료, 매우 저렴)',
     deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
     deeplHelpHtml: '<strong>무료 가입 방법:</strong><br>1. <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a> 접속<br>2. "API 무료로 시작하기" 클릭<br>3. 이메일 인증 후 API 키 복사<br>4. 월 50만글자 무료 사용!',
     openaiPlaceholder: 'ChatGPT API 키를 입력하세요',
+    queueEmpty: '파일을 드래그하여 추가하세요',
+    soundLabel: '알림음',
+    soundTest: '테스트',
+    settingsBtn: '설정',
+    settingsModalTitle: '설정',
+    soundSectionTitle: '알림음',
+    soundEnabled: '알림음 사용',
+    soundVolume: '볼륨',
+    apiSectionTitle: '번역 API 키',
   },
   en: {
     titleText: 'WhisperSubTranslate',
@@ -1063,15 +1112,15 @@ const I18N = {
     extractionComplete: (idx, total, name) => `[${idx}/${total}] Extraction complete: ${name}`,
     cleaningMemory: 'Cleaning memory...',
     fileProcessed: (name) => `File processed: ${name}`,
-    allTasksComplete: (success, error, stopped) => `🎉 All tasks complete! (Success: ${success}, Failed: ${error}, Stopped: ${stopped})`,
+    allTasksComplete: (success, error, stopped) => `All tasks complete! (Success: ${success}, Failed: ${error}, Stopped: ${stopped})`,
     translationProgress: 'Translation progress: ',
     translationStarting: 'Starting translation...',
     translationTranslatingProgress: (current, total) => `Translating... ${current}/${total}`,
     translationTranslating: 'Translating...',
-    translationCompleted: '✅ Translation completed!',
+    translationCompleted: 'Translation completed!',
     translationFailed: 'Translation failed: ',
-    modelAvailableGroup: '✅ Available Models',
-    modelNeedDownloadGroup: '📥 Download Required (auto-download)',
+    modelAvailableGroup: 'Available Models',
+    modelNeedDownloadGroup: 'Download Required (auto-download)',
     modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
     deviceStatusHtml: '<strong>GPU recommended:</strong> Much faster if NVIDIA GPU is available<br><strong>CPU:</strong> Use when no GPU or memory is limited',
     translationEnabledHtml: '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
@@ -1088,7 +1137,7 @@ const I18N = {
     trChatGPT: 'ChatGPT (Requires API key)',
     qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qUnsupported: 'Unsupported format',
     btnOpen: 'Open', btnRemove: 'Remove',
-    progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...',
+    progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...', progressProcessing: 'Processing...', progressComplete: 'Complete!',
     allDoneNoTr: 'All files completed!', allDoneWithTr: 'All files (extract+translate) completed! You may close the window.',
     fileCompleteRemaining: (n) => `File completed! ${n} file(s) remaining in queue. Please click Start button.`,
     processingNext: (n) => `Processing next file... (${n} remaining)`,
@@ -1104,12 +1153,21 @@ const I18N = {
     testConnBtn: 'Test Connection',
     saveBtn: 'Save',
     cancelBtn: 'Cancel',
-    mymemoryInfoHtml: '✅ MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).<br><br><strong>📝 Usage Guide:</strong><br>• Enter API keys and test immediately with "Test Connection"<br>• Or save keys first, then test saved keys<br>• Real-time testing supported without saving',
+    mymemoryInfoHtml: 'MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).<br><br><strong>Usage Guide:</strong><br>• Enter API keys and test immediately with "Test Connection"<br>• Or save keys first, then test saved keys<br>• Real-time testing supported without saving',
     openaiLinkText: 'Get OpenAI API Key',
     openaiHelpSuffix: ' (paid, low cost)',
     deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
     deeplHelpHtml: '<strong>How to get free key:</strong><br>1. Visit <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a><br>2. Click "Start for free"<br>3. Verify email and copy API key<br>4. Enjoy 500K chars/month free',
     openaiPlaceholder: 'Enter ChatGPT/OpenAI API key',
+    queueEmpty: 'Drag files here to add',
+    soundLabel: 'Sound',
+    soundTest: 'Test',
+    settingsBtn: 'Settings',
+    settingsModalTitle: 'Settings',
+    soundSectionTitle: 'Notification Sound',
+    soundEnabled: 'Enable sound',
+    soundVolume: 'Volume',
+    apiSectionTitle: 'Translation API Keys',
   },
   ja: {
     titleText: 'WhisperSubTranslate',
@@ -1143,15 +1201,15 @@ const I18N = {
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 抽出完了: ${name}`,
     cleaningMemory: 'メモリを整理中...',
     fileProcessed: (name) => `ファイル処理完了: ${name}`,
-    allTasksComplete: (success, error, stopped) => `🎉 全作業完了！ (成功: ${success}件, 失敗: ${error}件, 停止: ${stopped}件)`,
+    allTasksComplete: (success, error, stopped) => `全作業完了！ (成功: ${success}件, 失敗: ${error}件, 停止: ${stopped}件)`,
     translationProgress: '翻訳進行: ',
     translationStarting: '翻訳を開始中...',
     translationTranslatingProgress: (current, total) => `翻訳中... ${current}/${total}`,
     translationTranslating: '翻訳中...',
-    translationCompleted: '✅ 翻訳完了！',
+    translationCompleted: '翻訳完了！',
     translationFailed: '翻訳失敗: ',
-    modelAvailableGroup: '✅ 利用可能なモデル',
-    modelNeedDownloadGroup: '📥 ダウンロードが必要（自動ダウンロード）',
+    modelAvailableGroup: '利用可能なモデル',
+    modelNeedDownloadGroup: 'ダウンロードが必要（自動ダウンロード）',
     modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます` ,
     deviceStatusHtml: '<strong>GPU 推奨:</strong> NVIDIA GPU があれば高速処理<br><strong>CPU:</strong> GPU がない場合やメモリ不足時に安定',
     translationEnabledHtml: '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳\n<strong>1日約5万文字</strong>（目安）',
@@ -1168,7 +1226,7 @@ const I18N = {
     trChatGPT: 'ChatGPT（APIキー必要）',
     qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qUnsupported: '未対応の形式',
     btnOpen: '開く', btnRemove: '削除',
-    progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...',
+    progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...', progressProcessing: '処理中...', progressComplete: '完了！',
     allDoneNoTr: 'すべて完了！', allDoneWithTr: 'すべて完了（抽出＋翻訳）！ウィンドウを閉じても大丈夫です。',
     fileCompleteRemaining: (n) => `ファイル完了！待機中のファイル${n}件があります。処理開始ボタンを押してください。`,
     processingNext: (n) => `次のファイルを処理中... (残り${n}件)`,
@@ -1184,12 +1242,21 @@ const I18N = {
     testConnBtn: '接続テスト',
     saveBtn: '保存',
     cancelBtn: 'キャンセル',
-    mymemoryInfoHtml: '✅ MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。<br><br><strong>📝 使用方法：</strong><br>• API キーを入力後「接続テスト」で即座に確認可能<br>• または先にキーを保存してからテストすることも可能<br>• 保存せずに入力したキーでリアルタイムテスト対応',
+    mymemoryInfoHtml: 'MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。<br><br><strong>使用方法：</strong><br>• API キーを入力後「接続テスト」で即座に確認可能<br>• または先にキーを保存してからテストすることも可能<br>• 保存せずに入力したキーでリアルタイムテスト対応',
     openaiLinkText: 'OpenAI API キーを取得',
     openaiHelpSuffix: '（有料・低コスト）',
     deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
     deeplHelpHtml: '<strong>無料登録手順:</strong><br>1. <a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>にアクセス<br>2. 「無料で開始」をクリック<br>3. メール認証後、API キーをコピー<br>4. 月 50 万文字まで無料',
     openaiPlaceholder: 'ChatGPT/OpenAI の API キーを入力',
+    queueEmpty: 'ファイルをドラッグして追加',
+    soundLabel: '通知音',
+    soundTest: 'テスト',
+    settingsBtn: '設定',
+    settingsModalTitle: '設定',
+    soundSectionTitle: '通知音',
+    soundEnabled: '通知音を使用',
+    soundVolume: '音量',
+    apiSectionTitle: '翻訳 API キー',
   },
   zh: {
     titleText: 'WhisperSubTranslate',
@@ -1223,15 +1290,15 @@ const I18N = {
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 提取完成: ${name}`,
     cleaningMemory: '清理内存中...',
     fileProcessed: (name) => `文件处理完成: ${name}`,
-    allTasksComplete: (success, error, stopped) => `🎉 全部任务完成！ (成功: ${success}个, 失败: ${error}个, 停止: ${stopped}个)`,
+    allTasksComplete: (success, error, stopped) => `全部任务完成！ (成功: ${success}个, 失败: ${error}个, 停止: ${stopped}个)`,
     translationProgress: '翻译进行: ',
     translationStarting: '开始翻译中...',
     translationTranslatingProgress: (current, total) => `翻译中... ${current}/${total}`,
     translationTranslating: '翻译中...',
-    translationCompleted: '✅ 翻译完成！',
+    translationCompleted: '翻译完成！',
     translationFailed: '翻译失败: ',
-    modelAvailableGroup: '✅ 可用模型',
-    modelNeedDownloadGroup: '📥 需要下载（自动）',
+    modelAvailableGroup: '可用模型',
+    modelNeedDownloadGroup: '需要下载（自动）',
     modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载` ,
     deviceStatusHtml: '<strong>推荐 GPU:</strong> 若有 NVIDIA GPU 速度更快<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
     translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定\n<strong>约5万字/天</strong>（参考）',
@@ -1248,7 +1315,7 @@ const I18N = {
     trChatGPT: 'ChatGPT（需API密钥）',
     qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qUnsupported: '不支持的格式',
     btnOpen: '打开', btnRemove: '移除',
-    progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...',
+    progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...', progressProcessing: '处理中...', progressComplete: '完成！',
     allDoneNoTr: '全部完成！', allDoneWithTr: '全部完成（提取+翻译）！可以关闭窗口。',
     fileCompleteRemaining: (n) => `文件完成！队列中还有 ${n} 个文件。请点击开始按钮。`,
     processingNext: (n) => `正在处理下一个文件... (剩余${n}个)`,
@@ -1264,12 +1331,21 @@ const I18N = {
     testConnBtn: '测试连接',
     saveBtn: '保存',
     cancelBtn: '取消',
-    mymemoryInfoHtml: '✅ MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。<br><br><strong>📝 使用说明：</strong><br>• 输入 API 密钥后可通过"测试连接"立即验证<br>• 或者先保存密钥再进行测试<br>• 支持不保存直接用输入的密钥实时测试',
+    mymemoryInfoHtml: 'MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。<br><br><strong>使用说明：</strong><br>• 输入 API 密钥后可通过"测试连接"立即验证<br>• 或者先保存密钥再进行测试<br>• 支持不保存直接用输入的密钥实时测试',
     openaiLinkText: '获取 OpenAI API 密钥',
     openaiHelpSuffix: '（付费，成本低）',
     deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
     deeplHelpHtml: '<strong>免费获取方式：</strong><br>1. 访问 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a><br>2. 点击"免费开始"<br>3. 邮箱验证后复制密钥<br>4. 每月 50 万字符免费',
     openaiPlaceholder: '输入 ChatGPT/OpenAI API 密钥',
+    queueEmpty: '拖拽文件添加',
+    soundLabel: '提示音',
+    soundTest: '测试',
+    settingsBtn: '设置',
+    settingsModalTitle: '设置',
+    soundSectionTitle: '提示音',
+    soundEnabled: '启用提示音',
+    soundVolume: '音量',
+    apiSectionTitle: '翻译 API 密钥',
   },
 };
 
@@ -1423,27 +1499,34 @@ function applyI18n(lang) {
   setText('labelDevice', d.labelDevice);
   setText('labelTranslation', d.labelTranslation);
   setText('runBtn', d.runBtn);
-  setText('apiSettingsBtn', d.apiBtn);
+  setText('settingsBtnText', d.settingsBtn);
   setText('selectFileBtn', d.selectFileBtn);
   setText('stopBtn', d.stopBtn);
   setText('logTitle', d.logTitle);
   // 새로 추가된 i18n 요소
   setText('labelTargetLanguage', d.labelTargetLanguage);
   const tnote = document.getElementById('targetLangNote'); if (tnote) tnote.textContent = d.targetLangNote;
-  setText('apiModalTitle', d.apiModalTitle);
+
+  // 설정 모달 i18n
+  setText('settingsModalTitle', d.settingsModalTitle);
+  const soundSection = document.getElementById('soundSectionTitle');
+  if (soundSection) soundSection.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> ${d.soundSectionTitle}`;
+  setText('soundEnabledLabel', d.soundEnabled);
+  setText('soundVolumeLabelModal', d.soundVolume);
+  setText('soundTestLabelModal', d.soundTest);
+  const apiSection = document.getElementById('apiSectionTitle');
+  if (apiSection) apiSection.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> ${d.apiSectionTitle}`;
   setText('labelDeeplKey', d.labelDeeplKey);
   setText('labelOpenaiKey', d.labelOpenaiKey);
-  // MyMemory 정보는 API 키 설정에서 제거됨
   const oLink = document.getElementById('openaiLink'); if (oLink) oLink.textContent = d.openaiLinkText;
   const oSuf = document.getElementById('openaiHelpSuffix'); if (oSuf) oSuf.textContent = d.openaiHelpSuffix;
   setText('testApiKeysBtn', d.testConnBtn);
-  setText('saveApiKeysBtn', d.saveBtn);
-  setText('cancelApiBtn', d.cancelBtn);
+  setText('saveSettingsBtn', d.saveBtn);
   // placeholders & help
   const deeplInput = document.getElementById('deeplApiKey'); if (deeplInput) deeplInput.placeholder = d.deeplPlaceholder;
   const deeplHelp = document.getElementById('deeplHelp'); if (deeplHelp) deeplHelp.innerHTML = d.deeplHelpHtml;
   const openaiInput = document.getElementById('openaiApiKey'); if (openaiInput) openaiInput.placeholder = d.openaiPlaceholder;
-  
+
   // 동적 셀렉트/상태 갱신
   rebuildLanguageSelectOptions(currentUiLang);
   rebuildDeviceSelectOptions(currentUiLang);
@@ -1495,10 +1578,62 @@ function updateModelSelect() {
   // Update status message (localized) (상태 메시지 업데이트, 현지화)
   const availableCount = Object.keys(availableModels).length;
   if (modelStatus) modelStatus.innerHTML = I18N[currentUiLang].modelStatusText(availableCount);
+
+  // 모델 요구사항 표시 초기화 및 이벤트 리스너
+  updateModelRequirements(modelSelect.value);
+  modelSelect.addEventListener('change', (e) => updateModelRequirements(e.target.value));
 }
 
-// 큐 UI도 현지화된 상태/버튼 텍스트 사용
+// 모델별 시스템 요구사항 표시
+function updateModelRequirements(modelId) {
+  const requirementsEl = document.getElementById('modelRequirements');
+  if (!requirementsEl) return;
+
+  const requirements = {
+    'tiny': { vram: '~1GB', ram: '~2GB', speed: '★★★★★' },
+    'base': { vram: '~1GB', ram: '~2GB', speed: '★★★★☆' },
+    'small': { vram: '~2GB', ram: '~4GB', speed: '★★★☆☆' },
+    'medium': { vram: '~3GB', ram: '~6GB', speed: '★★☆☆☆' },
+    'large': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v2': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' },
+    'large-v3': { vram: '~4GB', ram: '~8GB', speed: '★☆☆☆☆' }
+  };
+
+  const req = requirements[modelId];
+  if (!req) {
+    requirementsEl.textContent = '';
+    return;
+  }
+
+  const texts = {
+    ko: `GPU: ${req.vram} VRAM / CPU: ${req.ram} RAM / 속도: ${req.speed}`,
+    en: `GPU: ${req.vram} VRAM / CPU: ${req.ram} RAM / Speed: ${req.speed}`,
+    ja: `GPU: ${req.vram} VRAM / CPU: ${req.ram} RAM / 速度: ${req.speed}`,
+    zh: `GPU: ${req.vram} VRAM / CPU: ${req.ram} RAM / 速度: ${req.speed}`
+  };
+
+  requirementsEl.textContent = texts[currentUiLang] || texts.en;
+}
+
+// 큐 UI도 현지화된 상태/버튼 텍스트 사용 (디바운스로 UI freeze 방지)
 function updateQueueDisplay() {
+  const now = Date.now();
+  const timeSinceLastUpdate = now - lastQueueUpdateTime;
+
+  // 최소 간격 미만이면 디바운스
+  if (timeSinceLastUpdate < MIN_QUEUE_UPDATE_INTERVAL) {
+    if (updateQueueDisplayTimer) clearTimeout(updateQueueDisplayTimer);
+    updateQueueDisplayTimer = setTimeout(() => {
+      updateQueueDisplayImmediate();
+    }, MIN_QUEUE_UPDATE_INTERVAL - timeSinceLastUpdate);
+    return;
+  }
+
+  updateQueueDisplayImmediate();
+}
+
+function updateQueueDisplayImmediate() {
+  lastQueueUpdateTime = Date.now();
   const queueContainer = document.getElementById('queueContainer');
   const queueList = document.getElementById('queueList');
   const runBtn = document.getElementById('runBtn');
@@ -1506,17 +1641,27 @@ function updateQueueDisplay() {
   const stopBtn = document.getElementById('stopBtn');
   const clearQueueBtn = document.getElementById('clearQueueBtn');
   const d = I18N[currentUiLang];
-  
+
+  // queueCount 업데이트
+  const queueCount = document.getElementById('queueCount');
+  if (queueCount) queueCount.textContent = fileQueue.length;
+
   if (fileQueue.length === 0) {
-    queueContainer.style.display = 'none';
+    // queueContainer는 항상 표시, queueList만 빈 상태 표시
     runBtn.disabled = true;
     runBtn.textContent = d.runBtn;
     if (pauseBtn) pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
+    // 빈 상태 메시지 표시
+    queueList.innerHTML = `<div class="queue-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      <span>${d.queueEmpty || '파일을 드래그하여 추가하세요'}</span>
+    </div>`;
     return;
   }
-  
-  queueContainer.style.display = 'block';
   
   if (isProcessing) {
     runBtn.textContent = d.qProcessing;  
@@ -1678,17 +1823,19 @@ if (window?.electronAPI) {
       if (msg) {
         addOutput(`${I18N[currentUiLang].translationProgress}${msg}\n`);
       }
-      // 진행률 갱신
+      // 진행률 갱신 - 번역 진행률(0-100)을 전체 진행률(50-100)로 변환
       if (typeof data?.progress === 'number') {
-        const pct = Math.max(0, Math.min(99, data.progress));
-        setProgressTarget(Math.max(lastProgress, pct), I18N[currentUiLang].progressTranslating);
+        // 번역은 전체 작업의 50-100% 구간 (추출이 0-50%)
+        const translationPct = Math.max(0, Math.min(100, data.progress));
+        const overallPct = 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
+        setProgressTarget(Math.max(lastProgress, overallPct), I18N[currentUiLang].progressTranslating);
       }
       if (data?.stage === 'completed' || data?.stage === 'error') {
         const isErrorStage = data?.stage === 'error';
-        // 번역 완료: 99%로 고정 후 세션 종료
+        // 번역 완료: 100%로 설정 후 세션 종료
         stopIndeterminate();
         translationSessionActive = false;
-        const stageProgressTarget = isErrorStage ? 95 : 99;
+        const stageProgressTarget = isErrorStage ? 95 : 100;
         setProgressTarget(Math.max(lastProgress, stageProgressTarget), data?.message || I18N[currentUiLang].progressTranslating);
 
         // 현재 처리 중인 파일을 completed로 마킹
@@ -1749,15 +1896,12 @@ if (window?.electronAPI) {
       }
     });
   }
+  // progress-update는 더 이상 main.js에서 보내지 않음 (의사 진행률만 사용)
+  // 호환성을 위해 핸들러는 유지하되, 실제로 호출되지 않음
   const origOnProgress = window.electronAPI.onProgressUpdate;
   if (typeof origOnProgress === 'function') {
     window.electronAPI.onProgressUpdate((data) => {
-      const localized = localizeLog(data.text || '');
-      updateProgress(data.progress, localized);
-      if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
-        fileQueue[currentProcessingIndex].progress = data.progress;
-        updateQueueDisplay();
-      }
+      // 사용하지 않음 - 의사 진행률(startIndeterminate)만 사용
     });
   }
 }
@@ -1826,51 +1970,128 @@ function initApp() {
   } catch (error) {
     console.error('[Init] Failed to initialize translation select:', error.message);
   }
-}
-
-// initApp은 첫 번째 DOMContentLoaded에서 호출됨
-
-async function playCompletionSound() {
   try {
-    // 우선 WAV 파일 재생 시도 (앱 루트에 존재하는 경우)
-    const audio = new Audio('./nya.wav');
-    audio.volume = 0.6;
-    await audio.play();
-    return;
+    initSettingsModal();
   } catch (error) {
-    // 폴백: WebAudio로 간단한 3음 비프
+    console.error('[Init] Failed to initialize settings modal:', error.message);
   }
+  // API 키 상태에 따라 번역 엔진 옵션 활성화/비활성화
   try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioCtx();
-    const now = ctx.currentTime;
-    const sequence = [
-      { freq: 880, dur: 0.12 },
-      { freq: 1320, dur: 0.12 },
-      { freq: 1760, dur: 0.18 }
-    ];
-    let t = now;
-    sequence.forEach(({ freq, dur }) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.15, t + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + dur + 0.02);
-      t += dur + 0.03;
-    });
-  } catch (_) { /* ignore */ }
+    updateTranslationEngineOptions();
+  } catch (error) {
+    console.error('[Init] Failed to update translation engine options:', error.message);
+  }
+  // 드래그 하이라이트 초기화
+  try {
+    initDragHighlight();
+  } catch (error) {
+    console.error('[Init] Failed to initialize drag highlight:', error.message);
+  }
 }
 
-// ===== API 키 모달 제어 및 검증 =====
-function showApiModal() {
-  const modal = document.getElementById('apiModal');
-  if (modal) modal.style.display = 'block';
-  // 기존 키 불러와서 입력 박스 채우기
+// ===== Settings Modal 초기화 =====
+function initSettingsModal() {
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsModal = document.getElementById('settingsModal');
+  const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+
+  // Sound settings elements
+  const soundEnabledCheckbox = document.getElementById('soundEnabledCheckbox');
+  const soundVolumeSlider = document.getElementById('soundVolumeSliderModal');
+  const soundVolumeValue = document.getElementById('soundVolumeValueModal');
+  const soundTestBtn = document.getElementById('soundTestBtnModal');
+  const soundVolumeRow = document.getElementById('soundVolumeRow');
+
+  if (!settingsBtn || !settingsModal) return;
+
+  // 초기 상태 설정
+  soundEnabledCheckbox.checked = !soundMuted;
+  soundVolumeSlider.value = Math.round(soundVolume * 100);
+  soundVolumeValue.textContent = `${Math.round(soundVolume * 100)}%`;
+  updateVolumeRowState();
+
+  // 설정 모달 열기
+  settingsBtn.addEventListener('click', () => {
+    showSettingsModal();
+  });
+
+  // 설정 모달 닫기
+  closeSettingsBtn.addEventListener('click', () => {
+    hideSettingsModal();
+  });
+
+  // 모달 외부 클릭시 닫기
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+      hideSettingsModal();
+    }
+  });
+
+  // 알림음 토글
+  soundEnabledCheckbox.addEventListener('change', () => {
+    soundMuted = !soundEnabledCheckbox.checked;
+    localStorage.setItem('soundMuted', soundMuted.toString());
+    updateVolumeRowState();
+  });
+
+  // 볼륨 슬라이더 변경
+  soundVolumeSlider.addEventListener('input', () => {
+    const value = parseInt(soundVolumeSlider.value);
+    soundVolume = value / 100;
+    soundVolumeValue.textContent = `${value}%`;
+    localStorage.setItem('soundVolume', soundVolume.toString());
+  });
+
+  // 테스트 버튼
+  soundTestBtn.addEventListener('click', () => {
+    // 테스트시 일시적으로 음소거 해제
+    const wasMuted = soundMuted;
+    soundMuted = false;
+    playCompletionSound();
+    soundMuted = wasMuted;
+  });
+
+  // 저장 버튼 (API 키 저장 + 설정 저장)
+  saveSettingsBtn.addEventListener('click', async () => {
+    await saveApiKeys();
+    // 설정 저장 완료 후 모달 닫기 (약간의 지연)
+    setTimeout(() => {
+      hideSettingsModal();
+    }, 1500);
+  });
+
+  function updateVolumeRowState() {
+    if (soundMuted) {
+      soundVolumeRow.classList.add('disabled');
+    } else {
+      soundVolumeRow.classList.remove('disabled');
+    }
+  }
+}
+
+function showSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) {
+    modal.classList.add('active');
+    // 모달이 열릴 때마다 현재 설정값 반영
+    const soundEnabledCheckbox = document.getElementById('soundEnabledCheckbox');
+    const soundVolumeSlider = document.getElementById('soundVolumeSliderModal');
+    const soundVolumeValue = document.getElementById('soundVolumeValueModal');
+    const soundVolumeRow = document.getElementById('soundVolumeRow');
+
+    if (soundEnabledCheckbox) soundEnabledCheckbox.checked = !soundMuted;
+    if (soundVolumeSlider) soundVolumeSlider.value = Math.round(soundVolume * 100);
+    if (soundVolumeValue) soundVolumeValue.textContent = `${Math.round(soundVolume * 100)}%`;
+    if (soundVolumeRow) {
+      if (soundMuted) {
+        soundVolumeRow.classList.add('disabled');
+      } else {
+        soundVolumeRow.classList.remove('disabled');
+      }
+    }
+  }
+  // API 키 로드
   try {
     window.electronAPI.loadApiKeys().then(res => {
       if (res && res.success && res.keys) {
@@ -1884,11 +2105,102 @@ function showApiModal() {
   } catch (_) {}
 }
 
-function hideApiModal() {
-  const modal = document.getElementById('apiModal');
-  if (modal) modal.style.display = 'none';
+function hideSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  if (modal) {
+    modal.classList.remove('active');
+    // 상태 메시지 초기화
+    const status = document.getElementById('apiKeyStatus');
+    if (status) status.style.display = 'none';
+  }
 }
 
+// initApp은 첫 번째 DOMContentLoaded에서 호출됨
+
+async function playCompletionSound() {
+  // 음소거 상태면 재생 안 함
+  if (soundMuted || soundVolume <= 0) return;
+
+  try {
+    // 우선 WAV 파일 재생 시도 (앱 루트에 존재하는 경우)
+    // Electron에서는 file:// 프로토콜 또는 절대 경로가 필요할 수 있음
+    const audio = new Audio('./nya.wav');
+    audio.volume = soundVolume;
+
+    // 로드 완료 대기 후 재생
+    await new Promise((resolve, reject) => {
+      audio.oncanplaythrough = resolve;
+      audio.onerror = reject;
+      audio.load();
+    });
+
+    await audio.play();
+    console.log('[Audio] nya.wav played successfully');
+    return;
+  } catch (error) {
+    console.warn('[Audio] WAV file failed:', error.message);
+    // 폴백: WebAudio로 간단한 3음 비프
+  }
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const sequence = [
+      { freq: 880, dur: 0.12 },
+      { freq: 1320, dur: 0.12 },
+      { freq: 1760, dur: 0.18 }
+    ];
+    let t = now;
+    const volumeMultiplier = soundVolume * 0.25; // WebAudio는 더 조용하게
+    sequence.forEach(({ freq, dur }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(volumeMultiplier, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+      t += dur + 0.03;
+    });
+  } catch (_) { /* ignore */ }
+}
+
+// ===== 드래그 영역 시각적 피드백 개선 =====
+function initDragHighlight() {
+  const dropZone = document.getElementById('dropZone');
+  if (!dropZone) return;
+
+  let dragCounter = 0;
+
+  dropZone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    dropZone.classList.add('drag-active');
+  });
+
+  dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter === 0) {
+      dropZone.classList.remove('drag-active');
+    }
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropZone.classList.remove('drag-active');
+  });
+}
+
+// ===== API 키 검증 및 저장 =====
 async function saveApiKeys() {
   const status = document.getElementById('apiKeyStatus');
   const deeplInput = document.getElementById('deeplApiKey');
@@ -1897,31 +2209,76 @@ async function saveApiKeys() {
     deepl: deeplInput ? (deeplInput.value || '').trim() : '',
     openai: openaiInput ? (openaiInput.value || '').trim() : ''
   };
+
+  const successMsg = {
+    ko: '설정이 저장되었습니다.',
+    en: 'Settings saved.',
+    ja: '設定が保存されました。',
+    zh: '设置已保存。'
+  };
+  const failMsg = {
+    ko: '저장 실패',
+    en: 'Save failed',
+    ja: '保存に失敗しました',
+    zh: '保存失败'
+  };
+  const errorMsg = {
+    ko: '오류',
+    en: 'Error',
+    ja: 'エラー',
+    zh: '错误'
+  };
+
   try {
     const res = await window.electronAPI.saveApiKeys(keys);
     if (status) {
       if (res && res.success) {
-        status.style.display = 'block';
-        status.style.background = '#d4edda';
-        status.style.border = '1px solid #c3e6cb';
-        status.style.color = '#155724';
-        status.textContent = '✅ API 키가 저장되었습니다.';
+        status.className = 'api-status success';
+        status.textContent = successMsg[currentUiLang] || successMsg.ko;
       } else {
-        status.style.display = 'block';
-        status.style.background = '#f8d7da';
-        status.style.border = '1px solid #f5c6cb';
-        status.style.color = '#721c24';
-        status.textContent = '저장 실패';
+        status.className = 'api-status error';
+        status.textContent = failMsg[currentUiLang] || failMsg.ko;
       }
     }
   } catch (e) {
     if (status) {
-      status.style.display = 'block';
-      status.style.background = '#f8d7da';
-      status.style.border = '1px solid #f5c6cb';
-      status.style.color = '#721c24';
-      status.textContent = `오류: ${e.message || e}`;
+      status.className = 'api-status error';
+      status.textContent = `${errorMsg[currentUiLang] || errorMsg.ko}: ${e.message || e}`;
     }
+  }
+  // 설정 저장 후 번역 엔진 옵션 상태 업데이트
+  updateTranslationEngineOptions();
+}
+
+// ===== 번역 엔진 옵션 상태 업데이트 (API 키 없으면 비활성화) =====
+async function updateTranslationEngineOptions() {
+  const translationSelect = document.getElementById('translationSelect');
+  if (!translationSelect) return;
+
+  try {
+    const res = await window.electronAPI.loadApiKeys();
+    const keys = res?.success ? res.keys : {};
+    const hasDeepL = !!(keys?.deepl?.trim());
+    const hasOpenAI = !!(keys?.openai?.trim());
+
+    // 옵션들 순회하며 API 키 필요한 엔진 비활성화
+    Array.from(translationSelect.options).forEach(option => {
+      if (option.value === 'deepl') {
+        option.disabled = !hasDeepL;
+        if (!hasDeepL && option.selected) {
+          translationSelect.value = 'none';
+          translationSelect.dispatchEvent(new Event('change'));
+        }
+      } else if (option.value === 'chatgpt') {
+        option.disabled = !hasOpenAI;
+        if (!hasOpenAI && option.selected) {
+          translationSelect.value = 'none';
+          translationSelect.dispatchEvent(new Event('change'));
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[updateTranslationEngineOptions] Error:', error);
   }
 }
 
@@ -1930,10 +2287,10 @@ async function testApiKeys() {
 
   // Checking message (확인 중 메시지)
   const checkingMsg = {
-    ko: '🔍 API 키를 확인하는 중...',
-    en: '🔍 Checking API keys...',
-    ja: '🔍 APIキーを確認中...',
-    zh: '🔍 正在检查API密钥...'
+    ko: '잠시만요, 키 확인하고 있어요...',
+    en: 'Hold on, checking your keys...',
+    ja: 'ちょっと待って、キーを確認中...',
+    zh: '稍等，正在验证密钥...'
   };
 
   if (status) {
@@ -1967,10 +2324,10 @@ async function testApiKeys() {
         status.style.border = '1px solid #ffeeba';
         status.style.color = '#856404';
         const noKeyMessage = {
-          ko: 'API 키를 입력한 후 테스트하거나, 저장된 키로 테스트하려면 먼저 저장해주세요.',
-          en: 'Please enter API keys to test, or save keys first to test saved keys.',
-          ja: 'APIキーを入力してテストするか、保存されたキーでテストする場合は先に保存してください。',
-          zh: '请输入API密钥后进行测试，或先保存密钥后测试保存的密钥。'
+          ko: '테스트할 키가 없네요. 먼저 입력해주세요!',
+          en: 'No keys to test. Enter one first!',
+          ja: 'テストするキーがないよ。先に入力して！',
+          zh: '没有可测试的密钥，先输入一个吧！'
         };
         status.textContent = noKeyMessage[currentUiLang] || noKeyMessage.ko;
       }
@@ -1985,17 +2342,17 @@ async function testApiKeys() {
 
     // Success/Failure messages (성공/실패 메시지)
     const successMsg = {
-      ko: '연결 성공',
-      en: 'Connected',
-      ja: '接続成功',
-      zh: '连接成功'
+      ko: 'OK',
+      en: 'OK',
+      ja: 'OK',
+      zh: 'OK'
     };
 
     const failMsg = {
-      ko: '연결 실패',
-      en: 'Connection failed',
-      ja: '接続失敗',
-      zh: '连接失败'
+      ko: '실패',
+      en: 'Failed',
+      ja: '失敗',
+      zh: '失败'
     };
 
     // 입력된 키가 있는 서비스만 표시
@@ -2009,8 +2366,8 @@ async function testApiKeys() {
       totalCount++;
       if (deeplOk) successCount++;
       const deeplMsg = deeplOk
-        ? `DeepL - ${successMsg[currentUiLang]}`
-        : `DeepL - ${results?.errors?.deepl || failMsg[currentUiLang]}`;
+        ? `✓ DeepL ${successMsg[currentUiLang]}`
+        : `✗ DeepL ${failMsg[currentUiLang]}`;
       messages.push(deeplMsg);
     }
 
@@ -2020,8 +2377,8 @@ async function testApiKeys() {
       totalCount++;
       if (openaiOk) successCount++;
       const openaiMsg = openaiOk
-        ? `ChatGPT - ${successMsg[currentUiLang]}`
-        : `ChatGPT - ${results?.errors?.openai || failMsg[currentUiLang]}`;
+        ? `✓ ChatGPT ${successMsg[currentUiLang]}`
+        : `✗ ChatGPT ${failMsg[currentUiLang]}`;
       messages.push(openaiMsg);
     }
 
@@ -2048,10 +2405,10 @@ async function testApiKeys() {
       status.innerHTML = messages.join('<br>');
     } else if (status) {
       const pleaseEnterMsg = {
-        ko: '테스트할 API 키를 입력해주세요.',
-        en: 'Please enter API keys to test.',
-        ja: 'テストするAPIキーを入力してください。',
-        zh: '请输入要测试的API密钥。'
+        ko: '키 먼저 입력!',
+        en: 'Enter a key first!',
+        ja: 'キーを入力して！',
+        zh: '先输入密钥！'
       };
       status.style.display = 'block';
       status.style.background = '#fff3cd';
@@ -2062,16 +2419,16 @@ async function testApiKeys() {
   } catch (e) {
     if (status) {
       const errorMsg = {
-        ko: '오류',
-        en: 'Error',
-        ja: 'エラー',
-        zh: '错误'
+        ko: '앗, 문제 발생',
+        en: 'Oops, something went wrong',
+        ja: 'あれ、問題が発生',
+        zh: '哎呀，出问题了'
       };
       status.style.display = 'block';
       status.style.background = '#f8d7da';
       status.style.border = '1px solid #f5c6cb';
       status.style.color = '#721c24';
-      status.textContent = `${errorMsg[currentUiLang]}: ${e.message || e}`;
+      status.textContent = `${errorMsg[currentUiLang]} - ${e.message || e}`;
     }
   }
 }

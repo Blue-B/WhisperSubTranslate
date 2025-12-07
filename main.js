@@ -13,6 +13,15 @@ const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
 const { Menu } = require('electron');
 
+// ffmpeg-static: npm 패키지에서 자동으로 플랫폼별 ffmpeg 바이너리 제공
+let ffmpegStaticPath = null;
+try {
+  ffmpegStaticPath = require('ffmpeg-static');
+  console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStaticPath);
+} catch (error) {
+  console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local ffmpeg.exe');
+}
+
 // Allow autoplay of audio (오디오 자동재생 허용)
 try {
   app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -171,8 +180,8 @@ function forceMemoryCleanup(device, isFileTransition = false) {
             if (process.platform === 'win32') {
                 // 2. Kill all related processes
                 try {
-                    execSync('taskkill /F /IM faster-whisper-xxl.exe /T', { stdio: 'ignore' });
-                    execSync('taskkill /F /IM python.exe /T', { stdio: 'ignore' });
+                    execSync('taskkill /F /IM whisper-cli.exe /T', { stdio: 'ignore' });
+                    execSync('taskkill /F /IM ffmpeg.exe /T', { stdio: 'ignore' });
                     console.log('   - 모든 관련 프로세스 정리 완료');
                 } catch (e) {
                     console.log('   - 정리할 프로세스 없음');
@@ -210,7 +219,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                                 }
                             }
 
-                            console.log('   - ✅ GPU 메모리 강제 정리 완료');
+                            console.log('   - GPU 메모리 강제 정리 완료');
 
                         } catch (e) {
                             console.log(`   - GPU 정리 시도 실패: ${e.message}`);
@@ -245,7 +254,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
             }
 
         } catch (e) {
-            console.error(`❌ 메모리 정리 중 오류: ${e.message}`);
+            console.error(`[ERROR] 메모리 정리 중 오류: ${e.message}`);
             resolve();
         }
     });
@@ -254,8 +263,11 @@ function forceMemoryCleanup(device, isFileTransition = false) {
 // App Initialization
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 700,
+        width: 1280,           // 더 넓게 (900→1280) - 2열 레이아웃에 적합
+        height: 800,           // 더 높게 (700→800)
+        minWidth: 1000,        // 최소 너비 제한 (UI 깨짐 방지)
+        minHeight: 650,        // 최소 높이 제한
+        title: 'WhisperSubTranslate',  // 윈도우 타이틀
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -265,6 +277,12 @@ function createWindow() {
         },
         icon: path.join(__dirname, 'icon.png'),
         autoHideMenuBar: true,
+        show: false,           // 준비 완료 전 깜빡임 방지
+    });
+
+    // 창이 준비되면 표시 (깜빡임 방지)
+    mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
     });
     mainWindow.loadFile('index.html');
 
@@ -333,7 +351,147 @@ app.on('activate', () => {
     }
 });
 
-// Single File Subtitle Extraction (Promise-based)
+// ===== Audio Conversion Helper (오디오 변환 헬퍼) =====
+function convertToWav(inputPath) {
+    return new Promise((resolve, reject) => {
+        const wavPath = inputPath.replace(/\.[^/.]+$/, '.wav');
+
+        // WAV 파일이 이미 존재하면 스킵
+        if (fs.existsSync(wavPath)) {
+            console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
+            resolve(wavPath);
+            return;
+        }
+
+        console.log(`[Audio] Converting to WAV: ${path.basename(inputPath)}`);
+        mainWindow.webContents.send('output-update', `Converting audio to WAV format...\n`);
+
+        // ffmpeg 경로 설정 (우선순위: ffmpeg-static > 로컬 파일 > 시스템 PATH)
+        const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+        let ffmpegPath = 'ffmpeg'; // 기본: 시스템 PATH에서 찾기
+
+        // 1. ffmpeg-static npm 패키지 사용 (가장 우선)
+        if (ffmpegStaticPath && fs.existsSync(ffmpegStaticPath)) {
+            ffmpegPath = ffmpegStaticPath;
+            console.log('[Audio] Using ffmpeg-static');
+        }
+        // 2. 프로젝트 내 ffmpeg.exe 확인 (배포판용)
+        else {
+            const localFfmpeg = path.join(basePath, 'ffmpeg.exe');
+            if (fs.existsSync(localFfmpeg)) {
+                ffmpegPath = localFfmpeg;
+                console.log('[Audio] Using local ffmpeg.exe');
+            } else {
+                console.log('[Audio] Using system PATH ffmpeg');
+            }
+        }
+
+        const ffmpegArgs = [
+            '-y',              // 덮어쓰기
+            '-i', inputPath,   // 입력 파일
+            '-ar', '16000',    // 16kHz (Whisper 요구사항)
+            '-ac', '1',        // 모노
+            '-c:a', 'pcm_s16le', // 16-bit PCM
+            wavPath
+        ];
+
+        const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        ffmpegProcess.stderr.on('data', (data) => {
+            // ffmpeg는 진행 정보를 stderr로 출력
+            const output = data.toString();
+            if (output.includes('time=')) {
+                // 진행 상황만 표시
+                const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/);
+                if (timeMatch) {
+                    mainWindow.webContents.send('output-update', `Audio conversion: ${timeMatch[1]}\r`);
+                }
+            }
+        });
+
+        ffmpegProcess.on('close', (code) => {
+            if (code === 0 && fs.existsSync(wavPath)) {
+                console.log(`[Audio] WAV conversion successful: ${path.basename(wavPath)}`);
+                mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
+                resolve(wavPath);
+            } else {
+                reject(new Error(`Audio conversion failed (code: ${code})`));
+            }
+        });
+
+        ffmpegProcess.on('error', (err) => {
+            if (err.code === 'ENOENT') {
+                reject(new Error(
+                    '[ERROR] ffmpeg not found!\n' +
+                    'Please install ffmpeg and add it to your PATH,\n' +
+                    'or place ffmpeg.exe in the project folder.\n\n' +
+                    'Download: https://ffmpeg.org/download.html'
+                ));
+            } else {
+                reject(err);
+            }
+        });
+    });
+}
+
+// ===== GGML Model Path Helper (GGML 모델 경로 헬퍼) =====
+function getGgmlModelPath(model) {
+    const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+    const modelsDir = path.join(basePath, '_models');
+
+    // 모델 이름 매핑 (whisper.cpp GGML 형식)
+    const modelMap = {
+        'tiny': 'ggml-tiny.bin',
+        'base': 'ggml-base.bin',
+        'small': 'ggml-small.bin',
+        'medium': 'ggml-medium.bin',
+        'large': 'ggml-large.bin',
+        'large-v2': 'ggml-large-v2.bin',
+        'large-v3': 'ggml-large-v3.bin',
+        'large-v3-turbo': 'ggml-large-v3-turbo.bin'
+    };
+
+    const modelFile = modelMap[model] || `ggml-${model}.bin`;
+    return path.join(modelsDir, modelFile);
+}
+
+// ===== whisper.cpp Settings (whisper.cpp 최적 설정) =====
+function getWhisperCppSettings(device) {
+    const totalMemory = os.totalmem() / (1024 * 1024 * 1024); // GB
+    const cpuCores = os.cpus().length;
+
+    console.log(`[System Info] RAM: ${totalMemory.toFixed(1)}GB, CPU Cores: ${cpuCores}`);
+
+    // whisper.cpp 공통 설정: 밀리초 타임스탬프를 위한 핵심 옵션
+    const baseSettings = [
+        '-ml', '50',    // max segment length (밀리초 타임스탬프 핵심!)
+        '-sow',         // split on word (단어 단위 분할)
+        '-bs', '5',     // beam size
+        '-bo', '5'      // best of
+    ];
+
+    if (device === 'cuda') {
+        console.log('[Performance] GPU settings applied');
+        return [
+            ...baseSettings,
+            '-t', Math.min(cpuCores, 4).toString() // 스레드 수
+        ];
+    } else {
+        // CPU 설정
+        const threads = Math.max(1, Math.min(cpuCores - 1, 8));
+        console.log(`[Performance] CPU settings applied (${threads} threads)`);
+        return [
+            ...baseSettings,
+            '-t', threads.toString(),
+            '-ng'  // no GPU
+        ];
+    }
+}
+
+// Single File Subtitle Extraction (Promise-based) - whisper.cpp 버전
 function extractSingleFile(filePath, model, language, device) {
     return new Promise(async (resolve, reject) => {
         console.log(`[START] Processing: ${path.basename(filePath)}`);
@@ -355,41 +513,63 @@ function extractSingleFile(filePath, model, language, device) {
         }
 
         const basePath = app.isPackaged ? process.resourcesPath : __dirname;
-        const exePath = path.join(basePath, 'faster-whisper-xxl.exe');
+
+        // whisper.cpp 실행 파일 경로
+        const whisperDir = path.join(basePath, 'whisper-cpp');
+        const exePath = path.join(whisperDir, 'whisper-cli.exe');
+
+        // WAV 변환 (whisper.cpp는 WAV만 지원)
+        let wavPath;
+        try {
+            wavPath = await convertToWav(filePath);
+        } catch (convErr) {
+            return reject(convErr);
+        }
+
+        // 모델 경로
+        const modelPath = getGgmlModelPath(model);
+        if (!fs.existsSync(modelPath)) {
+            return reject(new Error(
+                `[ERROR] Model not found: ${model}\n` +
+                `Expected path: ${modelPath}\n\n` +
+                `Please download the GGML model file.`
+            ));
+        }
+
+        // SRT 출력 경로 (원본 파일 기준)
+        const srtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+        const outputBase = filePath.replace(/\.[^/.]+$/, ''); // 확장자 제외
+
+        // whisper.cpp 인자 구성
         const args = [
-            filePath,
-            '--model', model,
-            '--device', chosenDevice,
-            '--output_dir', path.dirname(filePath),
-            '--output_format', 'srt',
-            ...getOptimalWhisperSettings(chosenDevice),
-            '--vad_filter', 'true',
-            '--condition_on_previous_text', 'false',
-            '--word_timestamps', 'false',
-            '--no_speech_threshold', '0.6',
+            '-m', modelPath,
+            '-f', wavPath,
+            '-osrt',                    // SRT 출력
+            '-of', outputBase,          // 출력 파일 기본 이름 (확장자 제외)
+            ...getWhisperCppSettings(chosenDevice),
         ];
+
+        // 언어 설정 (whisper.cpp는 'auto' 지원!)
         if (language && language !== 'auto') {
-            args.push('--language', language);
-        } else if (language === 'auto') {
-            // 언어 자동 감지를 위해 파라미터 생략 (Whisper 기본 동작)
-            console.log('[Language Detection] Auto-detect enabled - no language parameter passed');
+            args.push('-l', language);
         } else {
-            console.log(`[Language Detection] Fixed language mode: ${language}`);
+            args.push('-l', 'auto');  // 자동 감지
+            console.log('[Language Detection] Auto-detect enabled');
         }
 
         console.log(`[EXEC] ${exePath} ${args.join(' ')}`);
 
         if (chosenDevice === 'cuda') {
-            mainWindow.webContents.send('output-update', 'Starting extraction with CUDA device (float16, beam_size=5, batch_size=16)...\n');
-            console.log('[GPU Config] High-performance settings: float16, beam_size=5, batch_size=16');
+            mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CUDA, flash-attn)...\n');
+            console.log('[GPU Config] whisper.cpp with CUDA acceleration');
         } else {
-            mainWindow.webContents.send('output-update', 'Starting extraction with CPU device (balanced preset)...\n');
+            mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CPU mode)...\n');
         }
 
         currentProcess = spawn(exePath, args, {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: basePath,
+            cwd: whisperDir,
             timeout: 1800000 // 30 minutes safety timeout
         });
 
@@ -402,10 +582,19 @@ function extractSingleFile(filePath, model, language, device) {
         }, 1800000); // 30 minutes
 
         currentProcess.stdout.on('data', (data) => {
-            mainWindow.webContents.send('output-update', data.toString('utf8'));
+            const output = data.toString('utf8');
+            mainWindow.webContents.send('output-update', output);
         });
+
         currentProcess.stderr.on('data', (data) => {
-            mainWindow.webContents.send('output-update', '[ERROR] ' + data.toString('utf8'));
+            const output = data.toString('utf8');
+            // whisper.cpp는 모델 로딩 정보를 stderr로 출력
+            if (output.includes('error') || output.includes('Error') || output.includes('failed')) {
+                mainWindow.webContents.send('output-update', '[ERROR] ' + output);
+            } else {
+                // 모델 정보 등 일반 stderr 출력
+                mainWindow.webContents.send('output-update', output);
+            }
         });
 
         currentProcess.on('close', async (code) => {
@@ -414,13 +603,22 @@ function extractSingleFile(filePath, model, language, device) {
             // Enhanced cleanup after each file
             await forceMemoryCleanup(chosenDevice, true);
 
+            // WAV 임시 파일 정리 (원본이 WAV가 아닌 경우)
+            if (wavPath !== filePath && fs.existsSync(wavPath)) {
+                try {
+                    fs.unlinkSync(wavPath);
+                    console.log(`[Cleanup] Removed temporary WAV: ${path.basename(wavPath)}`);
+                } catch (e) {
+                    console.log(`[Cleanup] Failed to remove WAV: ${e.message}`);
+                }
+            }
+
             if (isUserStopped) {
                 return reject(new Error('Stopped by user'));
             }
 
             // Check if SRT file was actually created (real success indicator)
-            const srtPath = filePath.replace(/\.[^/.]+$/, '.srt');
-            const srtExists = require('fs').existsSync(srtPath);
+            const srtExists = fs.existsSync(srtPath);
 
             if (code === 0 || srtExists) {
                 console.log('[SUCCESS] ' + path.basename(filePath) + ' completed (code: ' + code + ', fileExists: ' + srtExists + ')');
@@ -432,9 +630,9 @@ function extractSingleFile(filePath, model, language, device) {
                 } else if (code === null || code === undefined) {
                     errorMessage = '프로세스가 비정상적으로 종료됨 (메모리 부족 가능성)';
                 } else if (code === 1) {
-                    errorMessage = '❌ Whisper 처리 실패 (파일 포맷 또는 오디오 문제)';
+                    errorMessage = '[ERROR] Whisper 처리 실패 (파일 포맷 또는 오디오 문제)';
                 } else if (code === 127) {
-                    errorMessage = '❌ faster-whisper-xxl.exe를 찾을 수 없음';
+                    errorMessage = '[ERROR] whisper-cli.exe를 찾을 수 없음';
                 }
                 console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
                 reject(new Error(errorMessage));
@@ -445,40 +643,41 @@ function extractSingleFile(filePath, model, language, device) {
             clearTimeout(processTimeout); // Clear timeout
             await forceMemoryCleanup(chosenDevice, true);
 
-            // ENOENT 에러 = faster-whisper-xxl.exe 파일 없음
+            // ENOENT 에러 = whisper-cli.exe 파일 없음
             if (err.code === 'ENOENT') {
                 const missingFileError = new Error(
-                    '❌ faster-whisper-xxl.exe not found!\n\n' +
-                    '📥 Please download Faster-Whisper-XXL:\n' +
-                    '1. Visit: https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL\n' +
-                    '2. Download: Faster-Whisper-XXL_r245.4_windows.7z\n' +
-                    '3. Extract to project root (exclude .bat files)\n' +
+                    '[ERROR] whisper-cli.exe not found!\n\n' +
+                    'Please download whisper.cpp:\n' +
+                    '1. Visit: https://github.com/ggml-org/whisper.cpp/releases\n' +
+                    '2. Download: whisper-cublas-*.zip (for CUDA) or whisper-bin-*.zip (for CPU)\n' +
+                    '3. Extract to project folder under "whisper-cpp" directory\n' +
                     '4. Restart the app\n\n' +
-                    '자막 추출 엔진(faster-whisper-xxl.exe)을 찾을 수 없습니다!\n' +
-                    '위 링크에서 다운로드 후 프로젝트 루트 폴더에 압축 해제해주세요.'
+                    '자막 추출 엔진(whisper-cli.exe)을 찾을 수 없습니다!\n' +
+                    '위 링크에서 다운로드 후 whisper-cpp 폴더에 압축 해제해주세요.'
                 );
 
                 // UI에 자세한 안내 전송
                 mainWindow.webContents.send('output-update',
                     '\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                    '❌ FASTER-WHISPER-XXL.EXE NOT FOUND\n' +
+                    '[ERROR] WHISPER-CLI.EXE NOT FOUND\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-                    '📥 Download Required:\n' +
-                    '   https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL\n\n' +
-                    '📦 File to download:\n' +
-                    '   Faster-Whisper-XXL_r245.4_windows.7z\n\n' +
-                    '📂 Installation:\n' +
-                    '   1. Extract the .7z file\n' +
-                    '   2. Copy all files EXCEPT .bat files\n' +
-                    '   3. Paste into project root folder\n' +
+                    'Download Required:\n' +
+                    '   https://github.com/ggml-org/whisper.cpp/releases\n\n' +
+                    'Files to download:\n' +
+                    '   - whisper-cublas-*.zip (CUDA/GPU)\n' +
+                    '   - OR whisper-bin-*.zip (CPU only)\n\n' +
+                    'Installation:\n' +
+                    '   1. Extract the .zip file\n' +
+                    '   2. Create "whisper-cpp" folder in project root\n' +
+                    '   3. Copy all files into whisper-cpp folder\n' +
                     '   4. Restart this app\n\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
                     '한국어 안내:\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-                    '자막 추출 엔진(faster-whisper-xxl.exe)이 없습니다.\n' +
+                    '자막 추출 엔진(whisper-cli.exe)이 없습니다.\n' +
                     '위 GitHub 링크에서 파일을 다운로드하여\n' +
-                    '프로젝트 폴더에 압축 해제 후 다시 실행해주세요.\n\n' +
+                    'whisper-cpp 폴더에 압축 해제 후 다시 실행해주세요.\n\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
                 );
 
@@ -505,19 +704,17 @@ ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, 
     let userStopped = false;
     const successDetails = [];
     const failureDetails = [];
+    const totalFiles = filesToProcess.length;
 
     for (let i = 0; i < filesToProcess.length; i++) {
         const currentFile = filesToProcess[i];
         if (!currentFile) continue;
 
-        const progressText = `[${i + 1}/${filesToProcess.length}] Processing: ${path.basename(currentFile)}`;
-        event.sender.send('progress-update', { progress: (i / filesToProcess.length) * 100, text: progressText });
-
         try {
             const srtPath = await extractSingleFile(currentFile, model, language, device);
             successCount++;
             successDetails.push({ source: currentFile, srtPath });
-            event.sender.send('output-update', `✅ [${i + 1}/${filesToProcess.length}] Completed: ${path.basename(currentFile)}\n`);
+            event.sender.send('output-update', `[${i + 1}/${filesToProcess.length}] Completed: ${path.basename(currentFile)}\n`);
 
             // Next file preview message
             if (i < filesToProcess.length - 1) {
@@ -559,7 +756,7 @@ ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, 
     }
 
     // 자막 추출 단계 완료 알림 (번역 옵션 시 추가 완료까지는 별도 핸들러에서 처리)
-    const extractionSummary = `\n✅ Extraction stage finished (success: ${successCount}, failed: ${failCount})`;
+    const extractionSummary = `\nExtraction stage finished (success: ${successCount}, failed: ${failCount})`;
     event.sender.send('output-update', extractionSummary);
 
     const response = {
@@ -611,17 +808,31 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
   }
 });
 
+// 외부 URL을 기본 브라우저에서 열기
+ipcMain.handle('open-external', async (event, url) => {
+  const { shell } = require('electron');
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('외부 링크 열기 실패:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('check-model-status', async () => {
   const modelsPath = path.join(app.isPackaged ? process.resourcesPath : __dirname, '_models');
   const availableModels = {};
+
+  // GGML 모델 이름 목록
+  const modelNames = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'large-v3-turbo'];
+
   try {
-    const modelFolders = fs.readdirSync(modelsPath);
-    for (const folder of modelFolders) {
-      const folderPath = path.join(modelsPath, folder);
-      if (fs.statSync(folderPath).isDirectory()) {
-        const requiredFiles = ['config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt'];
-        if (requiredFiles.every(file => fs.existsSync(path.join(folderPath, file)))) {
-          availableModels[folder.replace('faster-whisper-', '')] = true;
+    if (fs.existsSync(modelsPath)) {
+      for (const modelName of modelNames) {
+        const modelFile = path.join(modelsPath, `ggml-${modelName}.bin`);
+        if (fs.existsSync(modelFile)) {
+          availableModels[modelName] = true;
         }
       }
     }
@@ -631,28 +842,30 @@ ipcMain.handle('check-model-status', async () => {
   return availableModels;
 });
 
-// 모델 자동 다운로드 (Hugging Face: Systran/faster-whisper-*)
+// 모델 자동 다운로드 (Hugging Face: ggerganov/whisper.cpp GGML 형식)
 ipcMain.handle('download-model', async (event, modelName) => {
   try {
-    const repoMap = {
-      'tiny': 'faster-whisper-tiny',
-      'base': 'faster-whisper-base',
-      'small': 'faster-whisper-small',
-      'medium': 'faster-whisper-medium',
-      'large': 'faster-whisper-large',
-      'large-v2': 'faster-whisper-large-v2',
-      'large-v3': 'faster-whisper-large-v3',
+    // GGML 모델 파일 URL 매핑
+    const modelUrlMap = {
+      'tiny': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
+      'base': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+      'small': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
+      'medium': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
+      'large': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large.bin',
+      'large-v2': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin',
+      'large-v3': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin',
+      'large-v3-turbo': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
     };
-    const repo = repoMap[modelName];
-    if (!repo) {
+    const modelUrl = modelUrlMap[modelName];
+    if (!modelUrl) {
       throw new Error(`Unknown model: ${modelName}`);
     }
 
-    const targetDir = path.join(app.isPackaged ? process.resourcesPath : __dirname, '_models', `faster-whisper-${modelName}`);
+    const targetDir = path.join(app.isPackaged ? process.resourcesPath : __dirname, '_models');
     if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-    const files = ['config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt'];
-    const baseUrl = `https://huggingface.co/Systran/${repo}/resolve/main`;
+    const modelFileName = `ggml-${modelName}.bin`;
+    const targetPath = path.join(targetDir, modelFileName);
 
     downloadsCancelled = false;
 
@@ -700,11 +913,10 @@ ipcMain.handle('download-model', async (event, modelName) => {
       });
     };
 
-    // 파일 존재하면 스킵
-    const missing = files.filter(f => !fs.existsSync(path.join(targetDir, f)));
-    if (missing.length === 0) {
+    // 파일 존재하면 스킵 (GGML 단일 파일 체크)
+    if (fs.existsSync(targetPath)) {
       try {
-        mainWindow.webContents.send('output-update', `✅ Model already prepared: ${modelName}\n`);
+        mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
       } catch (error) {
         console.log('[Download] Failed to send model ready message:', error.message);
       }
@@ -712,24 +924,23 @@ ipcMain.handle('download-model', async (event, modelName) => {
     }
 
     try {
-      mainWindow.webContents.send('output-update', `📥 Starting model download: ${modelName}\n`);
+      mainWindow.webContents.send('output-update', `Starting GGML model download: ${modelName}\n`);
     } catch (error) {
       console.log('[Download] Failed to send download start message:', error.message);
     }
-    for (const file of files) {
-      const url = `${baseUrl}/${file}`;
-      const dest = path.join(targetDir, file);
-      // 부분 다운로드 중단되었을 경우 기존 파일 제거 후 다운로드
-      try {
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
-      } catch (error) {
-        console.log('[Download] Failed to delete partial file:', error.message);
-      }
-      if (downloadsCancelled) throw new Error('cancelled');
-      await downloadFile(url, dest);
-    }
+
+    // 부분 다운로드 중단되었을 경우 기존 파일 제거 후 다운로드
     try {
-      mainWindow.webContents.send('output-update', `✅ Model download completed: ${modelName}\n`);
+      if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
+    } catch (error) {
+      console.log('[Download] Failed to delete partial file:', error.message);
+    }
+
+    if (downloadsCancelled) throw new Error('cancelled');
+    await downloadFile(modelUrl, targetPath);
+
+    try {
+      mainWindow.webContents.send('output-update', `GGML Model download completed: ${modelName}\n`);
     } catch (error) {
       console.log('[Download] Failed to send completion message:', error.message);
     }
@@ -745,7 +956,7 @@ ipcMain.handle('download-model', async (event, modelName) => {
       return { success: false, error: 'cancelled' };
     }
     try {
-      mainWindow.webContents.send('output-update', `❌ Model download failed: ${error.message}\n`);
+      mainWindow.webContents.send('output-update', `[ERROR] Model download failed: ${error.message}\n`);
     } catch (error) {
       console.log('[Download] Failed to send error message:', error.message);
     }

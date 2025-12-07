@@ -15,7 +15,7 @@ Thumbs.db
 
 # Project-specific (models, native binaries, large artifacts)
 _models/
-_xxl_data/
+whisper-cpp/
 *.exe
 *.dll
 *.pyd
@@ -44,6 +44,6 @@ tmp/
 .env.*
 
 # Development artifacts
-nul
 settings.local*
-.claude/ 
+.claude/
+DEV_NOTES.md

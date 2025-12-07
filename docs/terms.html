@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate Terms of Service - MIT Licensed Open Source Software">
+    <title>Terms of Service - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --border: #222222;
+            --warning: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; }
+        .back-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--accent); }
+        .back-link svg { width: 16px; height: 16px; }
+
+        .lang-selector { position: relative; margin-left: 1rem; }
+        .lang-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+        .lang-btn svg { width: 14px; height: 14px; }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            min-width: 120px;
+        }
+        .lang-dropdown.active { display: block; }
+        .lang-option {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .lang-option:hover { background: var(--bg-tertiary); }
+
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+        }
+
+        .page-header { margin-bottom: 3rem; }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .last-updated {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .highlight-box svg {
+            width: 24px;
+            height: 24px;
+            color: var(--warning);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .highlight-box strong { color: var(--warning); }
+        .highlight-box p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        ul {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        li { margin-bottom: 0.5rem; }
+        li strong { color: var(--text-primary); }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            main { padding: 6rem 1.5rem 3rem; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="./" class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                </svg>
+                WhisperSubTranslate
+            </a>
+            <div style="display: flex; align-items: center;">
+                <a href="./" class="back-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <span data-i18n="nav.home">Home</span>
+                </a>
+                <div class="lang-selector">
+                    <button class="lang-btn" onclick="toggleLangDropdown()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="current-lang">EN</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <div class="lang-dropdown" id="lang-dropdown">
+                        <div class="lang-option" onclick="setLanguage('en')">English</div>
+                        <div class="lang-option" onclick="setLanguage('ko')">한국어</div>
+                        <div class="lang-option" onclick="setLanguage('ja')">日本語</div>
+                        <div class="lang-option" onclick="setLanguage('zh')">中文</div>
+                        <div class="lang-option" onclick="setLanguage('es')">Español</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div class="page-header">
+            <h1 data-i18n="terms.title">Terms of Service</h1>
+            <p class="last-updated" data-i18n="terms.updated">Last updated: December 2024</p>
+        </div>
+
+        <p data-i18n="terms.intro">By using WhisperSubTranslate (the "Software"), you agree to these terms. If you do not agree, please do not use the Software.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+            </svg>
+            <span data-i18n="terms.section1.title">1. License</span>
+        </h2>
+        <p data-i18n="terms.section1.intro">WhisperSubTranslate is open-source software distributed under the MIT License. Under the MIT License terms:</p>
+        <ul>
+            <li data-i18n="terms.section1.item1">You may freely use, copy, modify, merge, publish, distribute, sublicense, and sell the software.</li>
+            <li data-i18n="terms.section1.item2">You must include the copyright notice and permission notice in all copies or substantial portions of the software.</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span data-i18n="terms.section2.title">2. Disclaimer of Warranty</span>
+        </h2>
+        <div class="highlight-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+                <strong data-i18n="terms.section2.important">Important:</strong>
+                <p data-i18n="terms.section2.text">The software is provided "AS IS", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and noninfringement.</p>
+            </div>
+        </div>
+        <p data-i18n="terms.section2.liability">In no event shall the authors or copyright holders be liable for any claim, damages, or other liability arising from the software or its use.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+            </svg>
+            <span data-i18n="terms.section3.title">3. Usage Restrictions</span>
+        </h2>
+        <p data-i18n="terms.section3.intro">You must not use the Software for:</p>
+        <ul>
+            <li data-i18n="terms.section3.item1">Unauthorized copying or distribution of copyrighted content</li>
+            <li data-i18n="terms.section3.item2">Infringing on others' intellectual property rights</li>
+            <li data-i18n="terms.section3.item3">Any illegal purposes</li>
+            <li data-i18n="terms.section3.item4">Distributing malicious code or compromising security</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <span data-i18n="terms.section4.title">4. Copyright and Intellectual Property</span>
+        </h2>
+        <p data-i18n="terms.section4.intro">Copyright of subtitles generated using the Software may belong to the original content's copyright holder. You must:</p>
+        <ul>
+            <li data-i18n="terms.section4.item1">Have appropriate rights to all content you process</li>
+            <li data-i18n="terms.section4.item2">Take full responsibility for how you use generated subtitles</li>
+            <li data-i18n="terms.section4.item3">Comply with applicable copyright laws in your jurisdiction</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            </svg>
+            <span data-i18n="terms.section5.title">5. Third-Party Services</span>
+        </h2>
+        <p data-i18n="terms.section5.intro">The Software may optionally integrate with third-party translation services (DeepL, MyMemory, ChatGPT). Use of these services:</p>
+        <ul>
+            <li data-i18n="terms.section5.item1">Is subject to their respective terms of service</li>
+            <li data-i18n="terms.section5.item2">Requires you to provide your own API key</li>
+            <li data-i18n="terms.section5.item3">Any costs incurred are your responsibility</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            <span data-i18n="terms.section6.title">6. Open Source Components</span>
+        </h2>
+        <p data-i18n="terms.section6.intro">The Software includes the following open-source projects:</p>
+        <ul>
+            <li><strong>whisper.cpp</strong> - MIT License</li>
+            <li><strong>Electron</strong> - MIT License</li>
+            <li><strong>ffmpeg</strong> - LGPL/GPL License</li>
+        </ul>
+        <p data-i18n="terms.section6.note">Each component is subject to its respective license terms.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            <span data-i18n="terms.section7.title">7. Updates and Changes</span>
+        </h2>
+        <p data-i18n="terms.section7.text">These terms may be changed without prior notice. Updated terms will be posted on this page, and continued use constitutes acceptance of the changes.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="10" r="3"/>
+                <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
+            </svg>
+            <span data-i18n="terms.section8.title">8. Governing Law</span>
+        </h2>
+        <p data-i18n="terms.section8.text">These terms shall be governed by and construed in accordance with the laws of the Republic of Korea.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <path d="M22 6l-10 7L2 6"/>
+            </svg>
+            <span data-i18n="terms.section9.title">9. Contact</span>
+        </h2>
+        <p data-i18n="terms.section9.text">If you have questions about these terms, please contact us through GitHub Issues:</p>
+        <p><a href="https://github.com/whispersubtranslate/WhisperSubTranslate/issues">GitHub Issues</a></p>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <script>
+        const translations = {
+            en: {
+                "nav.home": "Home",
+                "terms.title": "Terms of Service",
+                "terms.updated": "Last updated: December 2024",
+                "terms.intro": "By using WhisperSubTranslate (the \"Software\"), you agree to these terms. If you do not agree, please do not use the Software.",
+                "terms.section1.title": "1. License",
+                "terms.section1.intro": "WhisperSubTranslate is open-source software distributed under the MIT License. Under the MIT License terms:",
+                "terms.section1.item1": "You may freely use, copy, modify, merge, publish, distribute, sublicense, and sell the software.",
+                "terms.section1.item2": "You must include the copyright notice and permission notice in all copies or substantial portions of the software.",
+                "terms.section2.title": "2. Disclaimer of Warranty",
+                "terms.section2.important": "Important:",
+                "terms.section2.text": "The software is provided \"AS IS\", without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, and noninfringement.",
+                "terms.section2.liability": "In no event shall the authors or copyright holders be liable for any claim, damages, or other liability arising from the software or its use.",
+                "terms.section3.title": "3. Usage Restrictions",
+                "terms.section3.intro": "You must not use the Software for:",
+                "terms.section3.item1": "Unauthorized copying or distribution of copyrighted content",
+                "terms.section3.item2": "Infringing on others' intellectual property rights",
+                "terms.section3.item3": "Any illegal purposes",
+                "terms.section3.item4": "Distributing malicious code or compromising security",
+                "terms.section4.title": "4. Copyright and Intellectual Property",
+                "terms.section4.intro": "Copyright of subtitles generated using the Software may belong to the original content's copyright holder. You must:",
+                "terms.section4.item1": "Have appropriate rights to all content you process",
+                "terms.section4.item2": "Take full responsibility for how you use generated subtitles",
+                "terms.section4.item3": "Comply with applicable copyright laws in your jurisdiction",
+                "terms.section5.title": "5. Third-Party Services",
+                "terms.section5.intro": "The Software may optionally integrate with third-party translation services (DeepL, MyMemory, ChatGPT). Use of these services:",
+                "terms.section5.item1": "Is subject to their respective terms of service",
+                "terms.section5.item2": "Requires you to provide your own API key",
+                "terms.section5.item3": "Any costs incurred are your responsibility",
+                "terms.section6.title": "6. Open Source Components",
+                "terms.section6.intro": "The Software includes the following open-source projects:",
+                "terms.section6.note": "Each component is subject to its respective license terms.",
+                "terms.section7.title": "7. Updates and Changes",
+                "terms.section7.text": "These terms may be changed without prior notice. Updated terms will be posted on this page, and continued use constitutes acceptance of the changes.",
+                "terms.section8.title": "8. Governing Law",
+                "terms.section8.text": "These terms shall be governed by and construed in accordance with the laws of the Republic of Korea.",
+                "terms.section9.title": "9. Contact",
+                "terms.section9.text": "If you have questions about these terms, please contact us through GitHub Issues:"
+            },
+            ko: {
+                "nav.home": "홈으로",
+                "terms.title": "이용약관",
+                "terms.updated": "최종 수정일: 2024년 12월",
+                "terms.intro": "WhisperSubTranslate(이하 \"소프트웨어\")를 사용함으로써, 귀하는 본 이용약관에 동의하게 됩니다. 이 약관에 동의하지 않는 경우 소프트웨어를 사용하지 마십시오.",
+                "terms.section1.title": "1. 라이선스",
+                "terms.section1.intro": "WhisperSubTranslate는 MIT 라이선스에 따라 배포되는 오픈소스 소프트웨어입니다. MIT 라이선스 조건에 따라:",
+                "terms.section1.item1": "소프트웨어를 무료로 사용, 복사, 수정, 병합, 게시, 배포, 재라이선스 및 판매할 수 있습니다.",
+                "terms.section1.item2": "소프트웨어를 사용하는 모든 복사본이나 상당 부분에 저작권 고지 및 허가 고지를 포함해야 합니다.",
+                "terms.section2.title": "2. 무보증 면책",
+                "terms.section2.important": "중요:",
+                "terms.section2.text": "소프트웨어는 \"있는 그대로\" 제공되며, 명시적이거나 묵시적인 어떠한 종류의 보증도 포함하지 않습니다. 상품성, 특정 목적에의 적합성, 비침해에 대한 보증을 포함하되 이에 국한되지 않습니다.",
+                "terms.section2.liability": "어떠한 경우에도 저작자 또는 저작권 보유자는 소프트웨어 또는 소프트웨어의 사용 또는 기타 거래로 인해 발생하는 모든 청구, 손해 또는 기타 책임에 대해 책임지지 않습니다.",
+                "terms.section3.title": "3. 사용 제한",
+                "terms.section3.intro": "귀하는 소프트웨어를 다음 목적으로 사용해서는 안 됩니다:",
+                "terms.section3.item1": "저작권이 있는 콘텐츠를 무단으로 복제하거나 배포하는 행위",
+                "terms.section3.item2": "타인의 지적재산권을 침해하는 행위",
+                "terms.section3.item3": "불법적인 목적으로 사용하는 행위",
+                "terms.section3.item4": "악성 코드를 배포하거나 보안을 위협하는 행위",
+                "terms.section4.title": "4. 저작권 및 지적재산권",
+                "terms.section4.intro": "소프트웨어를 사용하여 생성된 자막의 저작권은 원본 콘텐츠의 저작권자에게 귀속될 수 있습니다. 귀하는:",
+                "terms.section4.item1": "처리하는 모든 콘텐츠에 대한 적절한 권한을 보유해야 합니다.",
+                "terms.section4.item2": "생성된 자막의 사용에 대한 모든 책임을 집니다.",
+                "terms.section4.item3": "해당 국가의 저작권법을 준수해야 합니다.",
+                "terms.section5.title": "5. 제3자 서비스",
+                "terms.section5.intro": "소프트웨어는 선택적으로 제3자 번역 서비스(DeepL, MyMemory, ChatGPT)와 연동될 수 있습니다. 이러한 서비스의 사용은:",
+                "terms.section5.item1": "해당 서비스의 이용약관을 따릅니다.",
+                "terms.section5.item2": "사용자가 직접 API 키를 제공해야 합니다.",
+                "terms.section5.item3": "발생하는 비용은 사용자의 책임입니다.",
+                "terms.section6.title": "6. 오픈소스 구성요소",
+                "terms.section6.intro": "소프트웨어는 다음 오픈소스 프로젝트를 포함합니다:",
+                "terms.section6.note": "각 구성요소는 해당 라이선스 조건을 따릅니다.",
+                "terms.section7.title": "7. 업데이트 및 변경",
+                "terms.section7.text": "본 이용약관은 사전 통지 없이 변경될 수 있습니다. 변경된 약관은 본 페이지에 게시되며, 계속 사용하는 것은 변경된 약관에 동의하는 것으로 간주됩니다.",
+                "terms.section8.title": "8. 준거법",
+                "terms.section8.text": "본 이용약관은 대한민국 법률에 따라 해석되고 적용됩니다.",
+                "terms.section9.title": "9. 문의",
+                "terms.section9.text": "이용약관에 관한 질문이 있으시면 GitHub Issues를 통해 문의해 주세요:"
+            },
+            ja: {
+                "nav.home": "ホームへ",
+                "terms.title": "利用規約",
+                "terms.updated": "最終更新日：2024年12月",
+                "terms.intro": "WhisperSubTranslate（以下「本ソフトウェア」）を使用することにより、お客様は本利用規約に同意したものとみなされます。同意されない場合は、本ソフトウェアを使用しないでください。",
+                "terms.section1.title": "1. ライセンス",
+                "terms.section1.intro": "WhisperSubTranslateはMITライセンスの下で配布されるオープンソースソフトウェアです。MITライセンスの条件に基づき：",
+                "terms.section1.item1": "ソフトウェアを自由に使用、複製、修正、マージ、公開、配布、サブライセンス、販売することができます。",
+                "terms.section1.item2": "ソフトウェアのすべてのコピーまたは実質的な部分に著作権表示と許可表示を含める必要があります。",
+                "terms.section2.title": "2. 免責事項",
+                "terms.section2.important": "重要：",
+                "terms.section2.text": "本ソフトウェアは「現状のまま」提供され、商品性、特定目的への適合性、非侵害の保証を含むがこれらに限定されない、明示的または黙示的ないかなる種類の保証もありません。",
+                "terms.section2.liability": "いかなる場合においても、著作者または著作権保持者は、本ソフトウェアまたはその使用に起因する請求、損害、その他の責任について責任を負いません。",
+                "terms.section3.title": "3. 使用制限",
+                "terms.section3.intro": "本ソフトウェアを以下の目的で使用してはなりません：",
+                "terms.section3.item1": "著作権で保護されたコンテンツの無断複製または配布",
+                "terms.section3.item2": "他者の知的財産権の侵害",
+                "terms.section3.item3": "違法な目的での使用",
+                "terms.section3.item4": "悪意のあるコードの配布またはセキュリティの侵害",
+                "terms.section4.title": "4. 著作権と知的財産権",
+                "terms.section4.intro": "本ソフトウェアを使用して生成された字幕の著作権は、元のコンテンツの著作権者に帰属する場合があります。お客様は：",
+                "terms.section4.item1": "処理するすべてのコンテンツに対する適切な権利を有している必要があります。",
+                "terms.section4.item2": "生成された字幕の使用について全責任を負います。",
+                "terms.section4.item3": "該当する国の著作権法を遵守する必要があります。",
+                "terms.section5.title": "5. サードパーティサービス",
+                "terms.section5.intro": "本ソフトウェアはオプションでサードパーティ翻訳サービス（DeepL、MyMemory、ChatGPT）と連携できます。これらのサービスの使用は：",
+                "terms.section5.item1": "それぞれのサービスの利用規約に従います。",
+                "terms.section5.item2": "ご自身のAPIキーを提供する必要があります。",
+                "terms.section5.item3": "発生する費用はお客様の責任です。",
+                "terms.section6.title": "6. オープンソースコンポーネント",
+                "terms.section6.intro": "本ソフトウェアには以下のオープンソースプロジェクトが含まれています：",
+                "terms.section6.note": "各コンポーネントはそれぞれのライセンス条件に従います。",
+                "terms.section7.title": "7. 更新と変更",
+                "terms.section7.text": "本利用規約は予告なく変更される場合があります。変更された規約は本ページに掲載され、継続使用は変更への同意とみなされます。",
+                "terms.section8.title": "8. 準拠法",
+                "terms.section8.text": "本利用規約は大韓民国の法律に準拠し、解釈されます。",
+                "terms.section9.title": "9. お問い合わせ",
+                "terms.section9.text": "利用規約についてご質問がある場合は、GitHub Issuesを通じてお問い合わせください："
+            },
+            zh: {
+                "nav.home": "返回首页",
+                "terms.title": "服务条款",
+                "terms.updated": "最后更新：2024年12月",
+                "terms.intro": "使用WhisperSubTranslate（以下简称"本软件"），即表示您同意本服务条款。如不同意这些条款，请勿使用本软件。",
+                "terms.section1.title": "1. 许可证",
+                "terms.section1.intro": "WhisperSubTranslate是根据MIT许可证分发的开源软件。根据MIT许可证条款：",
+                "terms.section1.item1": "您可以自由使用、复制、修改、合并、发布、分发、再许可和销售本软件。",
+                "terms.section1.item2": "您必须在所有副本或软件的大部分内容中包含版权声明和许可声明。",
+                "terms.section2.title": "2. 免责声明",
+                "terms.section2.important": "重要：",
+                "terms.section2.text": "本软件按"原样"提供，不提供任何明示或暗示的保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。",
+                "terms.section2.liability": "在任何情况下，作者或版权持有人均不对因本软件或其使用或其他交易而产生的任何索赔、损害或其他责任负责。",
+                "terms.section3.title": "3. 使用限制",
+                "terms.section3.intro": "您不得将本软件用于：",
+                "terms.section3.item1": "未经授权复制或分发受版权保护的内容",
+                "terms.section3.item2": "侵犯他人的知识产权",
+                "terms.section3.item3": "任何非法目的",
+                "terms.section3.item4": "分发恶意代码或危害安全",
+                "terms.section4.title": "4. 版权和知识产权",
+                "terms.section4.intro": "使用本软件生成的字幕的版权可能属于原始内容的版权所有者。您必须：",
+                "terms.section4.item1": "拥有处理所有内容的适当权限",
+                "terms.section4.item2": "对生成字幕的使用承担全部责任",
+                "terms.section4.item3": "遵守所在司法管辖区适用的版权法",
+                "terms.section5.title": "5. 第三方服务",
+                "terms.section5.intro": "本软件可选择性地与第三方翻译服务（DeepL、MyMemory、ChatGPT）集成。使用这些服务：",
+                "terms.section5.item1": "须遵守其各自的服务条款",
+                "terms.section5.item2": "需要您提供自己的API密钥",
+                "terms.section5.item3": "产生的任何费用由您承担",
+                "terms.section6.title": "6. 开源组件",
+                "terms.section6.intro": "本软件包含以下开源项目：",
+                "terms.section6.note": "每个组件受其各自许可证条款的约束。",
+                "terms.section7.title": "7. 更新和变更",
+                "terms.section7.text": "本服务条款可能会在不事先通知的情况下进行更改。更新的条款将发布在本页面，继续使用即表示接受更改。",
+                "terms.section8.title": "8. 适用法律",
+                "terms.section8.text": "本服务条款应根据大韩民国法律进行解释和适用。",
+                "terms.section9.title": "9. 联系方式",
+                "terms.section9.text": "如果您对本服务条款有任何疑问，请通过GitHub Issues联系我们："
+            },
+            es: {
+                "nav.home": "Inicio",
+                "terms.title": "Términos de Servicio",
+                "terms.updated": "Última actualización: Diciembre 2024",
+                "terms.intro": "Al usar WhisperSubTranslate (el \"Software\"), usted acepta estos términos. Si no está de acuerdo, por favor no use el Software.",
+                "terms.section1.title": "1. Licencia",
+                "terms.section1.intro": "WhisperSubTranslate es software de código abierto distribuido bajo la Licencia MIT. Bajo los términos de la Licencia MIT:",
+                "terms.section1.item1": "Puede usar, copiar, modificar, fusionar, publicar, distribuir, sublicenciar y vender libremente el software.",
+                "terms.section1.item2": "Debe incluir el aviso de derechos de autor y el aviso de permiso en todas las copias o partes sustanciales del software.",
+                "terms.section2.title": "2. Exención de Garantía",
+                "terms.section2.important": "Importante:",
+                "terms.section2.text": "El software se proporciona \"TAL CUAL\", sin garantía de ningún tipo, expresa o implícita, incluyendo pero no limitado a garantías de comerciabilidad, idoneidad para un propósito particular y no infracción.",
+                "terms.section2.liability": "En ningún caso los autores o titulares de derechos de autor serán responsables de cualquier reclamación, daño u otra responsabilidad derivada del software o su uso.",
+                "terms.section3.title": "3. Restricciones de Uso",
+                "terms.section3.intro": "No debe usar el Software para:",
+                "terms.section3.item1": "Copia o distribución no autorizada de contenido protegido por derechos de autor",
+                "terms.section3.item2": "Infringir los derechos de propiedad intelectual de otros",
+                "terms.section3.item3": "Cualquier propósito ilegal",
+                "terms.section3.item4": "Distribuir código malicioso o comprometer la seguridad",
+                "terms.section4.title": "4. Derechos de Autor y Propiedad Intelectual",
+                "terms.section4.intro": "Los derechos de autor de los subtítulos generados usando el Software pueden pertenecer al titular de los derechos de autor del contenido original. Usted debe:",
+                "terms.section4.item1": "Tener los derechos apropiados sobre todo el contenido que procesa",
+                "terms.section4.item2": "Asumir toda la responsabilidad por el uso de los subtítulos generados",
+                "terms.section4.item3": "Cumplir con las leyes de derechos de autor aplicables en su jurisdicción",
+                "terms.section5.title": "5. Servicios de Terceros",
+                "terms.section5.intro": "El Software puede integrarse opcionalmente con servicios de traducción de terceros (DeepL, MyMemory, ChatGPT). El uso de estos servicios:",
+                "terms.section5.item1": "Está sujeto a sus respectivos términos de servicio",
+                "terms.section5.item2": "Requiere que proporcione su propia clave API",
+                "terms.section5.item3": "Cualquier costo incurrido es su responsabilidad",
+                "terms.section6.title": "6. Componentes de Código Abierto",
+                "terms.section6.intro": "El Software incluye los siguientes proyectos de código abierto:",
+                "terms.section6.note": "Cada componente está sujeto a sus respectivos términos de licencia.",
+                "terms.section7.title": "7. Actualizaciones y Cambios",
+                "terms.section7.text": "Estos términos pueden cambiar sin previo aviso. Los términos actualizados se publicarán en esta página, y el uso continuado constituye la aceptación de los cambios.",
+                "terms.section8.title": "8. Ley Aplicable",
+                "terms.section8.text": "Estos términos se regirán e interpretarán de acuerdo con las leyes de la República de Corea.",
+                "terms.section9.title": "9. Contacto",
+                "terms.section9.text": "Si tiene preguntas sobre estos términos, contáctenos a través de GitHub Issues:"
+            }
+        };
+
+        const langNames = { en: 'EN', ko: '한국어', ja: '日本語', zh: '中文', es: 'ES' };
+
+        function setLanguage(lang) {
+            const t = translations[lang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.textContent = t[key];
+            });
+            document.getElementById('current-lang').textContent = langNames[lang];
+            document.getElementById('lang-dropdown').classList.remove('active');
+            localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang;
+        }
+
+        function toggleLangDropdown() {
+            document.getElementById('lang-dropdown').classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.lang-selector')) {
+                document.getElementById('lang-dropdown').classList.remove('active');
+            }
+        });
+
+        const savedLang = localStorage.getItem('lang');
+        const browserLang = navigator.language.split('-')[0];
+        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
+        setLanguage(defaultLang);
+    </script>
+</body>
+</html>

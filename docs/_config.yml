@@ -1,0 +1,33 @@
+# GitHub Pages Configuration
+title: WhisperSubTranslate
+description: AI 기반 무료 자막 추출 & 번역 프로그램
+url: "https://whispersubtranslate.github.io"
+baseurl: ""
+
+# Theme
+theme: null
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude from build
+exclude:
+  - README.md
+  - CNAME.example
+
+# Include in build
+include:
+  - _headers
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: null
+
+# Plugins (GitHub Pages supported)
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap

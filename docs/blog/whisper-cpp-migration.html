@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate v1.2.0 Update: Migration from faster-whisper to whisper.cpp. No Python required, with millisecond timestamp support.">
+    <meta name="keywords" content="whisper.cpp, faster-whisper, subtitle extraction, AI speech recognition, millisecond timestamps">
+    <title>whisper.cpp Migration Complete - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* Google Translate Widget Styles */
+        .translate-widget {
+            display: flex;
+            align-items: center;
+        }
+        #google_translate_element {
+            display: inline-block;
+        }
+        #google_translate_element .goog-te-gadget {
+            font-family: inherit !important;
+            font-size: 0 !important;
+        }
+        #google_translate_element .goog-te-gadget-simple {
+            background: var(--bg-tertiary) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 8px !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.875rem !important;
+            line-height: 1.5 !important;
+        }
+        #google_translate_element .goog-te-gadget-simple:hover {
+            border-color: var(--border-hover) !important;
+        }
+        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value {
+            color: var(--text-secondary) !important;
+            font-family: 'Geist', sans-serif !important;
+        }
+        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value span:first-child {
+            display: none;
+        }
+        #google_translate_element .goog-te-gadget-simple .goog-te-menu-value span[style] {
+            color: var(--text-muted) !important;
+            margin-left: 0.25rem;
+        }
+        #google_translate_element img {
+            display: none !important;
+        }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        .skiptranslate { display: none !important; }
+
+        /* Article */
+        article {
+            max-width: 750px;
+            margin: 0 auto;
+            padding: 7rem 2rem 4rem;
+        }
+        .article-header {
+            margin-bottom: 3rem;
+        }
+        .article-category {
+            display: inline-block;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1.3;
+            margin-bottom: 1rem;
+            letter-spacing: -0.03em;
+        }
+        .article-meta {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .article-meta svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Article Content */
+        .article-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            color: var(--accent);
+            letter-spacing: -0.02em;
+        }
+        .article-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+        }
+        .article-content p {
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+        }
+        .article-content a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .article-content a:hover {
+            text-decoration: underline;
+        }
+        .article-content ul, .article-content ol {
+            padding-left: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .article-content li {
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+        .article-content strong {
+            color: var(--text-primary);
+        }
+        .article-content code {
+            background: var(--bg-tertiary);
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            color: var(--accent);
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 1.25rem;
+            border-radius: 12px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        .code-block .comment {
+            color: var(--text-muted);
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent);
+            padding: 1.25rem 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 12px 12px 0;
+        }
+        .highlight-box strong {
+            color: var(--text-primary);
+        }
+        .highlight-box ul {
+            margin-top: 0.75rem;
+            margin-bottom: 0;
+        }
+
+        /* Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison-table th {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .comparison-table td {
+            color: var(--text-secondary);
+        }
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+        .check { color: var(--success); }
+        .cross { color: var(--error); }
+
+        /* Article Footer */
+        .article-footer {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .share-btn {
+            padding: 0.625rem 1.25rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: opacity 0.2s;
+        }
+        .share-btn:hover { opacity: 0.9; }
+        .share-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .share-btn.twitter { background: #1da1f2; color: white; }
+        .share-btn.facebook { background: #1877f2; color: white; }
+
+        /* Related Posts */
+        .related-posts h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .related-posts h3 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+        .related-post-link {
+            display: block;
+            padding: 1rem 1.25rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+        .related-post-link:hover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        footer a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            h1 { font-size: 1.75rem; }
+            article { padding: 6rem 1.25rem 3rem; }
+            .share-buttons { flex-direction: column; }
+            .nav-links { gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">WhisperSubTranslate</a>
+            <div class="nav-links">
+                <a href="./" data-i18n="nav.blog">Blog</a>
+                <a href="../docs/" data-i18n="nav.docs">Docs</a>
+                <div class="translate-widget">
+                    <div id="google_translate_element"></div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category" data-i18n="article.category">Update</span>
+            <h1 data-i18n="article.title">whisper.cpp Migration Complete - What's Changed?</h1>
+            <p class="article-meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span data-i18n="article.date">December 2024</span>
+                <span>|</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span data-i18n="article.readTime">5 min read</span>
+            </p>
+        </header>
+
+        <div class="article-content">
+            <p data-i18n="article.intro">In WhisperSubTranslate v1.2.0, we switched the subtitle extraction engine from <strong>faster-whisper</strong> to <strong>whisper.cpp</strong>. This article explains why we made this decision and what changes users can expect.</p>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.tldr">TL;DR (Summary):</strong>
+                <ul>
+                    <li data-i18n="article.tldr1">No Python installation required - just extract and run</li>
+                    <li data-i18n="article.tldr2">Millisecond timestamp support - perfect for music videos and karaoke</li>
+                    <li data-i18n="article.tldr3">Same Whisper models used - no difference in accuracy</li>
+                </ul>
+            </div>
+
+            <h2 data-i18n="article.section1.title">Why Did We Change the Engine?</h2>
+
+            <h3 data-i18n="article.section1.sub1">Previous Issues: faster-whisper Limitations</h3>
+            <p data-i18n="article.section1.p1">The previous faster-whisper was a Python-based implementation. While it provided excellent performance, there were several issues:</p>
+            <ul>
+                <li data-i18n="article.section1.li1"><strong>Python dependency:</strong> Cannot run without Python installed on user's PC</li>
+                <li data-i18n="article.section1.li2"><strong>Distribution size:</strong> Over 300MB when including Python runtime</li>
+                <li data-i18n="article.section1.li3"><strong>Installation complexity:</strong> Environment setup difficult for regular users</li>
+                <li data-i18n="article.section1.li4"><strong>Policy changes:</strong> Latest features restricted to paid subscribers</li>
+            </ul>
+
+            <h3 data-i18n="article.section1.sub2">Advantages of whisper.cpp</h3>
+            <p data-i18n="article.section1.p2">whisper.cpp is a pure C++ reimplementation of OpenAI Whisper:</p>
+            <ul>
+                <li data-i18n="article.section1.li5"><strong>Standalone executable:</strong> All features in a single exe file</li>
+                <li data-i18n="article.section1.li6"><strong>Fully open source:</strong> MIT license, no restrictions</li>
+                <li data-i18n="article.section1.li7"><strong>Active development:</strong> Continuous updates from ggml-org</li>
+                <li data-i18n="article.section1.li8"><strong>Millisecond timestamps:</strong> Precise timing with <code>-ml</code> option</li>
+            </ul>
+
+            <h2 data-i18n="article.section2.title">Performance Comparison</h2>
+
+            <p data-i18n="article.section2.p1">Comparison of actual test results:</p>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th data-i18n="table.item">Item</th>
+                        <th>faster-whisper</th>
+                        <th>whisper.cpp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-i18n="table.python">Python Required</td>
+                        <td><span class="cross" data-i18n="table.required">Required</span></td>
+                        <td><span class="check" data-i18n="table.notRequired">Not Required</span></td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="table.timestamp">Timestamp Precision</td>
+                        <td data-i18n="table.seconds">Seconds</td>
+                        <td><span class="check" data-i18n="table.milliseconds">Milliseconds</span></td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="table.speed">Processing Speed (3 min video)</td>
+                        <td>~21s</td>
+                        <td>~18s</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="table.gpu">GPU Acceleration</td>
+                        <td><span class="check">CUDA</span></td>
+                        <td><span class="check">CUDA</span></td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="table.size">Distribution Size</td>
+                        <td>~300MB</td>
+                        <td>~100MB</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="table.accuracy">Recognition Accuracy</td>
+                        <td>Excellent</td>
+                        <td>Excellent</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 data-i18n="article.section3.title">What are Millisecond Timestamps?</h2>
+
+            <p data-i18n="article.section3.p1">Most existing subtitle extraction tools generate timestamps in <strong>seconds</strong>:</p>
+
+            <div class="code-block">
+<span class="comment"># Second-level timestamps (previous)</span>
+1
+00:00:00,000 --> 00:00:08,000
+Welcome to the channel and today we are going to talk about automation.
+            </div>
+
+            <p data-i18n="article.section3.p2">whisper.cpp with <code>-ml 50 -sow</code> options provides <strong>millisecond-level</strong> segmentation:</p>
+
+            <div class="code-block">
+<span class="comment"># Millisecond timestamps (whisper.cpp)</span>
+1
+00:00:00,000 --> 00:00:04,640
+Welcome to the channel and today we are going to
+
+2
+00:00:04,640 --> 00:00:07,520
+talk about how to automate anything that is on
+
+3
+00:00:07,520 --> 00:00:08,000
+web.
+            </div>
+
+            <h3 data-i18n="article.section3.sub1">Where is This Useful?</h3>
+            <ul>
+                <li data-i18n="article.section3.li1"><strong>Music video lyrics:</strong> Lyrics sync precisely with music</li>
+                <li data-i18n="article.section3.li2"><strong>Karaoke subtitles:</strong> Create karaoke-style captions</li>
+                <li data-i18n="article.section3.li3"><strong>Live subtitles:</strong> Real-time subtitle generation for broadcasts</li>
+                <li data-i18n="article.section3.li4"><strong>Educational content:</strong> Precisely timed explanatory subtitles</li>
+            </ul>
+
+            <h2 data-i18n="article.section4.title">Technical Changes</h2>
+
+            <p data-i18n="article.section4.p1">Detailed changes for developers:</p>
+
+            <h3 data-i18n="article.section4.sub1">Model Format Change</h3>
+            <p data-i18n="article.section4.p2">faster-whisper used CTranslate2 format (folder), while whisper.cpp uses GGML format (single .bin file):</p>
+
+            <div class="code-block">
+<span class="comment"># Previous (faster-whisper / CTranslate2)</span>
+_models/
+├── small/
+│   ├── config.json
+│   ├── model.bin
+│   ├── tokenizer.json
+│   └── vocabulary.txt
+
+<span class="comment"># New (whisper.cpp / GGML)</span>
+_models/
+├── ggml-small.bin      <span class="comment"># Single file!</span>
+├── ggml-medium.bin
+└── ggml-large-v3.bin
+            </div>
+
+            <h3 data-i18n="article.section4.sub2">Command Changes</h3>
+            <div class="code-block">
+<span class="comment"># Previous (faster-whisper)</span>
+python faster-whisper-xxl.exe --model small --language auto input.mp4
+
+<span class="comment"># New (whisper.cpp)</span>
+whisper-cli.exe -m ggml-small.bin -f input.wav -osrt -ml 50 -sow -l auto
+            </div>
+
+            <h3 data-i18n="article.section4.sub3">Audio Preprocessing</h3>
+            <p data-i18n="article.section4.p3">whisper.cpp only supports WAV files, so we automatically convert with ffmpeg:</p>
+            <div class="code-block">
+ffmpeg -y -i input.mp4 -ar 16000 -ac 1 -c:a pcm_s16le output.wav
+            </div>
+
+            <h2 data-i18n="article.section5.title">How to Upgrade</h2>
+
+            <p data-i18n="article.section5.p1">Existing users can upgrade with these steps:</p>
+            <ol>
+                <li data-i18n="article.section5.li1"><a href="https://github.com/whispersubtranslate/WhisperSubTranslate/releases/latest">Download</a> the latest version.</li>
+                <li data-i18n="article.section5.li2">Backup your existing folder.</li>
+                <li data-i18n="article.section5.li3">Extract the new version.</li>
+                <li data-i18n="article.section5.li4">Run the app and re-download models (format changed).</li>
+            </ol>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.note.title">Note:</strong>
+                <span data-i18n="article.note.text"> Existing settings (API keys, etc.) are preserved. You only need to download the models again.</span>
+            </div>
+
+            <h2 data-i18n="article.section6.title">Conclusion</h2>
+
+            <p data-i18n="article.section6.p1">With this engine migration, WhisperSubTranslate is now lighter, easier to install, and can generate more precise subtitles.</p>
+
+            <p data-i18n="article.section6.p2">If you encounter any issues or have feedback, please let us know on <a href="https://github.com/whispersubtranslate/WhisperSubTranslate/issues">GitHub Issues</a>. We'll continue working to make better subtitle tools.</p>
+
+            <p data-i18n="article.thanks">Thank you!</p>
+        </div>
+
+        <footer class="article-footer">
+            <div class="share-buttons">
+                <a href="https://twitter.com/intent/tweet?text=WhisperSubTranslate%20v1.2.0%20-%20whisper.cpp%20migration%20complete" class="share-btn twitter" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                    <span data-i18n="share.twitter">Share on X</span>
+                </a>
+                <a href="https://www.facebook.com/sharer/sharer.php?u=https://whispersubtranslate.github.io/blog/whisper-cpp-migration.html" class="share-btn facebook" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    <span data-i18n="share.facebook">Share on Facebook</span>
+                </a>
+            </div>
+
+            <div class="related-posts">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span data-i18n="related.title">Related Posts</span>
+                </h3>
+                <a href="./gpu-optimization.html" class="related-post-link" data-i18n="related.post1">Extract Subtitles 10x Faster with GPU Acceleration</a>
+                <a href="./model-comparison.html" class="related-post-link" data-i18n="related.post2">Whisper Model Comparison: From tiny to large</a>
+                <a href="./music-video-subtitle.html" class="related-post-link" data-i18n="related.post3">Creating Music Video Lyrics Subtitles</a>
+            </div>
+        </footer>
+    </article>
+
+    <footer>
+        <p>&copy; 2024 WhisperSubTranslate. MIT License. |
+            <a href="../privacy.html" data-i18n="footer.privacy">Privacy Policy</a> |
+            <a href="../terms.html" data-i18n="footer.terms">Terms of Service</a>
+        </p>
+    </footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

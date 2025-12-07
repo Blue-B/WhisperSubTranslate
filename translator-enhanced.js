@@ -113,9 +113,9 @@ class EnhancedSubtitleTranslator {
     this.translationCache = new Map();
     this.currentFileId = null;       // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
     this.lastRequestTime = 0;
-    this.minRequestInterval = 50;    // 100ms → 50ms (2배 빨라짐)
+    this.minRequestInterval = 20;    // 50ms → 20ms (더 빠르게)
     this.maxRetries = 3;             // 번역 실패 최소화를 위해 재시도 횟수 증가
-    this.batchSize = 3;              // 1 → 3 (3개씩 묶어서 처리)
+    this.batchSize = 5;              // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null;          // mainWindow 참조 저장
   }
 
@@ -207,42 +207,45 @@ class EnhancedSubtitleTranslator {
     };
   }
 
-  // 저사양 PC 대응 - 시스템 성능에 따른 최적 동시 처리 수
+  // 저사양 PC 대응 - 시스템 성능에 따른 최적 동시 처리 수 (더 공격적으로 설정)
   getOptimalConcurrency() {
     try {
       const os = require('os');
       const totalMemGB = os.totalmem() / 1024 / 1024 / 1024;
       const cpuCount = os.cpus().length;
-      
-      // 메모리 기준 조정
-      let concurrency = 2; // 기본값 (안전한 설정)
-      
-      if (totalMemGB >= 8 && cpuCount >= 4) {
-        concurrency = 4; // 고사양 PC
+
+      // 메모리 기준 조정 (더 공격적으로 설정하여 속도 개선)
+      let concurrency = 3; // 기본값 (2→3)
+
+      if (totalMemGB >= 16 && cpuCount >= 8) {
+        concurrency = 10; // 고사양 PC (4→10)
+      } else if (totalMemGB >= 8 && cpuCount >= 4) {
+        concurrency = 6; // 중고사양 PC (4→6)
       } else if (totalMemGB >= 4 && cpuCount >= 2) {
-        concurrency = 3; // 중사양 PC  
+        concurrency = 4; // 중사양 PC (3→4)
       } else {
-        concurrency = 1; // 저사양 PC (안전 우선)
+        concurrency = 2; // 저사양 PC (1→2)
       }
-      
+
       console.log(`[Performance] Detected: ${totalMemGB.toFixed(1)}GB RAM, ${cpuCount} CPU cores → Max concurrent: ${concurrency}`);
       return concurrency;
-      
+
     } catch (error) {
-      console.warn('[Performance] Failed to detect system specs, using safe default (2)');
-      return 2;
+      console.warn('[Performance] Failed to detect system specs, using safe default (3)');
+      return 3;
     }
   }
 
-  // 서비스별 최적 배치 크기
+  // 서비스별 최적 배치 크기 (더 공격적으로 설정하여 속도 개선)
   getOptimalBatchSize(service) {
     const batchSizes = {
-      'mymemory': 5,   // 무료 서비스 - 많이 묶어서 처리
-      'deepl': 3,      // 유료 API - 중간 크기
-      'chatgpt': 2     // 고급 모델 - 작은 배치 (품질 우선)
+      'mymemory': 10,  // 무료 서비스 - 많이 묶어서 처리 (5→10)
+      'deepl': 8,      // 유료 API - 더 큰 배치 (3→8)
+      'chatgpt': 5,    // 고급 모델 - 중간 배치 (2→5)
+      'offline': 15    // 오프라인 - 가장 큰 배치 (네트워크 없음)
     };
-    
-    return batchSizes[service] || 3; // 기본값
+
+    return batchSizes[service] || 8; // 기본값 3→8
   }
 
   saveApiKeys(keys) {
@@ -435,7 +438,7 @@ class EnhancedSubtitleTranslator {
     }
   }
 
-  // 개선된 OpenAI 번역
+  // OpenAI 번역 (GPT-4o-mini - 빠르고 저렴한 최신 모델)
   async translateWithChatGPT(text, targetLang = '한국어') {
     if (!this.apiKeys.openai) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
@@ -444,19 +447,20 @@ class EnhancedSubtitleTranslator {
     // 캐시 확인
     const cached = this.getCachedTranslation(text, 'chatgpt', targetLang);
     if (cached) {
-      console.log('[ChatGPT Cache Hit]', { 
-        text: text.substring(0, 30) + '...', 
-        cached: true 
+      console.log('[GPT-4o-mini Cache Hit]', {
+        text: text.substring(0, 30) + '...',
+        cached: true
       });
       return cached;
     }
 
-    console.log(`[ChatGPT Translation] Target: "${targetLang}" | Text: "${text.substring(0, 50)}..." | Model: gpt-4o-mini`);
+    console.log(`[GPT-4o-mini] "${text.substring(0, 40)}..." → ${targetLang}`);
 
     await this.throttleRequest();
 
     try {
       const startTime = Date.now();
+
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
@@ -501,7 +505,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
           }
         ],
-        temperature: 0.4,
+        temperature: 0.3,
         max_tokens: Math.min(1500, text.length * 3)
       }, {
         headers: {
@@ -512,30 +516,24 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       });
 
       let translation = response.data.choices[0].message.content.trim();
-      
+
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
-      
+
       const duration = Date.now() - startTime;
-      
-      console.log('[ChatGPT Success]', { 
+
+      console.log('[GPT-4o-mini OK]', {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
-        duration: `${duration}ms`,
-        chars: text.length,
-        model: 'gpt-4o-mini'
+        time: `${duration}ms`
       });
-      
+
       // 결과 캐시
       this.setCachedTranslation(text, 'chatgpt', targetLang, translation);
       return translation;
     } catch (error) {
-      console.error('[ChatGPT Translation Failed]', {
-        text: text.substring(0, 50) + '...',
-        error: error.message,
-        model: 'gpt-4o-mini'
-      });
-      this.logError('ChatGPT 번역 실패', error);
+      console.error('[GPT-4o-mini Error]', error.message);
+      this.logError('GPT-4o-mini 번역 실패', error);
       throw error;
     }
   }
@@ -940,7 +938,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       results.errors.deepl = errorMsg.noApiKey;
     }
 
-    // OpenAI 검사
+    // OpenAI 검사 (GPT-4o Mini)
     if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
       try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {

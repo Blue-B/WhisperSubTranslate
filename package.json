@@ -6,12 +6,13 @@
     "start": "electron --expose-gc .",
     "build": "electron-builder --publish never",
     "build-win": "electron-builder --win",
+    "postinstall": "node scripts/postinstall.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "GTPS Team",
   "license": "ISC",
-  "description": "Whisper 기반 자막 추출·번역 도구 (Faster-Whisper)",
+  "description": "Whisper 기반 자막 추출·번역 도구 (whisper.cpp)",
   "build": {
     "appId": "com.whispersubtranslate.app",
     "productName": "WhisperSubTranslate",
@@ -30,12 +31,8 @@
     ],
     "extraResources": [
       {
-        "from": "faster-whisper-xxl.exe",
-        "to": "faster-whisper-xxl.exe"
-      },
-      {
-        "from": "_xxl_data",
-        "to": "_xxl_data"
+        "from": "whisper-cpp",
+        "to": "whisper-cpp"
       },
       {
         "from": "_models",
@@ -61,6 +58,7 @@
   },
   "dependencies": {
     "axios": "^1.6.0",
-    "deepl-node": "^1.13.0"
+    "deepl-node": "^1.13.0",
+    "ffmpeg-static": "^5.3.0"
   }
 }

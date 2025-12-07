@@ -2,9 +2,9 @@
 
 [English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文
 
-将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 Faster‑Whisper 可执行文件，翻译支持 MyMemory（免费）、DeepL、ChatGPT（OpenAI）。
+将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译支持 MyMemory（免费）、DeepL、ChatGPT（OpenAI）。
 
-> 重要：本应用使用 Whisper（Faster‑Whisper）从视频音频新生成 SRT 字幕；不会提取已有的内嵌字幕轨道，也不会识别屏幕文字（无 OCR）。
+> 重要：本应用使用 whisper.cpp 从视频音频新生成 SRT 字幕；不会提取已有的内嵌字幕轨道，也不会识别屏幕文字（无 OCR）。
 
 ## 预览
 
@@ -29,30 +29,30 @@
 
 ## 快速开始
 
-前置条件（首次一次性，字幕提取必需）
+### 用户：运行便携版
 
-1) 从 Purfview 发布页下载 `Faster-Whisper-XXL_r245.4_windows.7z`：https://github.com/Purfview/whisper-standalone-win/releases/tag/Faster-Whisper-XXL
-2) 解压到项目根目录（与 `main.js` 同级），排除 `.bat` 文件。示例（7‑Zip）：
-```powershell
-7z x Faster-Whisper-XXL_r245.4_windows.7z -x!*.bat -o.
-```
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.2.0-portable.zip`
+- 解压后运行 `WhisperSubTranslate.exe`
 
-然后运行：
+即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
+
+### 开发者：从源码运行
+
 ```bash
 npm install
 npm start
 ```
-首次运行如缺少模型，会自动下载至 `_models/`。
+- **whisper-cpp** 在 `npm install` 时自动下载（~700MB CUDA 版本）
+- **FFmpeg** 通过 npm 包自动包含
+- 首次运行如缺少选定的 GGML 模型，会自动下载至 `_models/`
+
+> 自动下载失败时，请从 [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) 手动下载并解压到 `whisper-cpp/` 文件夹。
 
 ### 构建（Windows）
 ```bash
 npm run build-win
 ```
-生成在 `dist/` 目录。
-
-## 开发者环境（本地运行/打包）
-
-该章节已合并到“快速开始”。请参考上面的前置条件步骤。
+生成在 `dist2/` 目录。
 
 ## 技术栈
 
@@ -61,9 +61,9 @@ npm run build-win
 | 项目 | 说明 |
 | --- | --- |
 | 运行时 | Electron、Node.js、JavaScript |
-| 打包 | electron‑builder |
+| 打包 | electron-builder |
 | 网络 | axios |
-| 语音→文本 | Faster‑Whisper 可执行文件 |
+| 语音→文本 | whisper.cpp (GGML 模型) |
 | 翻译（可选） | DeepL API、OpenAI（ChatGPT）、MyMemory |
 
 ## 翻译引擎
@@ -85,7 +85,19 @@ API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使
 韩语 (ko)、英语 (en)、日语 (ja)、中文 (zh)、西班牙语 (es)、法语 (fr)、德语 (de)、意大利语 (it)、葡萄牙语 (pt)、俄语 (ru)、**匈牙利语 (hu)**、**阿拉伯语 (ar)**
 
 ### 音频识别语言
-Faster-Whisper XXL支持100多种语言，包括所有主要世界语言（英语、西班牙语、法语、德语、意大利语、葡萄牙语、俄语、中文、日语、韩语、阿拉伯语、印地语、土耳其语等）。
+whisper.cpp 支持100多种语言，包括所有主要世界语言（英语、西班牙语、法语、德语、意大利语、葡萄牙语、俄语、中文、日语、韩语、阿拉伯语、印地语、土耳其语等）。
+
+## 模型与性能
+
+模型存储在 `_models/`，按需自动下载。模型越大越慢，但可能更准确。CUDA 可用时使用 GPU，否则使用 CPU。
+
+| 模型 | 大小 | VRAM | 速度 | 质量 |
+| --- | --- | --- | --- | --- |
+| tiny | ~75MB | ~1GB | 最快 | 基本 |
+| base | ~142MB | ~1GB | 快 | 良好 |
+| small | ~466MB | ~2GB | 中等 | 更好 |
+| medium | ~1.5GB | ~5GB | 慢 | 优秀 |
+| large-v3 | ~3GB | ~10GB | 最慢 | 最佳 |
 
 ## 分支（简化 Trunk）
 
@@ -159,14 +171,15 @@ fix: localize target language note
 - 用途：修复缺陷、提升模型下载稳定性、打磨 UI、扩展翻译选项、Windows 构建/测试
 - 透明：不出售数据；资金用于开发时间、发布构建的基础设施、翻译 API 的测试费用
 - 一次性支持也会在 README/发布说明的赞助者名单中署名（可选择不公开）
-- 月度支持（$3/mo，GitHub Sponsors 自动扣款）额外享受 “Sponsor Request” issue 的优先分流（best‑effort）
+- 月度支持（$3/mo，GitHub Sponsors 自动扣款）额外享受 "Sponsor Request" issue 的优先分流（best-effort）
 
 [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/一次性_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
 
 ## 致谢
 
-- 感谢提供 Faster‑Whisper 独立可执行文件的项目： [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- whisper.cpp 由 Georgi Gerganov 开发: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
 ## 许可证
 
-ISC。使用外部服务（DeepL、OpenAI 等）时请遵守其各自条款。 
+ISC。使用外部服务（DeepL、OpenAI 等）时请遵守其各自条款。
