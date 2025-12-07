@@ -78,7 +78,8 @@ function updateModelSelect() {
     { id: 'medium', name: 'medium (769MB) - 균형잡힌 성능' },
     { id: 'large', name: 'large (1550MB) - 느림, 높은 정확도' },
     { id: 'large-v2', name: 'large-v2 (1550MB) - 개선된 정확도' },
-    { id: 'large-v3', name: 'large-v3 (1550MB) - 최신 버전' }
+    { id: 'large-v3', name: 'large-v3 (1550MB) - 최신 버전' },
+    { id: 'large-v3-turbo', name: 'large-v3-turbo (1550MB) - 빠르고 정확함 ⭐' }
   ];
   
   // Available models (사용 가능한 모델)
