@@ -93,8 +93,8 @@
             padding: 0 24px;
         }
 
-        /* Navigation */
-        nav {
+        /* Header & Navigation */
+        header {
             position: fixed;
             top: 0;
             left: 0;
@@ -104,6 +104,10 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid var(--border-subtle);
+        }
+
+        header nav {
+            width: 100%;
         }
 
         .nav-content {
@@ -313,10 +317,15 @@
             line-height: 1.1;
             margin-bottom: 24px;
             max-width: 900px;
+            text-align: center;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .hero h1 span {
             color: var(--accent);
+            display: block;
+            text-align: center;
         }
 
         .hero-desc {
@@ -888,7 +897,8 @@
     </style>
 </head>
 <body>
-    <!-- Navigation -->
+    <!-- Header -->
+    <header>
     <nav>
         <div class="container nav-content">
             <a href="/" class="logo">
@@ -936,6 +946,7 @@
             </button>
         </div>
     </nav>
+    </header>
 
     <!-- Mobile Menu Overlay -->
     <div class="mobile-menu" id="mobileMenu">
