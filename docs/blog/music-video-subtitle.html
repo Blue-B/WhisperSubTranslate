@@ -25,7 +25,8 @@
         body { font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.8; color: var(--text-primary); background: var(--bg-primary); }
         nav { position: fixed; top: 0; width: 100%; background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); z-index: 1000; padding: 1rem 2rem; }
         .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
         .nav-links { display: flex; align-items: center; gap: 2rem; }
         .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
         .nav-links a:hover { color: var(--text-primary); }
@@ -79,7 +80,14 @@
 <body>
     <nav>
         <div class="nav-container">
-            <a href="../" class="logo">WhisperSubTranslate</a>
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
             <div class="nav-links">
                 <a href="../">Home</a>
                 <a href="../docs/">Docs</a>

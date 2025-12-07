@@ -58,7 +58,11 @@
             color: var(--text-primary);
             text-decoration: none;
             letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
         .nav-links {
             display: flex;
             align-items: center;
@@ -374,7 +378,14 @@
 <body>
     <nav>
         <div class="nav-container">
-            <a href="../" class="logo">WhisperSubTranslate</a>
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
             <div class="nav-links">
                 <a href="./" data-i18n="nav.blog">Blog</a>
                 <a href="../docs/" data-i18n="nav.docs">Docs</a>

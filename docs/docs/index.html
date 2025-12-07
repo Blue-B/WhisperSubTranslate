@@ -61,7 +61,7 @@
             align-items: center;
             gap: 0.5rem;
         }
-        .logo svg { width: 24px; height: 24px; color: var(--accent); }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
         .nav-links {
             display: flex;
             align-items: center;
@@ -319,12 +319,12 @@
     <nav>
         <div class="nav-container">
             <a href="../" class="logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                    <path d="M2 17l10 5 10-5"/>
-                    <path d="M2 12l10 5 10-5"/>
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
                 </svg>
-                WhisperSubTranslate
+                <span>WhisperSubTranslate</span>
             </a>
             <div class="nav-links">
                 <a href="../" class="nav-link" data-i18n="nav.home">Home</a>
@@ -506,13 +506,25 @@
                         <td data-i18n="docs.models.accurate">Accurate</td>
                     </tr>
                     <tr>
+                        <td>large</td>
+                        <td>3GB</td>
+                        <td>~10GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
+                        <td>large-v2</td>
+                        <td>3GB</td>
+                        <td>~10GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
                         <td>large-v3</td>
                         <td>3GB</td>
                         <td>~10GB</td>
                         <td data-i18n="docs.models.best">Best Quality</td>
                     </tr>
                     <tr>
-                        <td>turbo</td>
+                        <td>large-v3-turbo</td>
                         <td>1.5GB</td>
                         <td>~6GB</td>
                         <td data-i18n="docs.models.turbo">Fast & Accurate</td>
@@ -523,7 +535,7 @@
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M12 16v-4M12 8h.01"/>
                     </svg>
-                    <p data-i18n="docs.models.recommendation">For most users, the "small" or "turbo" model provides the best balance of speed and accuracy.</p>
+                    <p data-i18n="docs.models.recommendation">For most users, the "small" or "large-v3-turbo" model provides the best balance of speed and accuracy.</p>
                 </div>
             </section>
 

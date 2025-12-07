@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Complete guide to adding subtitles to YouTube videos using WhisperSubTranslate. Step-by-step instructions for uploading SRT files.">
     <meta name="keywords" content="YouTube subtitles, SRT upload, video captions, WhisperSubTranslate, subtitle guide">
-    <title>Complete Guide to Adding Subtitles to YouTube Videos - WhisperSubTranslate Blog</title>
+    <title>YouTube Creator's Guide: Adding Subtitles to Your Videos - WhisperSubTranslate Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -52,7 +52,11 @@
             font-weight: 700;
             color: var(--text-primary);
             text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
         .nav-links {
             display: flex;
             align-items: center;
@@ -200,7 +204,14 @@
 <body>
     <nav>
         <div class="nav-container">
-            <a href="../" class="logo">WhisperSubTranslate</a>
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
             <div class="nav-links">
                 <a href="../">Home</a>
                 <a href="../docs/">Docs</a>
@@ -239,12 +250,12 @@
 
         <header class="article-header">
             <span class="category">Guide</span>
-            <h1>Complete Guide to Adding Subtitles to YouTube Videos</h1>
+            <h1>YouTube Creator's Guide: Adding Subtitles to Your Videos</h1>
             <p class="meta">November 2024 &bull; 5 min read</p>
         </header>
 
         <div class="content">
-            <p>Adding subtitles to your YouTube videos can significantly increase your audience reach and engagement. This guide walks you through the process of extracting subtitles with WhisperSubTranslate and uploading them to YouTube.</p>
+            <p><strong>This guide is for YouTube creators</strong> who want to add subtitles to their own uploaded videos. Adding subtitles can significantly increase your audience reach and engagement. We'll walk you through extracting subtitles from your video files with WhisperSubTranslate and uploading them to YouTube Studio.</p>
 
             <h2>Why Add Subtitles to Your Videos?</h2>
             <ul>
