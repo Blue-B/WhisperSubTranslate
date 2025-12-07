@@ -312,6 +312,13 @@ class EnhancedSubtitleTranslator {
 
   setCachedTranslation(text, method, targetLang, translation) {
     if (!this.apiKeys.enableCache) return;
+
+    // 빈 번역 결과는 캐시하지 않음
+    if (!translation || translation.trim().length === 0) {
+      console.warn('[Cache] Skipping empty translation cache');
+      return;
+    }
+
     const key = this.getCacheKey(text, method, targetLang);
 
     // LRU: Remove if exists, then add to end (최신으로 갱신)
@@ -345,7 +352,7 @@ class EnhancedSubtitleTranslator {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Enhanced error handling (향상된 에러 처리)
+  // Enhanced error handling (향상된 에러 처리) - 콘솔 + 파일 로그
   logError(context, error) {
     const errorInfo = {
       timestamp: new Date().toISOString(),
@@ -354,6 +361,15 @@ class EnhancedSubtitleTranslator {
       stack: error.stack
     };
     console.error('[Translation Error / 번역 오류]', errorInfo);
+
+    // 파일에도 에러 로그 저장 (디버깅용)
+    try {
+      const logPath = path.join(process.cwd(), 'translation-errors.log');
+      const logEntry = `[${errorInfo.timestamp}] ${context}: ${error.message}\n${error.stack || ''}\n---\n`;
+      fs.appendFileSync(logPath, logEntry, 'utf8');
+    } catch (fileErr) {
+      // 파일 로그 실패 시 무시
+    }
   }
 
   // Translation with retry (재시도 로직)
@@ -508,7 +524,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
           }
         ],
-        max_completion_tokens: Math.min(1500, text.length * 3)
+        max_completion_tokens: Math.max(100, Math.min(1500, text.length * 3))
       }, {
         headers: {
           'Authorization': `Bearer ${this.apiKeys.openai}`,
@@ -517,8 +533,34 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         timeout: 30000
       });
 
-      // Chat Completions API: choices[0].message.content로 응답 받음
-      let translation = response.data.choices[0].message.content.trim();
+      // Chat Completions API 응답 검증
+      const choices = response.data?.choices;
+      const finishReason = choices?.[0]?.finish_reason;
+      const rawContent = choices?.[0]?.message?.content;
+
+      // finish_reason 확인 - 응답이 잘렸는지 체크
+      if (finishReason === 'length') {
+        console.warn('[GPT-5-nano Warning] Response truncated due to max_completion_tokens');
+      }
+
+      // 응답 검증 - 빈 응답이면 에러 발생시켜 폴백 서비스로 넘김
+      if (!rawContent || rawContent.trim().length === 0) {
+        const errorInfo = {
+          original: text.substring(0, 40) + '...',
+          finishReason,
+          responsePreview: JSON.stringify(response.data).substring(0, 300),
+          hasChoices: !!choices,
+          choicesLength: choices?.length
+        };
+        console.error('[GPT-5-nano Empty Response]', errorInfo);
+
+        // 파일에 에러 로그 저장 (디버깅용)
+        this.logError('GPT-5-nano 빈 응답', new Error(JSON.stringify(errorInfo)));
+
+        throw new Error(`GPT-5-nano returned empty translation (finish_reason: ${finishReason})`);
+      }
+
+      let translation = rawContent.trim();
 
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
@@ -535,7 +577,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       this.setCachedTranslation(text, 'chatgpt', targetLang, translation);
       return translation;
     } catch (error) {
-      console.error('[GPT-5-nano Error]', error.message);
+      // API 에러 상세 로그
+      console.error('[GPT-5-nano Error]', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        code: error.code
+      });
       this.logError('GPT-5-nano 번역 실패', error);
       throw error;
     }
