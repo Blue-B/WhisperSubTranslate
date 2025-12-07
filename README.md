@@ -33,7 +33,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.2.0-portable.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.0-portable.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
@@ -98,8 +98,11 @@ Models are stored under `_models/` and auto‑downloaded on demand. Choose a siz
 | tiny | ~75MB | ~1GB | Fastest | Basic |
 | base | ~142MB | ~1GB | Fast | Good |
 | small | ~466MB | ~2GB | Medium | Better |
-| medium | ~1.5GB | ~5GB | Slow | Great |
-| large-v3 | ~3GB | ~10GB | Slowest | Best |
+| medium | ~1.5GB | ~4GB | Slow | Great |
+| large-v3 | ~3GB | ~5GB | Slowest | Best |
+| large-v3-turbo ⭐ | ~809MB | ~4GB | Fast | Excellent |
+
+> Note: VRAM requirements are for [whisper.cpp](https://github.com/ggerganov/whisper.cpp) with GGML optimization, which is significantly lower than PyTorch Whisper (~10GB for large). Tested: large-v3 works on 6GB VRAM GPU.
 
 ## Branching model (simple trunk)
 

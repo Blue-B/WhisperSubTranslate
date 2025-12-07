@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.2.0-portable.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.0-portable.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
@@ -96,8 +96,11 @@ whisper.cpp 支持100多种语言，包括所有主要世界语言（英语、�
 | tiny | ~75MB | ~1GB | 最快 | 基本 |
 | base | ~142MB | ~1GB | 快 | 良好 |
 | small | ~466MB | ~2GB | 中等 | 更好 |
-| medium | ~1.5GB | ~5GB | 慢 | 优秀 |
-| large-v3 | ~3GB | ~10GB | 最慢 | 最佳 |
+| medium | ~1.5GB | ~4GB | 慢 | 优秀 |
+| large-v3 | ~3GB | ~5GB | 最慢 | 最佳 |
+| large-v3-turbo ⭐ | ~809MB | ~4GB | 快 | 卓越 |
+
+> 注：VRAM 需求基于 [whisper.cpp](https://github.com/ggerganov/whisper.cpp) 的 GGML 优化，比 PyTorch Whisper（large 约 10GB）低很多。已测试：6GB VRAM GPU 可运行 large-v3。
 
 ## 分支（简化 Trunk）
 

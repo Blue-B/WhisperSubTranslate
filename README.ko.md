@@ -31,7 +31,7 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.2.0-portable.zip`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.3.0-portable.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(무료 MyMemory 기본 제공, DeepL/OpenAI는 본인 API 키 필요).
@@ -96,8 +96,11 @@ whisper.cpp는 100개 이상의 언어를 지원합니다 (영어, 스페인어,
 | tiny | ~75MB | ~1GB | 가장 빠름 | 기본 |
 | base | ~142MB | ~1GB | 빠름 | 좋음 |
 | small | ~466MB | ~2GB | 보통 | 더 좋음 |
-| medium | ~1.5GB | ~5GB | 느림 | 훌륭함 |
-| large-v3 | ~3GB | ~10GB | 가장 느림 | 최고 |
+| medium | ~1.5GB | ~4GB | 느림 | 훌륭함 |
+| large-v3 | ~3GB | ~5GB | 가장 느림 | 최고 |
+| large-v3-turbo ⭐ | ~809MB | ~4GB | 빠름 | 뛰어남 |
+
+> 참고: VRAM 요구사항은 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)의 GGML 최적화 기준이며, PyTorch Whisper(large ~10GB)보다 훨씬 낮습니다. 테스트: 6GB VRAM GPU에서 large-v3 동작 확인.
 
 ## 브랜치(단순 Trunk)
 

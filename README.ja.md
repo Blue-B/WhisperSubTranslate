@@ -31,7 +31,7 @@
 
 ### 一般ユーザー: ポータブル版で実行
 
-- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.2.0-portable.zip`
+- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.3.0-portable.zip`
 - 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
 すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション（無料MyMemoryがデフォルト、DeepL/OpenAIは自分のAPIキーが必要）。
@@ -96,8 +96,11 @@ whisper.cppは100以上の言語をサポートしています（英語、スペ
 | tiny | ~75MB | ~1GB | 最速 | 基本 |
 | base | ~142MB | ~1GB | 速い | 良好 |
 | small | ~466MB | ~2GB | 中程度 | より良い |
-| medium | ~1.5GB | ~5GB | 遅い | 素晴らしい |
-| large-v3 | ~3GB | ~10GB | 最も遅い | 最高 |
+| medium | ~1.5GB | ~4GB | 遅い | 素晴らしい |
+| large-v3 | ~3GB | ~5GB | 最も遅い | 最高 |
+| large-v3-turbo ⭐ | ~809MB | ~4GB | 速い | 優秀 |
+
+> 注：VRAM要件は[whisper.cpp](https://github.com/ggerganov/whisper.cpp)のGGML最適化基準であり、PyTorch Whisper（large約10GB）よりも大幅に低いです。テスト済み：6GB VRAM GPUでlarge-v3動作確認。
 
 ## ブランチ（シンプル Trunk）
 
