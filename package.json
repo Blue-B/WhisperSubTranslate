@@ -26,7 +26,6 @@
       "renderer.js",
       "translator-enhanced.js",
       "myMemoryTranslator.js",
-      "utils/**",
       "nya.wav"
     ],
     "extraResources": [
