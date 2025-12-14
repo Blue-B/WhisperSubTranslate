@@ -17,6 +17,10 @@ const { Menu } = require('electron');
 let ffmpegStaticPath = null;
 try {
   ffmpegStaticPath = require('ffmpeg-static');
+  // 빌드된 앱에서는 app.asar.unpacked 경로로 변환 필요
+  if (ffmpegStaticPath && ffmpegStaticPath.includes('app.asar')) {
+    ffmpegStaticPath = ffmpegStaticPath.replace('app.asar', 'app.asar.unpacked');
+  }
   console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStaticPath);
 } catch (error) {
   console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local ffmpeg.exe');

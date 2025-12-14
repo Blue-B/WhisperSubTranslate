@@ -32,10 +32,6 @@
       {
         "from": "whisper-cpp",
         "to": "whisper-cpp"
-      },
-      {
-        "from": "_models",
-        "to": "_models"
       }
     ],
     "win": {

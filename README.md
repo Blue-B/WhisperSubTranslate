@@ -33,7 +33,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate.v1.3.0.7z`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.0-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).

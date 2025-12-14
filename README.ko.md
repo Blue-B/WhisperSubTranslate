@@ -31,7 +31,7 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate.v1.3.0.7z`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.3.0-win-x64.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(무료 MyMemory 기본 제공, DeepL/OpenAI는 본인 API 키 필요).
