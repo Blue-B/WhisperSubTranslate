@@ -277,7 +277,7 @@ function createWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             webSecurity: false,
-            devTools: true,
+            devTools: false,  // 배포 버전: 개발자 도구 비활성화
         },
         icon: path.join(__dirname, 'icon.png'),
         autoHideMenuBar: true,
@@ -293,12 +293,13 @@ function createWindow() {
     // 개발 모드에서 캐시 비활성화 (파일 변경 즉시 반영)
     mainWindow.webContents.session.clearCache();
 
-    // 개발 모드에서 F12로 DevTools 열기
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (input.key === 'F12') {
-            mainWindow.webContents.toggleDevTools();
-        }
-    });
+    // F12 개발자 도구 비활성화 (배포 버전)
+    // 개발 시에는 devTools: true 로 변경하고 아래 주석 해제
+    // mainWindow.webContents.on('before-input-event', (event, input) => {
+    //     if (input.key === 'F12') {
+    //         mainWindow.webContents.toggleDevTools();
+    //     }
+    // });
 
     // Translator에 mainWindow 설정 (UI 업데이트용)
     translator.setMainWindow(mainWindow);
