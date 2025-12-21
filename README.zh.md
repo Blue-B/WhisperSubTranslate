@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-[English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文
+[English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文 | [Polski](./README.pl.md)
 
 将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译支持 MyMemory（免费）、DeepL、GPT-5-nano（OpenAI）、Gemini。
 
@@ -80,10 +80,10 @@ API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使
 ## 语言支持
 
 ### UI 语言
-韩语、英语、日语、中文（4种语言）
+韩语、英语、日语、中文、波兰语（5种语言）
 
-### 翻译目标语言（12种）
-韩语 (ko)、英语 (en)、日语 (ja)、中文 (zh)、西班牙语 (es)、法语 (fr)、德语 (de)、意大利语 (it)、葡萄牙语 (pt)、俄语 (ru)、**匈牙利语 (hu)**、**阿拉伯语 (ar)**
+### 翻译目标语言（13种）
+韩语 (ko)、英语 (en)、日语 (ja)、中文 (zh)、西班牙语 (es)、法语 (fr)、德语 (de)、意大利语 (it)、葡萄牙语 (pt)、俄语 (ru)、匈牙利语 (hu)、阿拉伯语 (ar)、**波兰语 (pl)**
 
 ### 音频识别语言
 whisper.cpp 支持100多种语言，包括所有主要世界语言（英语、西班牙语、法语、德语、意大利语、葡萄牙语、俄语、中文、日语、韩语、阿拉伯语、印地语、土耳其语等）。

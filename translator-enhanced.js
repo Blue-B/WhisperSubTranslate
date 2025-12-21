@@ -186,7 +186,8 @@ class EnhancedSubtitleTranslator {
             preferredService: config.preferredService || 'mymemory',
             enableCache: config.enableCache !== false,
             batchTranslation: config.batchTranslation !== false,
-            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency()
+            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
+            uiLanguage: config.uiLanguage || 'ko'
           };
         }
       }
@@ -206,7 +207,8 @@ class EnhancedSubtitleTranslator {
       preferredService: 'mymemory',
       enableCache: true,
       batchTranslation: true,
-      maxConcurrent: this.getOptimalConcurrency()
+      maxConcurrent: this.getOptimalConcurrency(),
+      uiLanguage: 'ko'
     };
   }
 

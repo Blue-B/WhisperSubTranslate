@@ -1810,6 +1810,114 @@ const I18N = {
     copyFileName: '文件名',
     copyPath: '路径',
   },
+  pl: {
+    titleText: 'WhisperSubTranslate',
+    dropTitle: 'Przeciągnij i upuść pliki',
+    dropHint1: 'Przeciągnij tutaj plik wideo lub SRT',
+    dropHint2: 'Obsługiwane: MP4, AVI, MKV, MOV, WMV, SRT',
+    queueTitle: 'Kolejka przetwarzania',
+    clearQueueBtn: 'Wyczyść kolejkę',
+    openFolderBtn: 'Otwórz folder wyjściowy',
+    labelModel: 'Model',
+    labelLanguage: 'Język',
+    langStatusInfo: 'Zalecane: Automatyczne wykrywanie języka dla każdego pliku\nStały: Użyj tego samego języka dla wszystkich plików',
+    labelDevice: 'Urządzenie',
+    labelTranslation: 'Tłumaczenie',
+    runBtn: 'Rozpocznij ekstrakcję',
+    runBtnProcessing: 'Przetwarzanie...',
+    clearQueueWaiting: 'Usuń oczekujące pliki',
+    clearQueueAll: 'Wyczyść całą kolejkę',
+    apiBtn: 'Klucze API',
+    selectFileBtn: 'Wybierz pliki',
+    stopBtn: 'Zatrzymaj',
+    logTitle: 'Logi',
+    cannotRemoveProcessing: 'Nie można usunąć pliku podczas przetwarzania.',
+    removedFromQueue: (name) => `Usunięto z kolejki: ${name}`,
+    queueCleared: 'Kolejka wyczyszczona.',
+    pendingFilesRemoved: (n) => `Usunięto ${n} oczekujących plików.`,
+    stopRequested: 'Żądanie zatrzymania. Zatrzyma się po zakończeniu bieżącego pliku.',
+    userStopped: 'Użytkownik zatrzymał przetwarzanie.',
+    unsupportedFormat: (name) => `Nieobsługiwany format pliku: ${name}`,
+    processingFile: (idx, total, name) => `[${idx}/${total}] Przetwarzanie: ${name}`,
+    extractionComplete: (idx, total, name) => `[${idx}/${total}] Ekstrakcja zakończona: ${name}`,
+    cleaningMemory: 'Czyszczenie pamięci...',
+    fileProcessed: (name) => `Plik przetworzony: ${name}`,
+    allTasksComplete: (success, error, stopped) => `Wszystkie zadania zakończone! (Sukces: ${success}, Błędy: ${error}, Zatrzymane: ${stopped})`,
+    translationProgress: 'Postęp tłumaczenia: ',
+    translationStarting: 'Rozpoczynanie tłumaczenia...',
+    translationTranslatingProgress: (current, total) => `Tłumaczenie... ${current}/${total}`,
+    translationTranslating: 'Tłumaczenie...',
+    translationCompleted: 'Tłumaczenie zakończone!',
+    translationFailed: 'Tłumaczenie nieudane: ',
+    modelAvailableGroup: 'Dostępne modele',
+    modelNeedDownloadGroup: 'Wymagane pobranie (automatyczne)',
+    modelStatusText: (count) => `${count} modeli dostępnych | Brakujące modele zostaną pobrane automatycznie`,
+    deviceStatusHtml: '<strong>Zalecany GPU:</strong> Znacznie szybsze przetwarzanie z GPU NVIDIA<br><strong>CPU:</strong> Użyj gdy brak GPU lub ograniczona pamięć',
+    translationEnabledHtml: '<strong>Zalecane:</strong> MyMemory jest darmowy i stabilny<br><strong>~50K znaków/dzień</strong> za darmo (w przybliżeniu)',
+    translationDisabledHtml: 'Tłumaczenie wyłączone.',
+    translationDeeplHtml: '<strong>DeepL:</strong> 500K znaków/miesiąc za darmo, wymagany klucz API<br><strong>Wysoka jakość</strong> tłumaczenia',
+    translationChatgptHtml: '<strong>GPT-5-nano:</strong> Wymagany klucz API użytkownika<br><strong>Naturalne</strong> tłumaczenie',
+    langAutoOption: 'Automatyczne wykrywanie (dla każdego pliku)',
+    deviceAuto: 'Auto (GPU jeśli dostępny, w przeciwnym razie CPU)',
+    deviceCuda: 'GPU (CUDA) - Szybki',
+    deviceCpu: 'CPU - Stabilny',
+    trNone: 'Bez tłumaczenia',
+    trMyMemory: 'MyMemory (Darmowy ~50K/dzień)',
+    trDeepL: 'DeepL (Darmowy 500K/miesiąc z kluczem API)',
+    trChatGPT: 'GPT-5-nano (Wymagany klucz API)',
+    trGemini: 'Gemini (Darmowy klucz API)',
+    srtModeHint: '📄 Tryb tłumaczenia SRT - Wybierz metodę tłumaczenia',
+    srtBadge: 'Tłumaczenie SRT',
+    mixedFileWarning: 'Pliki wideo i SRT są pomieszane. Każdy zostanie przetworzony odpowiednio.',
+    qWaiting: 'Oczekuje', qProcessing: 'Przetwarzanie', qTranslating: 'Tłumaczenie', qCompleted: 'Zakończone', qError: 'Błąd', qStopped: 'Zatrzymane', qSkipped: 'Pominięte', qUnsupported: 'Nieobsługiwany format',
+    srtSkippedNoTranslation: 'Plik SRT pominięty (brak konfiguracji tłumaczenia)',
+    srtWillBeSkipped: 'Pliki SRT zostaną pominięte bez tłumaczenia. Wybierz metodę tłumaczenia.',
+    btnOpen: 'Otwórz', btnRemove: 'Usuń',
+    progressReady: 'Gotowy...', progressExtracting: 'Ekstrakcja...', progressTranslating: 'Tłumaczenie...', progressPreparing: 'Przygotowanie ekstrakcji...', progressCleaning: 'Czyszczenie pamięci...', progressProcessing: 'Przetwarzanie...', progressComplete: 'Zakończone!',
+    allDoneNoTr: 'Wszystkie pliki zakończone!', allDoneWithTr: 'Wszystkie pliki (ekstrakcja+tłumaczenie) zakończone! Możesz zamknąć okno.',
+    fileCompleteRemaining: (n) => `Plik zakończony! ${n} plików pozostało w kolejce. Kliknij przycisk Start.`,
+    processingNext: (n) => `Przetwarzanie następnego pliku... (pozostało ${n})`,
+    statusLabel: 'Status',
+    runBtnCount: (n) => `Rozpocznij przetwarzanie ${n} plików`,
+    toastOpenFolder: 'Otwórz folder',
+    downloadingModel: 'Pobieranie modelu',
+    labelTargetLanguage: 'Język docelowy',
+    targetLangNote: 'Stosowane tylko gdy tłumaczenie jest włączone.',
+    apiModalTitle: 'Klucze API tłumaczenia',
+    labelDeeplKey: 'Klucz API DeepL (opcjonalny)',
+    labelOpenaiKey: 'Klucz API OpenAI (opcjonalny)',
+    testConnBtn: 'Test połączenia',
+    saveBtn: 'Zapisz',
+    cancelBtn: 'Anuluj',
+    mymemoryInfoHtml: 'MyMemory można używać za darmo bez klucza API.<br>Dzienny limit to około ~50K znaków na IP (może się zmieniać).<br><br><strong>Instrukcja:</strong><br>• Wprowadź klucze API i przetestuj natychmiast przez "Test połączenia"<br>• Lub najpierw zapisz klucze, potem przetestuj<br>• Obsługiwane testowanie w czasie rzeczywistym bez zapisywania',
+    openaiLinkText: 'Uzyskaj klucz API OpenAI',
+    openaiHelpSuffix: ' (płatny, niski koszt)',
+    deeplPlaceholder: 'Wprowadź klucz API DeepL (Darmowy 500K znaków/miesiąc)',
+    deeplHelpHtml: 'Uzyskaj darmowy klucz z <a href="https://www.deepl.com/pro-api" target="_blank">strony API DeepL</a>. (500K znaków/miesiąc za darmo)',
+    openaiPlaceholder: 'Wprowadź klucz API OpenAI (GPT-5-nano)',
+    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">Uzyskaj klucz API OpenAI</a><br>(GPT-5-nano, płatny - $0.05 wejście / $0.40 wyjście na 1M tokenów)',
+    labelGeminiKey: 'Klucz API Gemini (opcjonalny)',
+    geminiPlaceholder: 'Wprowadź klucz API Gemini (Gemini 3 Flash)',
+    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>(Darmowy: 250 napisów/dzień ~20-30min, Płatny: bez limitu)',
+    togglePasswordShow: 'Pokaż hasło',
+    togglePasswordHide: 'Ukryj hasło',
+    translationGeminiHtml: '<strong>Gemini:</strong> Tłumaczenie Google AI, darmowy klucz API<br><strong>Szybkie</strong> tłumaczenie',
+    queueEmpty: 'Przeciągnij pliki tutaj aby dodać',
+    soundLabel: 'Dźwięk',
+    soundTest: 'Test',
+    settingsBtn: 'Ustawienia',
+    settingsModalTitle: 'Ustawienia',
+    soundSectionTitle: 'Dźwięk powiadomienia',
+    soundEnabled: 'Włącz dźwięk',
+    soundVolume: 'Głośność',
+    apiSectionTitle: 'Klucze API tłumaczenia',
+    dragHandleTooltip: 'Przeciągnij aby zmienić kolejność',
+    clickToCopy: 'Kliknij aby skopiować',
+    fileNameCopied: 'Nazwa pliku skopiowana',
+    pathCopied: 'Ścieżka skopiowana',
+    copyFileName: 'Nazwa pliku',
+    copyPath: 'Ścieżka',
+  },
 };
 
 // 모델 이름 현지화
@@ -1854,14 +1962,25 @@ const MODEL_I18N = {
     'large-v2': 'large-v2 (1550MB) - 精度提升',
     'large-v3': 'large-v3 (1550MB) - 最新版本',
   },
+  pl: {
+    tiny: 'tiny (39MB) - Najszybszy, niska dokładność',
+    base: 'base (74MB) - Szybki, podstawowa dokładność',
+    small: 'small (244MB) - Szybkie przetwarzanie',
+    medium: 'medium (769MB) - Zrównoważony',
+    'large-v3-turbo': 'large-v3-turbo (809MB) - Szybki i dokładny ⭐Zalecany',
+    large: 'large (1550MB) - Wolny, wysoka dokładność',
+    'large-v2': 'large-v2 (1550MB) - Ulepszona dokładność',
+    'large-v3': 'large-v3 (1550MB) - Najnowsza wersja',
+  },
 };
 
 // 언어 이름 현지화 (대상/소스 공통 표시용)
 const LANG_NAMES_I18N = {
-  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', hu: '헝가리어', ar: '아랍어' },
-  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', hu: 'Hungarian', ar: 'Arabic' },
-  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語', hu: 'ハンガリー語', ar: 'アラビア語' },
-  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语', hu: '匈牙利语', ar: '阿拉伯语' },
+  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', hu: '헝가리어', ar: '아랍어', pl: '폴란드어' },
+  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', hu: 'Hungarian', ar: 'Arabic', pl: 'Polish' },
+  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語', hu: 'ハンガリー語', ar: 'アラビア語', pl: 'ポーランド語' },
+  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语', hu: '匈牙利语', ar: '阿拉伯语', pl: '波兰语' },
+  pl: { ko: 'Koreański', en: 'Angielski', ja: 'Japoński', zh: 'Chiński', es: 'Hiszpański', fr: 'Francuski', de: 'Niemiecki', it: 'Włoski', pt: 'Portugalski', ru: 'Rosyjski', hu: 'Węgierski', ar: 'Arabski', pl: 'Polski' },
 };
 
 // 장치/번역 메서드 옵션 현지화
@@ -2428,21 +2547,30 @@ function initUiLanguageDropdown() {
   if (!sel) return;
 
   const apply = (lang) => { applyI18n(lang); };
+  const validLangs = ['ko', 'en', 'ja', 'zh', 'pl'];
 
-  // 저장된 언어 설정 불러오기
-  const savedLang = localStorage.getItem('uiLanguage');
-  if (savedLang && ['ko', 'en', 'ja', 'zh'].includes(savedLang)) {
-    sel.value = savedLang;
-    apply(savedLang);
-  } else {
+  // 저장된 언어 설정 불러오기 (config 파일에서)
+  window.electronAPI.loadApiKeys().then(res => {
+    if (res && res.success && res.keys && res.keys.uiLanguage) {
+      const savedLang = res.keys.uiLanguage;
+      if (validLangs.includes(savedLang)) {
+        sel.value = savedLang;
+        apply(savedLang);
+      }
+    }
+  }).catch(() => {
     apply(sel.value || 'ko');
-  }
+  });
 
-  // 언어 변경 시 저장
-  sel.addEventListener('change', () => {
+  // 언어 변경 시 저장 (config 파일에)
+  sel.addEventListener('change', async () => {
     const newLang = sel.value;
-    localStorage.setItem('uiLanguage', newLang);
     apply(newLang);
+    try {
+      await window.electronAPI.saveApiKeys({ uiLanguage: newLang });
+    } catch (e) {
+      console.warn('[UI Language] Failed to save language preference:', e);
+    }
   });
 }
 

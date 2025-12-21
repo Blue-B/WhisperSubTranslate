@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md)
+English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
 A fast, local desktop app for turning video into subtitles (SRT) and translating them into the language you need. Powered by whisper.cpp for extraction and optional online engines for translation.
 
@@ -82,10 +82,10 @@ API keys and preferences are saved locally on your PC under `app.getPath('userDa
 ## Language support
 
 ### UI Languages
-Korean, English, Japanese, Chinese (4 languages)
+Korean, English, Japanese, Chinese, Polish (5 languages)
 
-### Translation Target Languages (12)
-Korean (ko), English (en), Japanese (ja), Chinese (zh), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Russian (ru), **Hungarian (hu)**, **Arabic (ar)**
+### Translation Target Languages (13)
+Korean (ko), English (en), Japanese (ja), Chinese (zh), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Russian (ru), Hungarian (hu), Arabic (ar), **Polish (pl)**
 
 ### Audio Recognition Languages
 whisper.cpp supports 100+ languages including all major world languages (English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, and many more).
