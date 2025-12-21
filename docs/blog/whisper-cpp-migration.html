@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="WhisperSubTranslate v1.3.0 Update: Migration from faster-whisper to whisper.cpp. No Python required, with millisecond timestamp support.">
+    <meta name="description" content="WhisperSubTranslate v1.3.0 Update: Migration from faster-whisper to whisper.cpp. Smaller package size, millisecond timestamp support.">
     <meta name="keywords" content="whisper.cpp, faster-whisper, subtitle extraction, AI speech recognition, millisecond timestamps">
     <title>whisper.cpp Migration Complete - WhisperSubTranslate Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -440,7 +440,7 @@
             <div class="highlight-box">
                 <strong data-i18n="article.tldr">TL;DR (Summary):</strong>
                 <ul>
-                    <li data-i18n="article.tldr1">No Python installation required - just extract and run</li>
+                    <li data-i18n="article.tldr1">Smaller package size (~100MB vs 2GB+) - faster downloads</li>
                     <li data-i18n="article.tldr2">Millisecond timestamp support - perfect for music videos and karaoke</li>
                     <li data-i18n="article.tldr3">Same Whisper models used - no difference in accuracy</li>
                 </ul>
@@ -449,12 +449,11 @@
             <h2 data-i18n="article.section1.title">Why Did We Change the Engine?</h2>
 
             <h3 data-i18n="article.section1.sub1">Previous Issues: faster-whisper Limitations</h3>
-            <p data-i18n="article.section1.p1">The previous faster-whisper was a Python-based implementation. While it provided excellent performance, there were several issues:</p>
+            <p data-i18n="article.section1.p1">The previous faster-whisper was a Python-based implementation. While it provided excellent performance, there were some areas for improvement:</p>
             <ul>
-                <li data-i18n="article.section1.li1"><strong>Python dependency:</strong> Cannot run without Python installed on user's PC</li>
-                <li data-i18n="article.section1.li2"><strong>Distribution size:</strong> Over 300MB when including Python runtime</li>
-                <li data-i18n="article.section1.li3"><strong>Installation complexity:</strong> Environment setup difficult for regular users</li>
-                <li data-i18n="article.section1.li4"><strong>Policy changes:</strong> Latest features restricted to paid subscribers</li>
+                <li data-i18n="article.section1.li1"><strong>Distribution size:</strong> The bundled package was over 2GB including Python runtime and dependencies</li>
+                <li data-i18n="article.section1.li2"><strong>Developer setup:</strong> Developers needed Python environment for building and testing</li>
+                <li data-i18n="article.section1.li3"><strong>Timestamp precision:</strong> Only second-level timestamps, not ideal for music videos</li>
             </ul>
 
             <h3 data-i18n="article.section1.sub2">Advantages of whisper.cpp</h3>
@@ -480,9 +479,9 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td data-i18n="table.python">Python Required</td>
-                        <td><span class="cross" data-i18n="table.required">Required</span></td>
-                        <td><span class="check" data-i18n="table.notRequired">Not Required</span></td>
+                        <td data-i18n="table.python">Developer Environment</td>
+                        <td>Python</td>
+                        <td>Node.js</td>
                     </tr>
                     <tr>
                         <td data-i18n="table.timestamp">Timestamp Precision</td>
@@ -501,7 +500,7 @@
                     </tr>
                     <tr>
                         <td data-i18n="table.size">Distribution Size</td>
-                        <td>~300MB</td>
+                        <td>~2GB+</td>
                         <td>~100MB</td>
                     </tr>
                     <tr>
