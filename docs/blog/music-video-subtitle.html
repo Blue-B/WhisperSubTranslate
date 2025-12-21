@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Learn how to create perfectly synced lyrics subtitles for music videos using WhisperSubTranslate's millisecond timestamp feature.">
+    <meta name="keywords" content="music video subtitles, lyrics sync, karaoke subtitles, millisecond timestamps, song lyrics">
+    <title>Creating Music Video Lyrics Subtitles - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.8; color: var(--text-primary); background: var(--bg-primary); }
+        nav { position: fixed; top: 0; width: 100%; background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); z-index: 1000; padding: 1rem 2rem; }
+        .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
+        .nav-links a:hover { color: var(--text-primary); }
+        /* Custom Language Selector */
+        .lang-selector { position: relative; }
+        .lang-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px; padding: 0.5rem 0.75rem; color: #ffffff;
+            font-size: 0.875rem; font-family: 'Geist', sans-serif; cursor: pointer; transition: all 0.2s;
+        }
+        .lang-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); }
+        .lang-btn svg { width: 16px; height: 16px; }
+        .lang-dropdown {
+            position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+            background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px; padding: 0.5rem 0; min-width: 140px;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .lang-dropdown a { display: block; padding: 0.5rem 1rem; color: #a1a1a1; text-decoration: none; font-size: 0.875rem; transition: all 0.15s; }
+        .lang-dropdown a:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none; }
+        article { max-width: 800px; margin: 0 auto; padding: 7rem 2rem 4rem; }
+        .article-header { margin-bottom: 3rem; }
+        .category { display: inline-block; background: var(--accent-glow); color: var(--accent); padding: 0.25rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 1rem; }
+        h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+        .meta { color: var(--text-muted); font-size: 0.9rem; }
+        .content h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; }
+        .content h3 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+        .content p { color: var(--text-secondary); margin-bottom: 1.25rem; }
+        .content ul, .content ol { color: var(--text-secondary); padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        .content li { margin-bottom: 0.5rem; }
+        .content strong { color: var(--text-primary); }
+        .code-block { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 1rem 0; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: var(--text-secondary); overflow-x: auto; }
+        .tip-box { background: var(--accent-glow); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+        .tip-box p { margin: 0; }
+        .warning-box { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+        .warning-box p { margin: 0; color: #f59e0b; }
+        .step-box { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0; }
+        .step-number { display: inline-block; background: var(--accent); color: var(--bg-primary); width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 600; margin-right: 0.75rem; }
+        .step-box h4 { display: inline; font-size: 1.1rem; }
+        .step-box p { margin-top: 0.75rem; margin-bottom: 0; padding-left: 2.5rem; }
+        footer { text-align: center; padding: 3rem 2rem; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 4rem; font-size: 0.875rem; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--accent); text-decoration: none; font-weight: 500; margin-bottom: 2rem; }
+        @media (max-width: 640px) { article { padding: 6rem 1.25rem 3rem; } h1 { font-size: 1.75rem; } }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../docs/">Docs</a>
+                <a href="./">Blog</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <a href="./" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to Blog
+        </a>
+
+        <header class="article-header">
+            <span class="category">Tutorial</span>
+            <h1>Creating Music Video Lyrics Subtitles</h1>
+            <p class="meta">July 2024 &bull; 5 min read</p>
+        </header>
+
+        <div class="content">
+            <p>Music videos require precise subtitle timing - even a few hundred milliseconds off can make lyrics feel out of sync. This tutorial shows you how to create perfectly timed lyrics subtitles.</p>
+
+            <h2>Why Music Videos Are Different</h2>
+            <p>Unlike speech, music has:</p>
+            <ul>
+                <li><strong>Faster tempo:</strong> Words come quickly and need precise timing</li>
+                <li><strong>Rhythm dependency:</strong> Subtitles should match the beat</li>
+                <li><strong>Overlapping vocals:</strong> Harmonies and backing vocals</li>
+                <li><strong>Non-speech sounds:</strong> Instrumental breaks, ad-libs</li>
+            </ul>
+
+            <h2>Step-by-Step Process</h2>
+
+            <div class="step-box">
+                <span class="step-number">1</span>
+                <h4>Choose the Right Model</h4>
+                <p>For music, use <strong>large-v3</strong> or <strong>medium</strong>. These models handle singing better than smaller ones. The accuracy difference is significant for musical content.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">2</span>
+                <h4>Specify the Language</h4>
+                <p>Don't use auto-detect for music. Explicitly select the song's language. This dramatically improves accuracy for lyrics.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">3</span>
+                <h4>Extract with Millisecond Timing</h4>
+                <p>WhisperSubTranslate with whisper.cpp provides millisecond-precision timestamps. This is crucial for music sync.</p>
+            </div>
+
+            <div class="step-box">
+                <span class="step-number">4</span>
+                <h4>Review and Adjust</h4>
+                <p>AI transcription of singing isn't perfect. Review the output and manually fix any misheard lyrics. The timing is usually accurate even when words are wrong.</p>
+            </div>
+
+            <h2>Millisecond Timestamps Explained</h2>
+            <p>WhisperSubTranslate uses whisper.cpp which provides precise timing:</p>
+
+            <div class="code-block">
+1
+00:00:05,240 --> 00:00:07,890
+Never gonna give you up
+
+2
+00:00:07,890 --> 00:00:10,450
+Never gonna let you down
+            </div>
+
+            <p>Notice the millisecond precision (,240, ,890, ,450). This level of accuracy is essential for music sync.</p>
+
+            <h2>Tips for Better Results</h2>
+
+            <div class="tip-box">
+                <p><strong>Use clean audio:</strong> If possible, use the official audio track rather than extracting from a video with background noise.</p>
+            </div>
+
+            <h3>Handling Instrumental Sections</h3>
+            <p>Whisper might try to transcribe instrumental sections. You can:</p>
+            <ul>
+                <li>Delete these segments from the SRT file</li>
+                <li>Replace with "[Instrumental]" or "[Music]"</li>
+                <li>Leave empty for cleaner subtitles</li>
+            </ul>
+
+            <h3>Background Vocals</h3>
+            <p>For backing vocals or harmonies, consider:</p>
+            <ul>
+                <li>Only transcribing the main vocal line</li>
+                <li>Using parentheses for backing vocals: (oh yeah)</li>
+                <li>Keeping important harmonies, removing filler</li>
+            </ul>
+
+            <div class="warning-box">
+                <p><strong>Note:</strong> AI may struggle with heavily auto-tuned vocals, screaming, or multiple overlapping voices. Manual correction will be needed.</p>
+            </div>
+
+            <h2>Editing Tips</h2>
+
+            <h3>Adjusting Timing</h3>
+            <p>If subtitles are consistently early or late, you can shift all timestamps. Most video editors and subtitle tools have a "shift" feature.</p>
+
+            <h3>Line Breaks</h3>
+            <p>For better readability, break long lines at natural pauses:</p>
+
+            <div class="code-block">
+1
+00:00:12,100 --> 00:00:16,500
+I've been searching for something
+that I can't quite find
+            </div>
+
+            <h3>Karaoke Style (Advanced)</h3>
+            <p>For karaoke-style subtitles where words highlight as they're sung, you'll need specialized software. WhisperSubTranslate provides the base timing which you can then enhance.</p>
+
+            <h2>Recommended Workflow</h2>
+            <ol>
+                <li>Extract audio from video if needed</li>
+                <li>Process with large-v3 model, specified language</li>
+                <li>Export SRT file</li>
+                <li>Open in subtitle editor (Aegisub, Subtitle Edit)</li>
+                <li>Compare with official lyrics if available</li>
+                <li>Fine-tune timing while watching the video</li>
+                <li>Export final version</li>
+            </ol>
+
+            <div class="tip-box">
+                <p><strong>Pro Tip:</strong> Search for official lyrics online and use them as reference. You can fix the words while keeping WhisperSubTranslate's accurate timing.</p>
+            </div>
+        </div>
+    </article>
+
+    <footer><p>&copy; 2025 WhisperSubTranslate. MIT License.</p></footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

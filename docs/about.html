@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="About WhisperSubTranslate - The story behind the open-source subtitle extraction tool">
+    <title>About - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --text-muted: #666666;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --border: #222222;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; }
+        .back-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--accent); }
+        .back-link svg { width: 16px; height: 16px; }
+
+        .lang-selector { position: relative; margin-left: 1rem; }
+        .lang-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+        .lang-btn svg { width: 14px; height: 14px; }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            min-width: 120px;
+        }
+        .lang-dropdown.active { display: block; }
+        .lang-option {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+        .lang-option:hover { background: var(--bg-tertiary); }
+
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .intro {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+        }
+
+        .story-section {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 16px;
+            margin: 2rem 0;
+            border: 1px solid var(--border);
+        }
+        .story-section h2 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .story-section h2 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+        .story-section p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+        .story-section p:last-child { margin-bottom: 0; }
+        .story-section strong { color: var(--text-primary); }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+
+        .timeline {
+            margin-top: 1.5rem;
+        }
+        .timeline-item {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-left: 1rem;
+            border-left: 2px solid var(--border);
+        }
+        .timeline-date {
+            min-width: 80px;
+            color: var(--accent);
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+        .timeline-content {
+            color: var(--text-secondary);
+        }
+
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .tech-item {
+            background: var(--bg-secondary);
+            padding: 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .tech-item h4 {
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .tech-item h4 svg {
+            width: 16px;
+            height: 16px;
+            color: var(--accent);
+        }
+        .tech-item p {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin: 0;
+        }
+
+        ul {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        li { margin-bottom: 0.5rem; }
+        li strong { color: var(--text-primary); }
+
+        .cta-section {
+            background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+            padding: 2.5rem;
+            border-radius: 16px;
+            margin-top: 3rem;
+            text-align: center;
+        }
+        .cta-section h2 {
+            color: white;
+            margin-top: 0;
+            justify-content: center;
+        }
+        .cta-section h2 svg { color: white; }
+        .cta-section p {
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 1.5rem;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: white;
+            color: var(--accent);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .btn svg { width: 18px; height: 18px; }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover { text-decoration: underline; }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            main { padding: 6rem 1.5rem 3rem; }
+            h1 { font-size: 2rem; }
+            .timeline-item { flex-direction: column; gap: 0.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="./" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div style="display: flex; align-items: center;">
+                <a href="./" class="back-link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    <span data-i18n="nav.home">Home</span>
+                </a>
+                <div class="lang-selector">
+                    <button class="lang-btn" onclick="toggleLangDropdown()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="current-lang">EN</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;">
+                            <path d="M6 9l6 6 6-6"/>
+                        </svg>
+                    </button>
+                    <div class="lang-dropdown" id="lang-dropdown">
+                        <div class="lang-option" onclick="setLanguage('en')">English</div>
+                        <div class="lang-option" onclick="setLanguage('ko')">한국어</div>
+                        <div class="lang-option" onclick="setLanguage('ja')">日本語</div>
+                        <div class="lang-option" onclick="setLanguage('zh')">中文</div>
+                        <div class="lang-option" onclick="setLanguage('es')">Español</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <h1 data-i18n="about.title">The Story Behind WhisperSubTranslate</h1>
+        <p class="intro" data-i18n="about.intro">An open-source project born from the need for accessible, privacy-focused subtitle extraction.</p>
+
+        <div class="story-section">
+            <h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span data-i18n="about.origin.title">How It Started</span>
+            </h2>
+            <p data-i18n="about.origin.p1">WhisperSubTranslate began with a simple goal: <strong>"Make subtitle extraction accessible to everyone."</strong></p>
+            <p data-i18n="about.origin.p2">Existing subtitle tools were either expensive, complicated to use, or required uploading sensitive content to remote servers. We wanted to solve all these problems with a free, offline tool.</p>
+            <p data-i18n="about.origin.p3">When OpenAI released the Whisper model, high-quality speech recognition became possible. We created a desktop app to make this powerful technology accessible to everyone.</p>
+        </div>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20V10M18 20V4M6 20v-4"/>
+            </svg>
+            <span data-i18n="about.timeline.title">Development Timeline</span>
+        </h2>
+        <div class="timeline">
+            <div class="timeline-item">
+                <span class="timeline-date">2025.08</span>
+                <span class="timeline-content" data-i18n="about.timeline.item1">Project started, v1.0 release with Electron UI and faster-whisper</span>
+            </div>
+            <div class="timeline-item">
+                <span class="timeline-date">2025.08</span>
+                <span class="timeline-content" data-i18n="about.timeline.item2">v1.1 release, performance optimization and translation improvements</span>
+            </div>
+            <div class="timeline-item">
+                <span class="timeline-date">2025.10</span>
+                <span class="timeline-content" data-i18n="about.timeline.item3">v1.2 release, bug fixes for timing drift and queue processing</span>
+            </div>
+            <div class="timeline-item">
+                <span class="timeline-date">2025.12</span>
+                <span class="timeline-content" data-i18n="about.timeline.item4">v1.3 release, migrated to whisper.cpp, GPT-5-nano translation</span>
+            </div>
+            <div class="timeline-item">
+                <span class="timeline-date">2025.12</span>
+                <span class="timeline-content" data-i18n="about.timeline.item5">Added large-v3-turbo model, GPU acceleration optimization</span>
+            </div>
+        </div>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 18 22 12 16 6"/>
+                <polyline points="8 6 2 12 8 18"/>
+            </svg>
+            <span data-i18n="about.tech.title">Technology Stack</span>
+        </h2>
+        <div class="tech-stack">
+            <div class="tech-item">
+                <h4>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    whisper.cpp
+                </h4>
+                <p data-i18n="about.tech.whisper">C++ implementation of OpenAI Whisper for fast, efficient speech recognition</p>
+            </div>
+            <div class="tech-item">
+                <h4>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                    </svg>
+                    Electron
+                </h4>
+                <p data-i18n="about.tech.electron">Cross-platform desktop application framework</p>
+            </div>
+            <div class="tech-item">
+                <h4>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    CUDA
+                </h4>
+                <p data-i18n="about.tech.cuda">NVIDIA GPU acceleration for 5-10x faster processing</p>
+            </div>
+            <div class="tech-item">
+                <h4>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="23 7 16 12 23 17 23 7"/>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                    </svg>
+                    ffmpeg
+                </h4>
+                <p data-i18n="about.tech.ffmpeg">Support for various media formats</p>
+            </div>
+        </div>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span data-i18n="about.why.title">Why Open Source?</span>
+        </h2>
+        <p data-i18n="about.why.intro">We believe software should be freely accessible to everyone. By making it open source:</p>
+        <ul>
+            <li data-i18n="about.why.item1">Developers worldwide can contribute improvements</li>
+            <li data-i18n="about.why.item2">You can verify the code and trust the software</li>
+            <li data-i18n="about.why.item3">Anyone can use it without financial burden</li>
+            <li data-i18n="about.why.item4">It serves as educational material for learning</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span data-i18n="about.contribute.title">How to Contribute</span>
+        </h2>
+        <p data-i18n="about.contribute.intro">WhisperSubTranslate is an open-source project. You can contribute in the following ways:</p>
+        <ul>
+            <li><strong data-i18n="about.contribute.bug">Bug Reports:</strong> <span data-i18n="about.contribute.bug.desc">Report issues on GitHub Issues</span></li>
+            <li><strong data-i18n="about.contribute.feature">Feature Suggestions:</strong> <span data-i18n="about.contribute.feature.desc">Share your new ideas</span></li>
+            <li><strong data-i18n="about.contribute.code">Code Contributions:</strong> <span data-i18n="about.contribute.code.desc">Submit pull requests</span></li>
+            <li><strong data-i18n="about.contribute.translation">Translations:</strong> <span data-i18n="about.contribute.translation.desc">Help with multi-language support</span></li>
+            <li><strong data-i18n="about.contribute.docs">Documentation:</strong> <span data-i18n="about.contribute.docs.desc">Write guides and tutorials</span></li>
+        </ul>
+
+        <div class="cta-section">
+            <h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                </svg>
+                <span data-i18n="about.cta.title">Join Us</span>
+            </h2>
+            <p data-i18n="about.cta.text">Thank you for your interest in WhisperSubTranslate. For questions, suggestions, or collaboration opportunities, feel free to reach out.</p>
+            <a href="https://github.com/Blue-B/WhisperSubTranslate" class="btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
+                </svg>
+                <span data-i18n="about.cta.btn">View on GitHub</span>
+            </a>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <script>
+        const translations = {
+            en: {
+                "nav.home": "Home",
+                "about.title": "The Story Behind WhisperSubTranslate",
+                "about.intro": "An open-source project born from the need for accessible, privacy-focused subtitle extraction.",
+                "about.origin.title": "How It Started",
+                "about.origin.p1": "WhisperSubTranslate began with a simple goal: \"Make subtitle extraction accessible to everyone.\"",
+                "about.origin.p2": "Existing subtitle tools were either expensive, complicated to use, or required uploading sensitive content to remote servers. We wanted to solve all these problems with a free, offline tool.",
+                "about.origin.p3": "When OpenAI released the Whisper model, high-quality speech recognition became possible. We created a desktop app to make this powerful technology accessible to everyone.",
+                "about.timeline.title": "Development Timeline",
+                "about.timeline.item1": "Project started, v1.0 release with Electron UI and faster-whisper",
+                "about.timeline.item2": "v1.1 release, performance optimization and translation improvements",
+                "about.timeline.item3": "v1.2 release, bug fixes for timing drift and queue processing",
+                "about.timeline.item4": "v1.3 release, migrated to whisper.cpp, GPT-5-nano translation",
+                "about.timeline.item5": "Added large-v3-turbo model, GPU acceleration optimization",
+                "about.tech.title": "Technology Stack",
+                "about.tech.whisper": "C++ implementation of OpenAI Whisper for fast, efficient speech recognition",
+                "about.tech.electron": "Cross-platform desktop application framework",
+                "about.tech.cuda": "NVIDIA GPU acceleration for 5-10x faster processing",
+                "about.tech.ffmpeg": "Support for various media formats",
+                "about.why.title": "Why Open Source?",
+                "about.why.intro": "We believe software should be freely accessible to everyone. By making it open source:",
+                "about.why.item1": "Developers worldwide can contribute improvements",
+                "about.why.item2": "You can verify the code and trust the software",
+                "about.why.item3": "Anyone can use it without financial burden",
+                "about.why.item4": "It serves as educational material for learning",
+                "about.contribute.title": "How to Contribute",
+                "about.contribute.intro": "WhisperSubTranslate is an open-source project. You can contribute in the following ways:",
+                "about.contribute.bug": "Bug Reports:",
+                "about.contribute.bug.desc": "Report issues on GitHub Issues",
+                "about.contribute.feature": "Feature Suggestions:",
+                "about.contribute.feature.desc": "Share your new ideas",
+                "about.contribute.code": "Code Contributions:",
+                "about.contribute.code.desc": "Submit pull requests",
+                "about.contribute.translation": "Translations:",
+                "about.contribute.translation.desc": "Help with multi-language support",
+                "about.contribute.docs": "Documentation:",
+                "about.contribute.docs.desc": "Write guides and tutorials",
+                "about.cta.title": "Join Us",
+                "about.cta.text": "Thank you for your interest in WhisperSubTranslate. For questions, suggestions, or collaboration opportunities, feel free to reach out.",
+                "about.cta.btn": "View on GitHub"
+            },
+            ko: {
+                "nav.home": "홈으로",
+                "about.title": "WhisperSubTranslate를 만든 이야기",
+                "about.intro": "접근성과 프라이버시를 중시하는 자막 추출 도구를 만들고자 시작된 오픈소스 프로젝트입니다.",
+                "about.origin.title": "프로젝트의 시작",
+                "about.origin.p1": "WhisperSubTranslate는 간단한 목표에서 시작되었습니다: \"누구나 쉽게 자막을 추출할 수 있게 하자.\"",
+                "about.origin.p2": "기존의 자막 추출 도구들은 비싸거나, 사용이 복잡하거나, 개인정보를 서버로 전송해야 했습니다. 우리는 이 모든 문제를 해결하는 무료 오프라인 도구를 만들고 싶었습니다.",
+                "about.origin.p3": "OpenAI의 Whisper 모델이 공개되면서 고품질 음성 인식이 가능해졌고, 이를 일반 사용자도 쉽게 사용할 수 있는 데스크톱 앱으로 만들게 되었습니다.",
+                "about.timeline.title": "개발 연혁",
+                "about.timeline.item1": "프로젝트 시작, v1.0 릴리스 (Electron UI, faster-whisper)",
+                "about.timeline.item2": "v1.1 릴리스, 성능 최적화 및 번역 기능 개선",
+                "about.timeline.item3": "v1.2 릴리스, 타이밍 드리프트 및 큐 처리 버그 수정",
+                "about.timeline.item4": "v1.3 릴리스, whisper.cpp 전환, GPT-5-nano 번역 추가",
+                "about.timeline.item5": "large-v3-turbo 모델 추가, GPU 가속 최적화",
+                "about.tech.title": "기술 스택",
+                "about.tech.whisper": "OpenAI Whisper의 C++ 구현체로 빠르고 효율적인 음성 인식",
+                "about.tech.electron": "크로스 플랫폼 데스크톱 앱 프레임워크",
+                "about.tech.cuda": "NVIDIA GPU 가속으로 5-10배 빠른 처리",
+                "about.tech.ffmpeg": "다양한 미디어 포맷 지원",
+                "about.why.title": "왜 오픈소스인가",
+                "about.why.intro": "우리는 소프트웨어가 누구나 자유롭게 사용할 수 있어야 한다고 믿습니다. 오픈소스로 공개함으로써:",
+                "about.why.item1": "전 세계 개발자들이 함께 개선할 수 있습니다",
+                "about.why.item2": "코드를 직접 확인하여 신뢰할 수 있습니다",
+                "about.why.item3": "경제적 부담 없이 누구나 사용할 수 있습니다",
+                "about.why.item4": "교육 및 학습 목적으로 활용될 수 있습니다",
+                "about.contribute.title": "기여하기",
+                "about.contribute.intro": "WhisperSubTranslate는 오픈소스 프로젝트입니다. 다음과 같은 방법으로 기여하실 수 있습니다:",
+                "about.contribute.bug": "버그 리포트:",
+                "about.contribute.bug.desc": "문제를 발견하면 GitHub Issues에 알려주세요",
+                "about.contribute.feature": "기능 제안:",
+                "about.contribute.feature.desc": "새로운 아이디어가 있으면 공유해주세요",
+                "about.contribute.code": "코드 기여:",
+                "about.contribute.code.desc": "Pull Request를 보내주세요",
+                "about.contribute.translation": "번역:",
+                "about.contribute.translation.desc": "다국어 지원을 위한 번역에 참여해주세요",
+                "about.contribute.docs": "문서화:",
+                "about.contribute.docs.desc": "사용 가이드나 튜토리얼 작성에 참여해주세요",
+                "about.cta.title": "함께 만들어가요",
+                "about.cta.text": "WhisperSubTranslate에 관심을 가져주셔서 감사합니다. 질문, 제안, 또는 협업 제안이 있으시면 언제든 연락주세요.",
+                "about.cta.btn": "GitHub에서 보기"
+            },
+            ja: {
+                "nav.home": "ホームへ",
+                "about.title": "WhisperSubTranslateの物語",
+                "about.intro": "アクセシビリティとプライバシーを重視した字幕抽出ツールを目指して始まったオープンソースプロジェクトです。",
+                "about.origin.title": "プロジェクトの始まり",
+                "about.origin.p1": "WhisperSubTranslateはシンプルな目標から始まりました：「誰もが簡単に字幕を抽出できるようにする。」",
+                "about.origin.p2": "既存の字幕ツールは高価だったり、使い方が複雑だったり、機密コンテンツをリモートサーバーにアップロードする必要がありました。私たちは無料のオフラインツールでこれらすべての問題を解決したいと考えました。",
+                "about.origin.p3": "OpenAIがWhisperモデルをリリースしたことで、高品質な音声認識が可能になりました。この強力な技術を誰もが使えるデスクトップアプリを作成しました。",
+                "about.timeline.title": "開発タイムライン",
+                "about.timeline.item1": "プロジェクト開始、v1.0リリース（Electron UI、faster-whisper）",
+                "about.timeline.item2": "v1.1リリース、パフォーマンス最適化と翻訳機能改善",
+                "about.timeline.item3": "v1.2リリース、タイミングドリフトとキュー処理のバグ修正",
+                "about.timeline.item4": "v1.3リリース、whisper.cpp移行、GPT-5-nano翻訳追加",
+                "about.timeline.item5": "large-v3-turboモデル追加、GPU加速最適化",
+                "about.tech.title": "技術スタック",
+                "about.tech.whisper": "高速で効率的な音声認識のためのOpenAI WhisperのC++実装",
+                "about.tech.electron": "クロスプラットフォームデスクトップアプリケーションフレームワーク",
+                "about.tech.cuda": "5-10倍高速な処理のためのNVIDIA GPU加速",
+                "about.tech.ffmpeg": "様々なメディアフォーマットのサポート",
+                "about.why.title": "なぜオープンソースなのか",
+                "about.why.intro": "私たちはソフトウェアは誰もが自由にアクセスできるべきだと信じています。オープンソースにすることで：",
+                "about.why.item1": "世界中の開発者が改善に貢献できます",
+                "about.why.item2": "コードを確認してソフトウェアを信頼できます",
+                "about.why.item3": "経済的負担なく誰でも使用できます",
+                "about.why.item4": "学習のための教育材料として活用できます",
+                "about.contribute.title": "貢献方法",
+                "about.contribute.intro": "WhisperSubTranslateはオープンソースプロジェクトです。以下の方法で貢献できます：",
+                "about.contribute.bug": "バグ報告：",
+                "about.contribute.bug.desc": "GitHub Issuesで問題を報告してください",
+                "about.contribute.feature": "機能提案：",
+                "about.contribute.feature.desc": "新しいアイデアを共有してください",
+                "about.contribute.code": "コード貢献：",
+                "about.contribute.code.desc": "プルリクエストを送ってください",
+                "about.contribute.translation": "翻訳：",
+                "about.contribute.translation.desc": "多言語サポートにご協力ください",
+                "about.contribute.docs": "ドキュメント：",
+                "about.contribute.docs.desc": "ガイドやチュートリアルを作成してください",
+                "about.cta.title": "参加しませんか",
+                "about.cta.text": "WhisperSubTranslateに関心をお寄せいただきありがとうございます。ご質問、ご提案、またはコラボレーションのご提案がありましたら、お気軽にお問い合わせください。",
+                "about.cta.btn": "GitHubで見る"
+            },
+            zh: {
+                "nav.home": "返回首页",
+                "about.title": "WhisperSubTranslate的故事",
+                "about.intro": "一个致力于提供便捷、注重隐私的字幕提取工具的开源项目。",
+                "about.origin.title": "项目起源",
+                "about.origin.p1": "WhisperSubTranslate始于一个简单的目标：\"让每个人都能轻松提取字幕。\"",
+                "about.origin.p2": "现有的字幕工具要么昂贵，要么使用复杂，要么需要将敏感内容上传到远程服务器。我们想用一个免费的离线工具来解决所有这些问题。",
+                "about.origin.p3": "当OpenAI发布Whisper模型后，高质量的语音识别成为可能。我们创建了一个桌面应用程序，让每个人都能使用这项强大的技术。",
+                "about.timeline.title": "开发时间线",
+                "about.timeline.item1": "项目启动，v1.0发布（Electron UI、faster-whisper）",
+                "about.timeline.item2": "v1.1发布，性能优化和翻译功能改进",
+                "about.timeline.item3": "v1.2发布，修复时间戳漂移和队列处理问题",
+                "about.timeline.item4": "v1.3发布，迁移至whisper.cpp，添加GPT-5-nano翻译",
+                "about.timeline.item5": "添加large-v3-turbo模型，GPU加速优化",
+                "about.tech.title": "技术栈",
+                "about.tech.whisper": "OpenAI Whisper的C++实现，实现快速高效的语音识别",
+                "about.tech.electron": "跨平台桌面应用程序框架",
+                "about.tech.cuda": "NVIDIA GPU加速，处理速度提升5-10倍",
+                "about.tech.ffmpeg": "支持各种媒体格式",
+                "about.why.title": "为什么开源？",
+                "about.why.intro": "我们相信软件应该对每个人免费开放。通过开源：",
+                "about.why.item1": "世界各地的开发者可以贡献改进",
+                "about.why.item2": "您可以验证代码并信任软件",
+                "about.why.item3": "任何人都可以免费使用",
+                "about.why.item4": "它可以作为学习的教育材料",
+                "about.contribute.title": "如何贡献",
+                "about.contribute.intro": "WhisperSubTranslate是一个开源项目。您可以通过以下方式贡献：",
+                "about.contribute.bug": "错误报告：",
+                "about.contribute.bug.desc": "在GitHub Issues上报告问题",
+                "about.contribute.feature": "功能建议：",
+                "about.contribute.feature.desc": "分享您的新想法",
+                "about.contribute.code": "代码贡献：",
+                "about.contribute.code.desc": "提交拉取请求",
+                "about.contribute.translation": "翻译：",
+                "about.contribute.translation.desc": "帮助多语言支持",
+                "about.contribute.docs": "文档：",
+                "about.contribute.docs.desc": "编写指南和教程",
+                "about.cta.title": "加入我们",
+                "about.cta.text": "感谢您对WhisperSubTranslate的关注。如有任何问题、建议或合作意向，请随时联系我们。",
+                "about.cta.btn": "在GitHub上查看"
+            },
+            es: {
+                "nav.home": "Inicio",
+                "about.title": "La Historia de WhisperSubTranslate",
+                "about.intro": "Un proyecto de código abierto nacido de la necesidad de extracción de subtítulos accesible y centrada en la privacidad.",
+                "about.origin.title": "Cómo Empezó",
+                "about.origin.p1": "WhisperSubTranslate comenzó con un objetivo simple: \"Hacer la extracción de subtítulos accesible para todos.\"",
+                "about.origin.p2": "Las herramientas de subtítulos existentes eran caras, complicadas de usar o requerían subir contenido sensible a servidores remotos. Queríamos resolver todos estos problemas con una herramienta gratuita y offline.",
+                "about.origin.p3": "Cuando OpenAI lanzó el modelo Whisper, el reconocimiento de voz de alta calidad se hizo posible. Creamos una aplicación de escritorio para hacer esta poderosa tecnología accesible para todos.",
+                "about.timeline.title": "Cronología de Desarrollo",
+                "about.timeline.item1": "Inicio del proyecto, lanzamiento v1.0 (Electron UI, faster-whisper)",
+                "about.timeline.item2": "Lanzamiento v1.1, optimización de rendimiento y mejoras de traducción",
+                "about.timeline.item3": "Lanzamiento v1.2, correcciones de deriva de tiempo y procesamiento de cola",
+                "about.timeline.item4": "Lanzamiento v1.3, migración a whisper.cpp, traducción GPT-5-nano",
+                "about.timeline.item5": "Añadido modelo large-v3-turbo, optimización de aceleración GPU",
+                "about.tech.title": "Stack Tecnológico",
+                "about.tech.whisper": "Implementación C++ de OpenAI Whisper para reconocimiento de voz rápido y eficiente",
+                "about.tech.electron": "Framework de aplicación de escritorio multiplataforma",
+                "about.tech.cuda": "Aceleración GPU de NVIDIA para procesamiento 5-10x más rápido",
+                "about.tech.ffmpeg": "Soporte para varios formatos de medios",
+                "about.why.title": "¿Por Qué Código Abierto?",
+                "about.why.intro": "Creemos que el software debe ser libremente accesible para todos. Al hacerlo de código abierto:",
+                "about.why.item1": "Desarrolladores de todo el mundo pueden contribuir mejoras",
+                "about.why.item2": "Puedes verificar el código y confiar en el software",
+                "about.why.item3": "Cualquiera puede usarlo sin carga financiera",
+                "about.why.item4": "Sirve como material educativo para aprender",
+                "about.contribute.title": "Cómo Contribuir",
+                "about.contribute.intro": "WhisperSubTranslate es un proyecto de código abierto. Puedes contribuir de las siguientes maneras:",
+                "about.contribute.bug": "Reportes de Errores:",
+                "about.contribute.bug.desc": "Reporta problemas en GitHub Issues",
+                "about.contribute.feature": "Sugerencias de Funciones:",
+                "about.contribute.feature.desc": "Comparte tus nuevas ideas",
+                "about.contribute.code": "Contribuciones de Código:",
+                "about.contribute.code.desc": "Envía pull requests",
+                "about.contribute.translation": "Traducciones:",
+                "about.contribute.translation.desc": "Ayuda con el soporte multiidioma",
+                "about.contribute.docs": "Documentación:",
+                "about.contribute.docs.desc": "Escribe guías y tutoriales",
+                "about.cta.title": "Únete a Nosotros",
+                "about.cta.text": "Gracias por tu interés en WhisperSubTranslate. Para preguntas, sugerencias u oportunidades de colaboración, no dudes en contactarnos.",
+                "about.cta.btn": "Ver en GitHub"
+            }
+        };
+
+        const langNames = { en: 'EN', ko: '한국어', ja: '日本語', zh: '中文', es: 'ES' };
+
+        function setLanguage(lang) {
+            const t = translations[lang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.textContent = t[key];
+            });
+            document.getElementById('current-lang').textContent = langNames[lang];
+            document.getElementById('lang-dropdown').classList.remove('active');
+            localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang;
+        }
+
+        function toggleLangDropdown() {
+            document.getElementById('lang-dropdown').classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.lang-selector')) {
+                document.getElementById('lang-dropdown').classList.remove('active');
+            }
+        });
+
+        const savedLang = localStorage.getItem('lang');
+        const browserLang = navigator.language.split('-')[0];
+        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
+        setLanguage(defaultLang);
+    </script>
+</body>
+</html>

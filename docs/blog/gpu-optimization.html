@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Learn how to use GPU acceleration in WhisperSubTranslate for 5-10x faster subtitle extraction. NVIDIA CUDA optimization guide.">
+    <meta name="keywords" content="GPU acceleration, CUDA, NVIDIA, faster transcription, WhisperSubTranslate optimization">
+    <title>Extract Subtitles 5-10x Faster with GPU Acceleration - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--text-primary); }
+        /* Custom Language Selector */
+        .lang-selector { position: relative; }
+        .lang-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px; padding: 0.5rem 0.75rem; color: #ffffff;
+            font-size: 0.875rem; font-family: 'Geist', sans-serif; cursor: pointer; transition: all 0.2s;
+        }
+        .lang-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); }
+        .lang-btn svg { width: 16px; height: 16px; }
+        .lang-dropdown {
+            position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+            background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px; padding: 0.5rem 0; min-width: 140px;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .lang-dropdown a { display: block; padding: 0.5rem 1rem; color: #a1a1a1; text-decoration: none; font-size: 0.875rem; transition: all 0.15s; }
+        .lang-dropdown a:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none; }
+        article { max-width: 800px; margin: 0 auto; padding: 7rem 2rem 4rem; }
+        .article-header { margin-bottom: 3rem; }
+        .category {
+            display: inline-block;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+        h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+        .meta { color: var(--text-muted); font-size: 0.9rem; }
+        .content h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; }
+        .content h3 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+        .content p { color: var(--text-secondary); margin-bottom: 1.25rem; }
+        .content ul, .content ol { color: var(--text-secondary); padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        .content li { margin-bottom: 0.5rem; }
+        .content strong { color: var(--text-primary); }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        .comparison-table th, .comparison-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison-table th { background: var(--bg-secondary); color: var(--text-primary); font-weight: 600; }
+        .comparison-table td { color: var(--text-secondary); }
+        .highlight { color: var(--accent); font-weight: 600; }
+        .info-box {
+            background: var(--accent-glow);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+        .info-box p { margin: 0; }
+        .warning-box {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+        .warning-box p { margin: 0; color: #f59e0b; }
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+        @media (max-width: 640px) {
+            article { padding: 6rem 1.25rem 3rem; }
+            h1 { font-size: 1.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../docs/">Docs</a>
+                <a href="./">Blog</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <a href="./" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Blog
+        </a>
+
+        <header class="article-header">
+            <span class="category">Tips</span>
+            <h1>Extract Subtitles 5-10x Faster with GPU Acceleration</h1>
+            <p class="meta">October 2024 &bull; 4 min read</p>
+        </header>
+
+        <div class="content">
+            <p>If you have an NVIDIA GPU, you can dramatically speed up subtitle extraction in WhisperSubTranslate. This guide explains how GPU acceleration works and how to get the best performance.</p>
+
+            <h2>CPU vs GPU Performance</h2>
+            <p>The difference between CPU and GPU processing is significant. Here's a real-world comparison extracting subtitles from a 10-minute video:</p>
+
+            <table class="comparison-table">
+                <tr>
+                    <th>Model</th>
+                    <th>CPU (i7-10700)</th>
+                    <th>GPU (RTX 3060)</th>
+                    <th>Speedup</th>
+                </tr>
+                <tr>
+                    <td>tiny</td>
+                    <td>45 seconds</td>
+                    <td>8 seconds</td>
+                    <td class="highlight">5.6x</td>
+                </tr>
+                <tr>
+                    <td>small</td>
+                    <td>2 minutes</td>
+                    <td>15 seconds</td>
+                    <td class="highlight">8x</td>
+                </tr>
+                <tr>
+                    <td>medium</td>
+                    <td>6 minutes</td>
+                    <td>35 seconds</td>
+                    <td class="highlight">10x</td>
+                </tr>
+                <tr>
+                    <td>large-v3</td>
+                    <td>15 minutes</td>
+                    <td>1.5 minutes</td>
+                    <td class="highlight">10x</td>
+                </tr>
+            </table>
+
+            <h2>Requirements for GPU Acceleration</h2>
+            <ul>
+                <li><strong>NVIDIA GPU:</strong> GTX 1060 or higher recommended</li>
+                <li><strong>VRAM:</strong> At least 4GB for small model, 8GB+ for large models</li>
+                <li><strong>Drivers:</strong> Latest NVIDIA drivers installed</li>
+                <li><strong>CUDA:</strong> Automatically included with WhisperSubTranslate</li>
+            </ul>
+
+            <div class="info-box">
+                <p><strong>Good News:</strong> WhisperSubTranslate automatically downloads the CUDA-optimized version of whisper.cpp if you have a compatible GPU. No manual setup required!</p>
+            </div>
+
+            <h2>How to Enable GPU Acceleration</h2>
+            <ol>
+                <li>Open WhisperSubTranslate</li>
+                <li>In the settings, find "Processing Device"</li>
+                <li>Select "GPU (CUDA)" or leave it on "Auto"</li>
+                <li>Start extracting subtitles - GPU will be used automatically</li>
+            </ol>
+
+            <h2>Optimizing GPU Performance</h2>
+            <h3>Choose the Right Model</h3>
+            <p>Larger models provide better accuracy but require more VRAM:</p>
+            <ul>
+                <li><strong>4GB VRAM:</strong> tiny, base, small</li>
+                <li><strong>6GB VRAM:</strong> medium, turbo</li>
+                <li><strong>8GB+ VRAM:</strong> large-v3</li>
+            </ul>
+
+            <h3>Close Other Applications</h3>
+            <p>For best performance, close GPU-intensive applications like games or video editors while processing.</p>
+
+            <h3>Process Multiple Files</h3>
+            <p>WhisperSubTranslate can queue multiple files. GPU processing handles batches efficiently.</p>
+
+            <div class="warning-box">
+                <p><strong>Note:</strong> AMD GPUs are not currently supported. Only NVIDIA GPUs with CUDA are compatible.</p>
+            </div>
+
+            <h2>Troubleshooting</h2>
+            <h3>GPU not detected?</h3>
+            <ul>
+                <li>Update your NVIDIA drivers to the latest version</li>
+                <li>Restart WhisperSubTranslate after driver update</li>
+                <li>Check if your GPU supports CUDA (most GTX 900 series and newer)</li>
+            </ul>
+
+            <h3>Out of memory errors?</h3>
+            <ul>
+                <li>Use a smaller model (small instead of medium)</li>
+                <li>Close other GPU applications</li>
+                <li>Process shorter video segments</li>
+            </ul>
+        </div>
+    </article>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

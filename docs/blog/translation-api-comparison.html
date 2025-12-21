@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Compare translation APIs: DeepL vs MyMemory vs GPT-5-nano vs Gemini. Quality, pricing, and limits analysis for subtitle translation.">
+    <meta name="keywords" content="DeepL, MyMemory, GPT-5-nano, OpenAI, Gemini, translation API, subtitle translation, API comparison">
+    <title>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano vs Gemini - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif; line-height: 1.8; color: var(--text-primary); background: var(--bg-primary); }
+        nav { position: fixed; top: 0; width: 100%; background: rgba(10, 10, 10, 0.8); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); z-index: 1000; padding: 1rem 2rem; }
+        .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.25rem; font-weight: 700; color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links { display: flex; align-items: center; gap: 2rem; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; }
+        .nav-links a:hover { color: var(--text-primary); }
+        /* Custom Language Selector */
+        .lang-selector { position: relative; }
+        .lang-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px; padding: 0.5rem 0.75rem; color: #ffffff;
+            font-size: 0.875rem; font-family: 'Geist', sans-serif; cursor: pointer; transition: all 0.2s;
+        }
+        .lang-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); }
+        .lang-btn svg { width: 16px; height: 16px; }
+        .lang-dropdown {
+            position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+            background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px; padding: 0.5rem 0; min-width: 140px;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .lang-dropdown a { display: block; padding: 0.5rem 1rem; color: #a1a1a1; text-decoration: none; font-size: 0.875rem; transition: all 0.15s; }
+        .lang-dropdown a:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none; }
+        article { max-width: 800px; margin: 0 auto; padding: 7rem 2rem 4rem; }
+        .article-header { margin-bottom: 3rem; }
+        .category { display: inline-block; background: var(--accent-glow); color: var(--accent); padding: 0.25rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; margin-bottom: 1rem; }
+        h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+        .meta { color: var(--text-muted); font-size: 0.9rem; }
+        .content h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; }
+        .content h3 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+        .content p { color: var(--text-secondary); margin-bottom: 1.25rem; }
+        .content ul { color: var(--text-secondary); padding-left: 1.5rem; margin-bottom: 1.25rem; }
+        .content li { margin-bottom: 0.5rem; }
+        .content strong { color: var(--text-primary); }
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+        .comparison-table th, .comparison-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .comparison-table th { background: var(--bg-secondary); color: var(--text-primary); font-weight: 600; }
+        .comparison-table td { color: var(--text-secondary); }
+        .service-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0; }
+        .service-card h3 { margin-top: 0; color: var(--accent); display: flex; align-items: center; gap: 0.5rem; }
+        .service-card .badge { background: var(--accent); color: var(--bg-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+        .pros h4 { color: #22c55e; margin-bottom: 0.5rem; }
+        .cons h4 { color: #ef4444; margin-bottom: 0.5rem; }
+        .pros ul, .cons ul { padding-left: 1.25rem; margin: 0; }
+        .info-box { background: var(--accent-glow); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+        .info-box p { margin: 0; }
+        footer { text-align: center; padding: 3rem 2rem; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 4rem; font-size: 0.875rem; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--accent); text-decoration: none; font-weight: 500; margin-bottom: 2rem; }
+        @media (max-width: 640px) { article { padding: 6rem 1.25rem 3rem; } h1 { font-size: 1.75rem; } .pros-cons { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../docs/">Docs</a>
+                <a href="./">Blog</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <a href="./" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to Blog
+        </a>
+
+        <header class="article-header">
+            <span class="category">Comparison</span>
+            <h1>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano vs Gemini</h1>
+            <p class="meta">December 2025 &bull; 7 min read</p>
+        </header>
+
+        <div class="content">
+            <p>WhisperSubTranslate supports four translation services. Each has its strengths and limitations. This guide helps you choose the right one for your needs.</p>
+
+            <h2>Quick Comparison</h2>
+            <table class="comparison-table">
+                <tr>
+                    <th>Feature</th>
+                    <th>MyMemory</th>
+                    <th>DeepL</th>
+                    <th>GPT-5-nano</th>
+                    <th>Gemini</th>
+                </tr>
+                <tr>
+                    <td>Free Tier</td>
+                    <td>50,000 chars/day</td>
+                    <td>500,000 chars/month</td>
+                    <td>Pay per use ($0.05/1M input)</td>
+                    <td>~250 subs/day free</td>
+                </tr>
+                <tr>
+                    <td>API Key Required</td>
+                    <td>No</td>
+                    <td>Yes</td>
+                    <td>Yes</td>
+                    <td>Yes (Free)</td>
+                </tr>
+                <tr>
+                    <td>Quality</td>
+                    <td>Good</td>
+                    <td>Excellent</td>
+                    <td>Excellent</td>
+                    <td>Excellent</td>
+                </tr>
+                <tr>
+                    <td>Speed</td>
+                    <td>Fast</td>
+                    <td>Fast</td>
+                    <td>Very Fast</td>
+                    <td>Very Fast</td>
+                </tr>
+                <tr>
+                    <td>Context Awareness</td>
+                    <td>Low</td>
+                    <td>High</td>
+                    <td>Very High</td>
+                    <td>Very High</td>
+                </tr>
+            </table>
+
+            <h2>Detailed Analysis</h2>
+
+            <div class="service-card">
+                <h3>MyMemory <span class="badge">FREE</span></h3>
+                <p>A free translation API that's great for getting started. No registration or API key required.</p>
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h4>Pros</h4>
+                        <ul>
+                            <li>Completely free</li>
+                            <li>No API key needed</li>
+                            <li>Easy to start</li>
+                            <li>50,000 chars/day</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h4>Cons</h4>
+                        <ul>
+                            <li>Lower quality</li>
+                            <li>Limited context</li>
+                            <li>Daily limits</li>
+                            <li>Fewer languages</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <h3>DeepL <span class="badge">RECOMMENDED</span></h3>
+                <p>Professional-grade translation with excellent quality. Free tier available with generous limits.</p>
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h4>Pros</h4>
+                        <ul>
+                            <li>Excellent quality</li>
+                            <li>Natural phrasing</li>
+                            <li>500K chars/month free</li>
+                            <li>Fast processing</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h4>Cons</h4>
+                        <ul>
+                            <li>API key required</li>
+                            <li>Registration needed</li>
+                            <li>Limited languages</li>
+                            <li>Paid for heavy use</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <h3>GPT-5-nano <span class="badge">FAST & CHEAP</span></h3>
+                <p>OpenAI's fastest and most affordable GPT-5 model. Optimized for high-throughput tasks like subtitle translation with excellent quality.</p>
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h4>Pros</h4>
+                        <ul>
+                            <li>Very fast processing</li>
+                            <li>Lowest cost ($0.05/1M input)</li>
+                            <li>Great context awareness</li>
+                            <li>100+ languages supported</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h4>Cons</h4>
+                        <ul>
+                            <li>Pay per use only</li>
+                            <li>API key required</li>
+                            <li>Less reasoning depth</li>
+                            <li>OpenAI account needed</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="service-card">
+                <h3>Gemini 3 Flash <span class="badge">FREE API</span></h3>
+                <p>Google's fast and capable AI model. Free API key with generous daily limits, making it an excellent choice for most users.</p>
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h4>Pros</h4>
+                        <ul>
+                            <li>Free API key available</li>
+                            <li>~250 subtitles/day free</li>
+                            <li>Very fast processing</li>
+                            <li>Excellent context awareness</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h4>Cons</h4>
+                        <ul>
+                            <li>API key required</li>
+                            <li>Daily request limits</li>
+                            <li>Google account needed</li>
+                            <li>Paid for heavy use</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Recommendations by Use Case</h2>
+
+            <h3>Casual/Personal Use</h3>
+            <p><strong>Recommended: MyMemory</strong> - Free and easy to start. Good enough for personal videos and informal content.</p>
+
+            <h3>YouTube Creators</h3>
+            <p><strong>Recommended: DeepL</strong> - Professional quality at a reasonable cost. The free tier is usually sufficient for most creators.</p>
+
+            <h3>Professional/Commercial</h3>
+            <p><strong>Recommended: DeepL or GPT-5-nano</strong> - Both offer excellent quality. DeepL for European languages, GPT-5-nano for speed and Asian languages.</p>
+
+            <h3>Movies/TV Shows</h3>
+            <p><strong>Recommended: GPT-5-nano</strong> - Fast processing with good context awareness. Very cost-effective for large subtitle files.</p>
+
+            <div class="info-box">
+                <p><strong>Pro Tip:</strong> Start with MyMemory to test your workflow, then upgrade to DeepL for production content. The quality difference is noticeable but MyMemory is great for drafts.</p>
+            </div>
+
+            <h2>Setting Up Each Service</h2>
+
+            <h3>MyMemory</h3>
+            <p>No setup required! Just select MyMemory in WhisperSubTranslate settings and start translating.</p>
+
+            <h3>DeepL</h3>
+            <ol>
+                <li>Visit <a href="https://www.deepl.com/pro-api" style="color: var(--accent);">deepl.com/pro-api</a></li>
+                <li>Create a free account</li>
+                <li>Copy your API key from the account page</li>
+                <li>Paste it in WhisperSubTranslate settings</li>
+            </ol>
+
+            <h3>GPT-5-nano (OpenAI)</h3>
+            <ol>
+                <li>Visit <a href="https://platform.openai.com/api-keys" style="color: var(--accent);">platform.openai.com/api-keys</a></li>
+                <li>Create an account and add payment method</li>
+                <li>Generate an API key (starts with <code>sk-proj-</code> or <code>sk-</code>)</li>
+                <li>Paste it in WhisperSubTranslate settings</li>
+            </ol>
+
+            <h3>Gemini (Google AI)</h3>
+            <ol>
+                <li>Visit <a href="https://aistudio.google.com/app/apikey" style="color: var(--accent);">Google AI Studio</a></li>
+                <li>Sign in with your Google account</li>
+                <li>Click "Create API key" to generate a free key</li>
+                <li>Paste it in WhisperSubTranslate settings</li>
+            </ol>
+
+            <div class="info-box">
+                <p><strong>Why GPT-5-nano?</strong> It's the fastest and cheapest model in OpenAI's GPT-5 family. Perfect for subtitle translation: $0.05 per 1M input tokens, $0.40 per 1M output tokens. A typical 2-hour movie subtitle costs about $0.05 (less than 100 won) to translate!</p>
+            </div>
+
+            <div class="info-box">
+                <p><strong>Why Gemini?</strong> Free API key with ~250 subtitle lines per day (~20-30 min of video). Google's Gemini 3 Flash model offers excellent quality and speed. Great for casual users who want AI-quality translation without paying!</p>
+            </div>
+        </div>
+    </article>
+
+    <footer><p>&copy; 2025 WhisperSubTranslate. MIT License.</p></footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

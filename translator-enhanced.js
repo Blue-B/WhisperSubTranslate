@@ -113,10 +113,11 @@ class EnhancedSubtitleTranslator {
     this.translationCache = new Map();
     this.currentFileId = null;       // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
     this.lastRequestTime = 0;
-    this.minRequestInterval = 50;    // 100ms → 50ms (2배 빨라짐)
+    this.minRequestInterval = 20;    // 50ms → 20ms (더 빠르게)
     this.maxRetries = 3;             // 번역 실패 최소화를 위해 재시도 횟수 증가
-    this.batchSize = 3;              // 1 → 3 (3개씩 묶어서 처리)
+    this.batchSize = 5;              // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null;          // mainWindow 참조 저장
+    this.geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
   }
 
   // MainWindow에 메시지 전송 헬퍼
@@ -180,11 +181,19 @@ class EnhancedSubtitleTranslator {
           return {
             deepl: config.deepl || '',
             openai: config.openai || '',
+            gemini: config.gemini || '',
             deepseek: config.deepseek || '',
             preferredService: config.preferredService || 'mymemory',
             enableCache: config.enableCache !== false,
             batchTranslation: config.batchTranslation !== false,
-            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency()
+            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
+            uiLanguage: config.uiLanguage || 'ko',
+            // 앱 설정 (모델, 언어, 장치 등)
+            selectedModel: config.selectedModel || '',
+            selectedLanguage: config.selectedLanguage || '',
+            selectedDevice: config.selectedDevice || '',
+            selectedTranslation: config.selectedTranslation || '',
+            selectedTargetLanguage: config.selectedTargetLanguage || ''
           };
         }
       }
@@ -199,50 +208,56 @@ class EnhancedSubtitleTranslator {
     return {
       deepl: '',
       openai: '',
+      gemini: '',
       deepseek: '',
       preferredService: 'mymemory',
       enableCache: true,
       batchTranslation: true,
-      maxConcurrent: this.getOptimalConcurrency()
+      maxConcurrent: this.getOptimalConcurrency(),
+      uiLanguage: 'ko'
     };
   }
 
-  // 저사양 PC 대응 - 시스템 성능에 따른 최적 동시 처리 수
+  // 저사양 PC 대응 - 시스템 성능에 따른 최적 동시 처리 수 (더 공격적으로 설정)
   getOptimalConcurrency() {
     try {
       const os = require('os');
       const totalMemGB = os.totalmem() / 1024 / 1024 / 1024;
       const cpuCount = os.cpus().length;
-      
-      // 메모리 기준 조정
-      let concurrency = 2; // 기본값 (안전한 설정)
-      
-      if (totalMemGB >= 8 && cpuCount >= 4) {
-        concurrency = 4; // 고사양 PC
+
+      // 메모리 기준 조정 (더 공격적으로 설정하여 속도 개선)
+      let concurrency = 3; // 기본값 (2→3)
+
+      if (totalMemGB >= 16 && cpuCount >= 8) {
+        concurrency = 10; // 고사양 PC (4→10)
+      } else if (totalMemGB >= 8 && cpuCount >= 4) {
+        concurrency = 6; // 중고사양 PC (4→6)
       } else if (totalMemGB >= 4 && cpuCount >= 2) {
-        concurrency = 3; // 중사양 PC  
+        concurrency = 4; // 중사양 PC (3→4)
       } else {
-        concurrency = 1; // 저사양 PC (안전 우선)
+        concurrency = 2; // 저사양 PC (1→2)
       }
-      
+
       console.log(`[Performance] Detected: ${totalMemGB.toFixed(1)}GB RAM, ${cpuCount} CPU cores → Max concurrent: ${concurrency}`);
       return concurrency;
-      
+
     } catch (error) {
-      console.warn('[Performance] Failed to detect system specs, using safe default (2)');
-      return 2;
+      console.warn('[Performance] Failed to detect system specs, using safe default (3)');
+      return 3;
     }
   }
 
-  // 서비스별 최적 배치 크기
+  // 서비스별 최적 배치 크기 (더 공격적으로 설정하여 속도 개선)
   getOptimalBatchSize(service) {
     const batchSizes = {
-      'mymemory': 5,   // 무료 서비스 - 많이 묶어서 처리
-      'deepl': 3,      // 유료 API - 중간 크기
-      'chatgpt': 2     // 고급 모델 - 작은 배치 (품질 우선)
+      'mymemory': 10,  // 무료 서비스 - 많이 묶어서 처리 (5→10)
+      'deepl': 8,      // 유료 API - 더 큰 배치 (3→8)
+      'chatgpt': 5,    // 고급 모델 - 중간 배치 (2→5)
+      'gemini': 6,     // Gemini - 중간 배치 (빠른 응답)
+      'offline': 15    // 오프라인 - 가장 큰 배치 (네트워크 없음)
     };
-    
-    return batchSizes[service] || 3; // 기본값
+
+    return batchSizes[service] || 8; // 기본값 3→8
   }
 
   saveApiKeys(keys) {
@@ -309,6 +324,13 @@ class EnhancedSubtitleTranslator {
 
   setCachedTranslation(text, method, targetLang, translation) {
     if (!this.apiKeys.enableCache) return;
+
+    // 빈 번역 결과는 캐시하지 않음
+    if (!translation || translation.trim().length === 0) {
+      console.warn('[Cache] Skipping empty translation cache');
+      return;
+    }
+
     const key = this.getCacheKey(text, method, targetLang);
 
     // LRU: Remove if exists, then add to end (최신으로 갱신)
@@ -342,7 +364,7 @@ class EnhancedSubtitleTranslator {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Enhanced error handling (향상된 에러 처리)
+  // Enhanced error handling (향상된 에러 처리) - 콘솔 + 파일 로그
   logError(context, error) {
     const errorInfo = {
       timestamp: new Date().toISOString(),
@@ -351,6 +373,15 @@ class EnhancedSubtitleTranslator {
       stack: error.stack
     };
     console.error('[Translation Error / 번역 오류]', errorInfo);
+
+    // 파일에도 에러 로그 저장 (디버깅용)
+    try {
+      const logPath = path.join(process.cwd(), 'translation-errors.log');
+      const logEntry = `[${errorInfo.timestamp}] ${context}: ${error.message}\n${error.stack || ''}\n---\n`;
+      fs.appendFileSync(logPath, logEntry, 'utf8');
+    } catch (fileErr) {
+      // 파일 로그 실패 시 무시
+    }
   }
 
   // Translation with retry (재시도 로직)
@@ -435,7 +466,9 @@ class EnhancedSubtitleTranslator {
     }
   }
 
-  // 개선된 OpenAI 번역
+  // OpenAI 번역 (GPT-5-nano - 2025년 최신 모델, 고처리량/저비용)
+  // 참고: https://platform.openai.com/docs/models
+  // GPT-5 모델은 temperature, top_p 파라미터를 지원하지 않음
   async translateWithChatGPT(text, targetLang = '한국어') {
     if (!this.apiKeys.openai) {
       throw new Error('OpenAI API 키가 설정되지 않았습니다.');
@@ -444,21 +477,23 @@ class EnhancedSubtitleTranslator {
     // 캐시 확인
     const cached = this.getCachedTranslation(text, 'chatgpt', targetLang);
     if (cached) {
-      console.log('[ChatGPT Cache Hit]', { 
-        text: text.substring(0, 30) + '...', 
-        cached: true 
+      console.log('[GPT-5-nano Cache Hit]', {
+        text: text.substring(0, 30) + '...',
+        cached: true
       });
       return cached;
     }
 
-    console.log(`[ChatGPT Translation] Target: "${targetLang}" | Text: "${text.substring(0, 50)}..." | Model: gpt-4o-mini`);
+    console.log(`[GPT-5-nano] "${text.substring(0, 40)}..." → ${targetLang}`);
 
     await this.throttleRequest();
 
     try {
       const startTime = Date.now();
+
+      // GPT-5 모델: Chat Completions API 사용
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: 'gpt-4o-mini',
+        model: 'gpt-5-nano',
         messages: [
           {
             role: 'system',
@@ -501,8 +536,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
           }
         ],
-        temperature: 0.4,
-        max_tokens: Math.min(1500, text.length * 3)
+        max_completion_tokens: Math.max(100, Math.min(1500, text.length * 3))
       }, {
         headers: {
           'Authorization': `Bearer ${this.apiKeys.openai}`,
@@ -511,31 +545,188 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         timeout: 30000
       });
 
-      let translation = response.data.choices[0].message.content.trim();
-      
+      // Chat Completions API 응답 검증
+      const choices = response.data?.choices;
+      const finishReason = choices?.[0]?.finish_reason;
+      const rawContent = choices?.[0]?.message?.content;
+
+      // finish_reason 확인 - 응답이 잘렸는지 체크
+      if (finishReason === 'length') {
+        console.warn('[GPT-5-nano Warning] Response truncated due to max_completion_tokens');
+      }
+
+      // 응답 검증 - 빈 응답이면 에러 발생시켜 폴백 서비스로 넘김
+      if (!rawContent || rawContent.trim().length === 0) {
+        const errorInfo = {
+          original: text.substring(0, 40) + '...',
+          finishReason,
+          responsePreview: JSON.stringify(response.data).substring(0, 300),
+          hasChoices: !!choices,
+          choicesLength: choices?.length
+        };
+        console.error('[GPT-5-nano Empty Response]', errorInfo);
+
+        // 파일에 에러 로그 저장 (디버깅용)
+        this.logError('GPT-5-nano 빈 응답', new Error(JSON.stringify(errorInfo)));
+
+        throw new Error(`GPT-5-nano returned empty translation (finish_reason: ${finishReason})`);
+      }
+
+      let translation = rawContent.trim();
+
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
-      
+
       const duration = Date.now() - startTime;
-      
-      console.log('[ChatGPT Success]', { 
+
+      console.log('[GPT-5-nano OK]', {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
-        duration: `${duration}ms`,
-        chars: text.length,
-        model: 'gpt-4o-mini'
+        time: `${duration}ms`
       });
-      
+
       // 결과 캐시
       this.setCachedTranslation(text, 'chatgpt', targetLang, translation);
       return translation;
     } catch (error) {
-      console.error('[ChatGPT Translation Failed]', {
-        text: text.substring(0, 50) + '...',
-        error: error.message,
-        model: 'gpt-4o-mini'
+      // API 에러 상세 로그
+      console.error('[GPT-5-nano Error]', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        code: error.code
       });
-      this.logError('ChatGPT 번역 실패', error);
+      this.logError('GPT-5-nano 번역 실패', error);
+      throw error;
+    }
+  }
+
+  // Google Gemini 번역 (Gemini 3 Flash - 무료 사용 가능)
+  // 참고: https://ai.google.dev/gemini-api
+  async translateWithGemini(text, targetLang = '한국어') {
+    if (!this.apiKeys.gemini) {
+      throw new Error('Gemini API 키가 설정되지 않았습니다.');
+    }
+
+    // 캐시 확인
+    const cached = this.getCachedTranslation(text, 'gemini', targetLang);
+    if (cached) {
+      console.log('[Gemini Cache Hit]', {
+        text: text.substring(0, 30) + '...',
+        cached: true
+      });
+      return cached;
+    }
+
+    console.log(`[Gemini] "${text.substring(0, 40)}..." → ${targetLang}`);
+
+    await this.throttleRequest();
+
+    try {
+      const startTime = Date.now();
+
+      // Gemini API 호출 (REST API) - system instruction 분리
+      const response = await axios.post(
+        `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
+        {
+          system_instruction: {
+            parts: [{
+              text: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
+
+CRITICAL RULES:
+1. ALWAYS translate to ${targetLang} - never use English or other languages
+2. PRESERVE proper names, character names, and place names as-is (don't translate names like "John", "Tokyo", "NASA")
+3. Use natural, conversational ${targetLang} that native speakers would actually say
+4. Consider the context and tone of the scene
+5. TRANSLATE ALL CONTENT including profanity, sexual content, violence, and adult themes naturally without censorship or filtering
+
+TRANSLATION GUIDELINES:
+- Character names: Keep original but integrate naturally with ${targetLang} grammar
+- Place names: Keep original but use natural ${targetLang} grammar and particles
+- Brand names: Keep original with natural ${targetLang} grammar
+- Technical terms: Use commonly accepted ${targetLang} terms
+- Cultural references: Adapt naturally for ${targetLang} audience
+- Emotions/tone: Match the speaker's mood (angry, sad, joking, etc.)
+- Slang/informal speech: Use natural ${targetLang} equivalents
+- Formal speech: Use appropriate formal ${targetLang}
+- Profanity/vulgar language: Translate to equivalent ${targetLang} expressions naturally
+- Sexual/adult content: Translate directly and naturally without euphemisms
+- Violence/strong language: Maintain intensity and meaning in ${targetLang}
+- Grammar: Use proper ${targetLang} grammar rules and particles with foreign names
+
+STYLE ADAPTATION:
+- Movies/Dramas: Emotional, natural dialogue including mature themes
+- Action scenes: Short, punchy translations with strong language
+- Comedy: Preserve humor and timing, including adult humor
+- Romance: Emotional, heartfelt tone including intimate content
+- Adult/R-rated content: Direct, unfiltered translation
+- Documentaries: Clear, informative style
+- Thriller/Horror: Maintain intensity and impact
+
+IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`
+            }]
+          },
+          contents: [{
+            parts: [{
+              text: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: Math.max(100, Math.min(1500, text.length * 3))
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      // Gemini API 응답 구조 처리
+      const candidates = response.data?.candidates;
+      const rawContent = candidates?.[0]?.content?.parts?.[0]?.text;
+
+      // 응답 검증
+      if (!rawContent || rawContent.trim().length === 0) {
+        const errorInfo = {
+          original: text.substring(0, 40) + '...',
+          responsePreview: JSON.stringify(response.data).substring(0, 300),
+          hasCandidates: !!candidates
+        };
+        console.error('[Gemini Empty Response]', errorInfo);
+        this.logError('Gemini 빈 응답', new Error(JSON.stringify(errorInfo)));
+        throw new Error('Gemini returned empty translation');
+      }
+
+      let translation = rawContent.trim();
+
+      // 따옴표 제거
+      translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
+
+      const duration = Date.now() - startTime;
+
+      console.log('[Gemini OK]', {
+        original: text.substring(0, 30) + '...',
+        translated: translation.substring(0, 30) + '...',
+        time: `${duration}ms`
+      });
+
+      // 결과 캐시
+      this.setCachedTranslation(text, 'gemini', targetLang, translation);
+      return translation;
+    } catch (error) {
+      // API 에러 상세 로그
+      console.error('[Gemini Error]', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        code: error.code
+      });
+      this.logError('Gemini 번역 실패', error);
       throw error;
     }
   }
@@ -580,7 +771,8 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       { name: preferredMethod, lang: targetLanguage },
       { name: 'mymemory', lang: targetLanguage === 'KO' ? 'ko' : targetLanguage },
       { name: 'deepl', lang: targetLanguage === 'ko' ? 'KO' : targetLanguage },
-      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
+      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' },
+      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
     ];
 
     const uniqueMethods = methods.filter((m, i, a) => a.findIndex(x => x.name === m.name) === i);
@@ -598,6 +790,11 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           case 'chatgpt':
             if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
               return await this.translateWithRetry((t) => this.translateWithChatGPT(t, m.lang), text);
+            }
+            break;
+          case 'gemini':
+            if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
+              return await this.translateWithRetry((t) => this.translateWithGemini(t, m.lang), text);
             }
             break;
         }
@@ -619,7 +816,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   }
 
   mapToHumanLang(targetLang) {
-    // ChatGPT에 사람이 읽는 언어명 전달 (더 명확한 지시)
+    // GPT-5-nano에 사람이 읽는 언어명 전달 (더 명확한 지시)
     const map = {
       ko: 'Korean (한국어)',
       en: 'English',
@@ -904,6 +1101,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     const results = {
       deepl: false,
       openai: false,
+      gemini: false,
       mymemory: true, // 항상 사용 가능
       errors: {},
       usage: {}
@@ -913,23 +1111,23 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     if (this.apiKeys.deepl && this.apiKeys.deepl.trim()) {
       try {
         const translator = new deepl.Translator(this.apiKeys.deepl.trim());
-        
+
         // 사용량 정보 조회만으로 충분한 검증 (빠르고 확실함)
         const usage = await translator.getUsage();
-        
+
         // 사용량 정보가 정상적으로 반환되면 유효한 키
         results.deepl = true;
         results.usage.deepl = {
           character: usage.character,
           limit: usage.character ? usage.character.limit : null
         };
-        
-        console.log('[DeepL Validation Success]', { 
+
+        console.log('[DeepL Validation Success]', {
           hasUsage: !!usage,
           characterCount: usage?.character?.count,
-          characterLimit: usage?.character?.limit 
+          characterLimit: usage?.character?.limit
         });
-        
+
       } catch (error) {
         console.error('[DeepL Validation Error]', error);
         results.deepl = false;
@@ -940,13 +1138,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       results.errors.deepl = errorMsg.noApiKey;
     }
 
-    // OpenAI 검사
+    // OpenAI 검사 (GPT-5-nano - 2025년 최신 모델)
+    // GPT-5 모델: Chat Completions API 지원, max_completion_tokens 사용
     if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
       try {
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-          model: 'gpt-4o-mini',
+          model: 'gpt-5-nano',
           messages: [{ role: 'user', content: 'hi' }],
-          max_tokens: 5
+          max_completion_tokens: 5
         }, {
           headers: {
             'Authorization': `Bearer ${this.apiKeys.openai.trim()}`,
@@ -956,11 +1155,37 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         });
         results.openai = true;
       } catch (error) {
+        console.error('[OpenAI Validation] 실패:', error.response?.data || error.message);
         results.errors.openai = this.classifyError(error, 'openai', 'ko');
       }
     } else {
       const errorMsg = this.getErrorMessages('ko');
       results.errors.openai = errorMsg.noApiKey;
+    }
+
+    // Gemini 검사 (Gemini 3 Flash)
+    if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
+      try {
+        const response = await axios.post(
+          `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini.trim()}`,
+          {
+            contents: [{ parts: [{ text: 'hi' }] }],
+            generationConfig: { maxOutputTokens: 5 }
+          },
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
+          }
+        );
+        results.gemini = true;
+        console.log('[Gemini Validation Success]');
+      } catch (error) {
+        console.error('[Gemini Validation] 실패:', error.response?.data || error.message);
+        results.errors.gemini = this.classifyError(error, 'gemini', 'ko');
+      }
+    } else {
+      const errorMsg = this.getErrorMessages('ko');
+      results.errors.gemini = errorMsg.noApiKey;
     }
 
     return results;

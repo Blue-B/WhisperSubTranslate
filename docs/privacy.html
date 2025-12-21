@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate Privacy Policy - Your data stays on your device">
+    <title>Privacy Policy - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #22c55e;
+            --warning: #f59e0b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* Language Selector */
+        .lang-selector {
+            position: relative;
+        }
+        .lang-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.5rem 0.875rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+        .lang-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .lang-dropdown {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.5rem;
+            min-width: 140px;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        .lang-dropdown.active { display: block; }
+        .lang-option {
+            display: block;
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            text-align: left;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .lang-option:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        /* Main Content */
+        main {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+        }
+
+        .page-header {
+            margin-bottom: 3rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.03em;
+        }
+        .last-updated {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: var(--accent-glow);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+        .highlight-box svg {
+            width: 24px;
+            height: 24px;
+            color: var(--accent);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .highlight-box strong {
+            color: var(--accent);
+        }
+        .highlight-box p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        /* Sections */
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 3rem;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2 svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        ul {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        li strong {
+            color: var(--text-primary);
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        a:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            main { padding: 6rem 1.5rem 3rem; }
+            h1 { font-size: 2rem; }
+            .nav-links { gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="./" class="logo">WhisperSubTranslate</a>
+            <div class="nav-links">
+                <a href="./" data-i18n="nav.home">Home</a>
+                <a href="./blog/" data-i18n="nav.blog">Blog</a>
+                <a href="./docs/" data-i18n="nav.docs">Docs</a>
+                <div class="lang-selector">
+                    <button class="lang-btn" onclick="toggleLangDropdown()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span id="current-lang">EN</span>
+                    </button>
+                    <div class="lang-dropdown" id="lang-dropdown">
+                        <div class="lang-option" onclick="setLanguage('en')">English</div>
+                        <div class="lang-option" onclick="setLanguage('ko')">한국어</div>
+                        <div class="lang-option" onclick="setLanguage('ja')">日本語</div>
+                        <div class="lang-option" onclick="setLanguage('zh')">中文</div>
+                        <div class="lang-option" onclick="setLanguage('es')">Español</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div class="page-header">
+            <h1 data-i18n="privacy.title">Privacy Policy</h1>
+            <p class="last-updated" data-i18n="privacy.updated">Last updated: December 2025</p>
+        </div>
+
+        <div class="highlight-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M9 12l2 2 4-4"/>
+            </svg>
+            <div>
+                <strong data-i18n="privacy.summary.title">Key Summary:</strong>
+                <p data-i18n="privacy.summary.text">WhisperSubTranslate does not collect user data. Speech recognition runs locally on your computer. Translation (optional) sends subtitle text to external APIs.</p>
+            </div>
+        </div>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+            </svg>
+            <span data-i18n="privacy.section1.title">1. Information We Collect</span>
+        </h2>
+        <p data-i18n="privacy.section1.intro">WhisperSubTranslate desktop application does <strong>NOT</strong> collect:</p>
+        <ul>
+            <li data-i18n="privacy.section1.item1">Personal identification information (name, email, phone, etc.)</li>
+            <li data-i18n="privacy.section1.item2">Video/audio files you process</li>
+            <li data-i18n="privacy.section1.item3">Generated subtitle content</li>
+            <li data-i18n="privacy.section1.item4">Usage patterns or analytics data</li>
+            <li data-i18n="privacy.section1.item5">IP addresses or location information</li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <path d="M8 21h8M12 17v4"/>
+            </svg>
+            <span data-i18n="privacy.section2.title">2. How Data is Processed</span>
+        </h2>
+        <p data-i18n="privacy.section2.intro">WhisperSubTranslate performs subtitle extraction locally on your device:</p>
+        <ul>
+            <li><strong data-i18n="privacy.section2.item1.title">Local Processing:</strong> <span data-i18n="privacy.section2.item1.text">All speech recognition and subtitle generation is performed directly on your computer.</span></li>
+            <li><strong data-i18n="privacy.section2.item2.title">File Storage:</strong> <span data-i18n="privacy.section2.item2.text">Generated subtitle files are only saved to locations you specify.</span></li>
+            <li><strong data-i18n="privacy.section2.item3.title">No Servers:</strong> <span data-i18n="privacy.section2.item3.text">No data is transmitted to external servers.</span></li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span data-i18n="privacy.section3.title">3. Translation Feature</span>
+        </h2>
+        <p data-i18n="privacy.section3.intro">When using the translation feature, extracted subtitle text may be sent to translation API providers:</p>
+        <ul>
+            <li><strong>DeepL:</strong> <a href="https://www.deepl.com/privacy" target="_blank" rel="noopener">DeepL Privacy Policy</a></li>
+            <li><strong>MyMemory:</strong> <a href="https://mymemory.translated.net/doc/spec.php" target="_blank" rel="noopener">MyMemory Service</a></li>
+            <li><strong>GPT-5-nano (OpenAI):</strong> <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">OpenAI Privacy Policy</a></li>
+        </ul>
+        <p data-i18n="privacy.section3.note">Translation API usage is optional and requires you to enter your own API key.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <span data-i18n="privacy.section4.title">4. Website Visits</span>
+        </h2>
+        <p data-i18n="privacy.section4.intro">When visiting this website:</p>
+        <ul>
+            <li><strong>GitHub Pages:</strong> <span data-i18n="privacy.section4.item1">Hosted on GitHub's servers, subject to GitHub's privacy policy.</span></li>
+            <li><strong data-i18n="privacy.section4.item2.title">Cookies:</strong> <span data-i18n="privacy.section4.item2.text">Only minimal cookies required for essential functionality.</span></li>
+            <li><strong data-i18n="privacy.section4.item3.title">Analytics:</strong> <span data-i18n="privacy.section4.item3.text">Google Analytics may be used; only anonymized data is collected.</span></li>
+        </ul>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            </svg>
+            <span data-i18n="privacy.section5.title">5. Third-Party Services</span>
+        </h2>
+        <p data-i18n="privacy.section5.intro">The application uses the following open-source technologies:</p>
+        <ul>
+            <li>whisper.cpp - C++ implementation of OpenAI Whisper</li>
+            <li>Electron - Desktop application framework</li>
+            <li>ffmpeg - Audio/video processing</li>
+        </ul>
+        <p data-i18n="privacy.section5.note">All these components run locally on your computer.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span data-i18n="privacy.section6.title">6. Children's Privacy</span>
+        </h2>
+        <p data-i18n="privacy.section6.text">WhisperSubTranslate is not directed at children under 13. We do not knowingly collect personal information from children under 13.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            <span data-i18n="privacy.section7.title">7. Changes</span>
+        </h2>
+        <p data-i18n="privacy.section7.text">This privacy policy may be updated as needed. Significant changes will be announced on this page.</p>
+
+        <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <path d="M22 6l-10 7L2 6"/>
+            </svg>
+            <span data-i18n="privacy.section8.title">8. Contact</span>
+        </h2>
+        <p data-i18n="privacy.section8.text">If you have questions about this privacy policy, please contact us through GitHub Issues:</p>
+        <p><a href="https://github.com/Blue-B/WhisperSubTranslate/issues">GitHub Issues</a></p>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <script>
+        const translations = {
+            en: {
+                "nav.home": "Home",
+                "nav.blog": "Blog",
+                "nav.docs": "Docs",
+                "privacy.title": "Privacy Policy",
+                "privacy.updated": "Last updated: December 2025",
+                "privacy.summary.title": "Key Summary:",
+                "privacy.summary.text": "WhisperSubTranslate does not collect user data. Speech recognition runs locally on your computer. Translation (optional) sends subtitle text to external APIs.",
+                "privacy.section1.title": "1. Information We Collect",
+                "privacy.section1.intro": "WhisperSubTranslate desktop application does NOT collect:",
+                "privacy.section1.item1": "Personal identification information (name, email, phone, etc.)",
+                "privacy.section1.item2": "Video/audio files you process",
+                "privacy.section1.item3": "Generated subtitle content",
+                "privacy.section1.item4": "Usage patterns or analytics data",
+                "privacy.section1.item5": "IP addresses or location information",
+                "privacy.section2.title": "2. How Data is Processed",
+                "privacy.section2.intro": "WhisperSubTranslate performs subtitle extraction locally on your device:",
+                "privacy.section2.item1.title": "Local Processing:",
+                "privacy.section2.item1.text": "All speech recognition and subtitle generation is performed directly on your computer.",
+                "privacy.section2.item2.title": "File Storage:",
+                "privacy.section2.item2.text": "Generated subtitle files are only saved to locations you specify.",
+                "privacy.section2.item3.title": "No Servers:",
+                "privacy.section2.item3.text": "No data is transmitted to external servers.",
+                "privacy.section3.title": "3. Translation Feature",
+                "privacy.section3.intro": "When using the translation feature, extracted subtitle text may be sent to translation API providers:",
+                "privacy.section3.note": "Translation API usage is optional and requires you to enter your own API key.",
+                "privacy.section4.title": "4. Website Visits",
+                "privacy.section4.intro": "When visiting this website:",
+                "privacy.section4.item1": "Hosted on GitHub's servers, subject to GitHub's privacy policy.",
+                "privacy.section4.item2.title": "Cookies:",
+                "privacy.section4.item2.text": "Only minimal cookies required for essential functionality.",
+                "privacy.section4.item3.title": "Analytics:",
+                "privacy.section4.item3.text": "Google Analytics may be used; only anonymized data is collected.",
+                "privacy.section5.title": "5. Third-Party Services",
+                "privacy.section5.intro": "The application uses the following open-source technologies:",
+                "privacy.section5.note": "All these components run locally on your computer.",
+                "privacy.section6.title": "6. Children's Privacy",
+                "privacy.section6.text": "WhisperSubTranslate is not directed at children under 13. We do not knowingly collect personal information from children under 13.",
+                "privacy.section7.title": "7. Changes",
+                "privacy.section7.text": "This privacy policy may be updated as needed. Significant changes will be announced on this page.",
+                "privacy.section8.title": "8. Contact",
+                "privacy.section8.text": "If you have questions about this privacy policy, please contact us through GitHub Issues:"
+            },
+            ko: {
+                "nav.home": "홈",
+                "nav.blog": "블로그",
+                "nav.docs": "문서",
+                "privacy.title": "개인정보처리방침",
+                "privacy.updated": "최종 수정일: 2025년 12월",
+                "privacy.summary.title": "한눈에 보기:",
+                "privacy.summary.text": "WhisperSubTranslate는 사용자 데이터를 수집하지 않아요. 음성 인식은 내 PC에서만 처리되고, 번역 기능을 쓸 때만 자막 텍스트가 외부 API로 전송돼요.",
+                "privacy.section1.title": "1. 수집하는 정보",
+                "privacy.section1.intro": "WhisperSubTranslate 앱은 다음 정보를 수집하지 않습니다:",
+                "privacy.section1.item1": "개인 식별 정보 (이름, 이메일, 전화번호 등)",
+                "privacy.section1.item2": "처리하는 영상/오디오 파일",
+                "privacy.section1.item3": "생성된 자막 내용",
+                "privacy.section1.item4": "사용 패턴이나 분석 데이터",
+                "privacy.section1.item5": "IP 주소나 위치 정보",
+                "privacy.section2.title": "2. 데이터 처리 방식",
+                "privacy.section2.intro": "WhisperSubTranslate는 자막 추출을 내 PC에서 처리해요:",
+                "privacy.section2.item1.title": "로컬 처리:",
+                "privacy.section2.item1.text": "음성 인식과 자막 생성은 전부 내 컴퓨터에서 직접 이루어져요.",
+                "privacy.section2.item2.title": "파일 저장:",
+                "privacy.section2.item2.text": "만든 자막 파일은 내가 지정한 폴더에만 저장돼요.",
+                "privacy.section2.item3.title": "서버 미사용:",
+                "privacy.section2.item3.text": "어떤 데이터도 외부 서버로 전송되지 않아요.",
+                "privacy.section3.title": "3. 번역 기능",
+                "privacy.section3.intro": "번역 기능을 사용하면 자막 텍스트가 번역 API 서비스로 전송될 수 있어요:",
+                "privacy.section3.note": "번역 API 사용은 선택이고, 직접 API 키를 입력해야 해요.",
+                "privacy.section4.title": "4. 웹사이트 방문",
+                "privacy.section4.intro": "이 웹사이트 방문 시:",
+                "privacy.section4.item1": "GitHub 서버에서 호스팅되며 GitHub 개인정보처리방침이 적용돼요.",
+                "privacy.section4.item2.title": "쿠키:",
+                "privacy.section4.item2.text": "필수 기능에 필요한 최소한의 쿠키만 사용해요.",
+                "privacy.section4.item3.title": "분석:",
+                "privacy.section4.item3.text": "Google Analytics를 사용할 수 있고, 익명 데이터만 수집돼요.",
+                "privacy.section5.title": "5. 사용하는 기술",
+                "privacy.section5.intro": "앱에서 사용하는 오픈소스 기술:",
+                "privacy.section5.note": "이 기술들은 모두 내 컴퓨터에서 로컬로 실행돼요.",
+                "privacy.section6.title": "6. 아동 개인정보",
+                "privacy.section6.text": "WhisperSubTranslate는 13세 미만 아동을 대상으로 하지 않아요. 13세 미만의 개인정보를 의도적으로 수집하지 않습니다.",
+                "privacy.section7.title": "7. 변경 사항",
+                "privacy.section7.text": "이 방침은 필요에 따라 업데이트될 수 있어요. 중요한 변경이 있으면 이 페이지에서 알려드릴게요.",
+                "privacy.section8.title": "8. 문의",
+                "privacy.section8.text": "개인정보처리방침에 대해 궁금한 점이 있으면 GitHub Issues로 문의해 주세요:"
+            },
+            ja: {
+                "nav.home": "ホーム",
+                "nav.blog": "ブログ",
+                "nav.docs": "ドキュメント",
+                "privacy.title": "プライバシーポリシー",
+                "privacy.updated": "最終更新日：2025年12月",
+                "privacy.summary.title": "ポイント：",
+                "privacy.summary.text": "WhisperSubTranslateはユーザーデータを収集しません。音声認識は自分のPCで処理され、翻訳機能を使う時だけ字幕テキストが外部APIに送られます。",
+                "privacy.section1.title": "1. 収集する情報",
+                "privacy.section1.intro": "WhisperSubTranslateアプリは以下の情報を収集しません：",
+                "privacy.section1.item1": "個人情報（名前、メール、電話番号など）",
+                "privacy.section1.item2": "処理する動画・音声ファイル",
+                "privacy.section1.item3": "作成した字幕の内容",
+                "privacy.section1.item4": "使用パターンや分析データ",
+                "privacy.section1.item5": "IPアドレスや位置情報",
+                "privacy.section2.title": "2. データの処理方法",
+                "privacy.section2.intro": "WhisperSubTranslateの字幕抽出は自分のPCで行われます：",
+                "privacy.section2.item1.title": "ローカル処理：",
+                "privacy.section2.item1.text": "音声認識と字幕作成はすべて自分のパソコンで直接処理されます。",
+                "privacy.section2.item2.title": "ファイル保存：",
+                "privacy.section2.item2.text": "作成した字幕ファイルは指定したフォルダにのみ保存されます。",
+                "privacy.section2.item3.title": "サーバー不使用：",
+                "privacy.section2.item3.text": "外部サーバーにデータが送られることはありません。",
+                "privacy.section3.title": "3. 翻訳機能について",
+                "privacy.section3.intro": "翻訳機能を使うと、字幕テキストが翻訳APIサービスに送られます：",
+                "privacy.section3.note": "翻訳APIの使用は任意で、自分でAPIキーを入力する必要があります。",
+                "privacy.section4.title": "4. ウェブサイト訪問時",
+                "privacy.section4.intro": "このウェブサイト訪問時：",
+                "privacy.section4.item1": "GitHubのサーバーでホスティングされ、GitHubのプライバシーポリシーが適用されます。",
+                "privacy.section4.item2.title": "Cookie：",
+                "privacy.section4.item2.text": "必要最低限のCookieのみ使用しています。",
+                "privacy.section4.item3.title": "分析：",
+                "privacy.section4.item3.text": "Google Analyticsを使用することがあり、匿名データのみ収集されます。",
+                "privacy.section5.title": "5. 使用している技術",
+                "privacy.section5.intro": "アプリで使用しているオープンソース技術：",
+                "privacy.section5.note": "これらはすべて自分のパソコンでローカルに動作します。",
+                "privacy.section6.title": "6. 子供のプライバシー",
+                "privacy.section6.text": "WhisperSubTranslateは13歳未満の子供を対象としていません。13歳未満の個人情報を意図的に収集することはありません。",
+                "privacy.section7.title": "7. 変更について",
+                "privacy.section7.text": "このポリシーは必要に応じて更新されることがあります。重要な変更があればこのページでお知らせします。",
+                "privacy.section8.title": "8. お問い合わせ",
+                "privacy.section8.text": "プライバシーポリシーについて質問があれば、GitHub Issuesからお問い合わせください："
+            },
+            zh: {
+                "nav.home": "首页",
+                "nav.blog": "博客",
+                "nav.docs": "文档",
+                "privacy.title": "隐私政策",
+                "privacy.updated": "最后更新：2025年12月",
+                "privacy.summary.title": "要点：",
+                "privacy.summary.text": "WhisperSubTranslate不收集任何用户数据。语音识别在你自己的电脑上运行，只有使用翻译功能时字幕文本才会发送到外部API。",
+                "privacy.section1.title": "1. 收集的信息",
+                "privacy.section1.intro": "WhisperSubTranslate应用不收集以下信息：",
+                "privacy.section1.item1": "个人信息（姓名、邮箱、电话等）",
+                "privacy.section1.item2": "你处理的视频/音频文件",
+                "privacy.section1.item3": "生成的字幕内容",
+                "privacy.section1.item4": "使用习惯或分析数据",
+                "privacy.section1.item5": "IP地址或位置信息",
+                "privacy.section2.title": "2. 数据处理方式",
+                "privacy.section2.intro": "WhisperSubTranslate的字幕提取在你的电脑上完成：",
+                "privacy.section2.item1.title": "本地处理：",
+                "privacy.section2.item1.text": "语音识别和字幕生成全部在你自己的电脑上进行。",
+                "privacy.section2.item2.title": "文件保存：",
+                "privacy.section2.item2.text": "生成的字幕文件只保存在你指定的位置。",
+                "privacy.section2.item3.title": "不用服务器：",
+                "privacy.section2.item3.text": "不会向任何外部服务器传输数据。",
+                "privacy.section3.title": "3. 翻译功能",
+                "privacy.section3.intro": "使用翻译功能时，字幕文本会发送到翻译API服务：",
+                "privacy.section3.note": "翻译API是可选的，需要你自己输入API密钥。",
+                "privacy.section4.title": "4. 网站访问",
+                "privacy.section4.intro": "访问本网站时：",
+                "privacy.section4.item1": "网站托管在GitHub服务器，适用GitHub隐私政策。",
+                "privacy.section4.item2.title": "Cookie：",
+                "privacy.section4.item2.text": "只使用必要功能所需的最少Cookie。",
+                "privacy.section4.item3.title": "分析：",
+                "privacy.section4.item3.text": "可能使用Google Analytics，只收集匿名数据。",
+                "privacy.section5.title": "5. 使用的技术",
+                "privacy.section5.intro": "应用使用的开源技术：",
+                "privacy.section5.note": "这些技术都在你自己的电脑上本地运行。",
+                "privacy.section6.title": "6. 儿童隐私",
+                "privacy.section6.text": "WhisperSubTranslate不面向13岁以下儿童，我们不会故意收集13岁以下儿童的个人信息。",
+                "privacy.section7.title": "7. 变更说明",
+                "privacy.section7.text": "本隐私政策可能会更新。有重要变更时会在这个页面通知。",
+                "privacy.section8.title": "8. 联系我们",
+                "privacy.section8.text": "如果对本隐私政策有疑问，请通过GitHub Issues联系我们："
+            },
+            es: {
+                "nav.home": "Inicio",
+                "nav.blog": "Blog",
+                "nav.docs": "Documentos",
+                "privacy.title": "Política de Privacidad",
+                "privacy.updated": "Última actualización: Diciembre 2025",
+                "privacy.summary.title": "En resumen:",
+                "privacy.summary.text": "WhisperSubTranslate no recopila datos de usuario. El reconocimiento de voz funciona en tu propio equipo, y solo cuando usas la traducción se envía el texto a APIs externas.",
+                "privacy.section1.title": "1. Información que recopilamos",
+                "privacy.section1.intro": "WhisperSubTranslate NO recopila:",
+                "privacy.section1.item1": "Información personal (nombre, correo, teléfono, etc.)",
+                "privacy.section1.item2": "Tus archivos de video/audio",
+                "privacy.section1.item3": "El contenido de los subtítulos",
+                "privacy.section1.item4": "Patrones de uso o datos analíticos",
+                "privacy.section1.item5": "Direcciones IP o ubicación",
+                "privacy.section2.title": "2. Cómo se procesan los datos",
+                "privacy.section2.intro": "WhisperSubTranslate extrae los subtítulos en tu propio equipo:",
+                "privacy.section2.item1.title": "Procesamiento local:",
+                "privacy.section2.item1.text": "El reconocimiento de voz y la generación de subtítulos se hacen directamente en tu ordenador.",
+                "privacy.section2.item2.title": "Guardado de archivos:",
+                "privacy.section2.item2.text": "Los subtítulos se guardan solo donde tú elijas.",
+                "privacy.section2.item3.title": "Sin servidores:",
+                "privacy.section2.item3.text": "No se envía ningún dato a servidores externos.",
+                "privacy.section3.title": "3. Función de traducción",
+                "privacy.section3.intro": "Al usar la traducción, el texto de los subtítulos se envía a servicios de API:",
+                "privacy.section3.note": "El uso de APIs de traducción es opcional y requiere que introduzcas tu propia clave API.",
+                "privacy.section4.title": "4. Visitas al sitio web",
+                "privacy.section4.intro": "Al visitar este sitio:",
+                "privacy.section4.item1": "Está alojado en GitHub, aplicándose su política de privacidad.",
+                "privacy.section4.item2.title": "Cookies:",
+                "privacy.section4.item2.text": "Solo usamos las cookies mínimas necesarias.",
+                "privacy.section4.item3.title": "Análisis:",
+                "privacy.section4.item3.text": "Puede usarse Google Analytics, recopilando solo datos anónimos.",
+                "privacy.section5.title": "5. Tecnologías utilizadas",
+                "privacy.section5.intro": "La app usa estas tecnologías de código abierto:",
+                "privacy.section5.note": "Todas funcionan localmente en tu ordenador.",
+                "privacy.section6.title": "6. Privacidad de menores",
+                "privacy.section6.text": "WhisperSubTranslate no está dirigido a menores de 13 años. No recopilamos información personal de menores de 13 años de forma intencionada.",
+                "privacy.section7.title": "7. Cambios",
+                "privacy.section7.text": "Esta política puede actualizarse. Los cambios importantes se anunciarán en esta página.",
+                "privacy.section8.title": "8. Contacto",
+                "privacy.section8.text": "Si tienes dudas sobre esta política de privacidad, contacta con nosotros a través de GitHub Issues:"
+            }
+        };
+
+        const langNames = { en: 'EN', ko: '한국어', ja: '日本語', zh: '中文', es: 'ES' };
+
+        function setLanguage(lang) {
+            const t = translations[lang];
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (t[key]) el.textContent = t[key];
+            });
+            document.getElementById('current-lang').textContent = langNames[lang];
+            document.getElementById('lang-dropdown').classList.remove('active');
+            localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang;
+        }
+
+        function toggleLangDropdown() {
+            document.getElementById('lang-dropdown').classList.toggle('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.lang-selector')) {
+                document.getElementById('lang-dropdown').classList.remove('active');
+            }
+        });
+
+        // Initialize
+        const savedLang = localStorage.getItem('lang');
+        const browserLang = navigator.language.split('-')[0];
+        const defaultLang = savedLang || (translations[browserLang] ? browserLang : 'en');
+        setLanguage(defaultLang);
+    </script>
+</body>
+</html>

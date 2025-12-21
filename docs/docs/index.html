@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate Documentation - Installation, usage guide, and advanced features">
+    <title>Documentation - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --code-bg: #161616;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+        .nav-link:hover { color: var(--accent); }
+        .nav-link.active { color: var(--accent); }
+
+        /* Custom Language Selector */
+        .lang-selector { position: relative; }
+        .lang-btn {
+            display: flex; align-items: center; gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px; padding: 0.5rem 0.75rem; color: #ffffff;
+            font-size: 0.875rem; font-family: 'Geist', sans-serif; cursor: pointer; transition: all 0.2s;
+        }
+        .lang-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.3); }
+        .lang-btn svg { width: 16px; height: 16px; }
+        .lang-dropdown {
+            position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+            background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px; padding: 0.5rem 0; min-width: 140px;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s; z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .lang-dropdown a { display: block; padding: 0.5rem 1rem; color: #a1a1a1; text-decoration: none; font-size: 0.875rem; transition: all 0.15s; }
+        .lang-dropdown a:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none; }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 6rem 2rem 4rem;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 3rem;
+        }
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 5rem;
+            height: fit-content;
+            max-height: calc(100vh - 6rem);
+            overflow-y: auto;
+        }
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+        .sidebar h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+        .sidebar ul {
+            list-style: none;
+        }
+        .sidebar li { margin-bottom: 0.25rem; }
+        .sidebar a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: block;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .sidebar a:hover {
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+        }
+        .sidebar a.active {
+            color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        main {
+            min-width: 0;
+        }
+        main h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fff 0%, #a1a1a1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .intro {
+            font-size: 1.125rem;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        section {
+            margin-bottom: 4rem;
+        }
+        h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-top: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        h2 svg {
+            width: 24px;
+            height: 24px;
+            color: var(--accent);
+        }
+        h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        ul, ol {
+            color: var(--text-secondary);
+            padding-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        li { margin-bottom: 0.5rem; }
+        li strong { color: var(--text-primary); }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: var(--accent);
+        }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            overflow-x: auto;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-secondary);
+        }
+
+        .info-box {
+            background: var(--accent-glow);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .info-box svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .info-box p { margin: 0; }
+
+        .warning-box {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+        .warning-box svg {
+            width: 20px;
+            height: 20px;
+            color: var(--warning);
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .warning-box p { margin: 0; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: var(--bg-secondary);
+        }
+        td {
+            color: var(--text-secondary);
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        a:hover { text-decoration: underline; }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 600px) {
+            nav { padding: 1rem; }
+            .container { padding: 5rem 1rem 2rem; }
+            main h1 { font-size: 2rem; }
+            h2 { font-size: 1.25rem; }
+            .nav-links { gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="../" class="nav-link" data-i18n="nav.home">Home</a>
+                <a href="../blog/" class="nav-link" data-i18n="nav.blog">Blog</a>
+                <a href="./" class="nav-link active">Docs</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.getting-started">Getting Started</h3>
+                <ul>
+                    <li><a href="#installation" class="active" data-i18n="docs.sidebar.installation">Installation</a></li>
+                    <li><a href="#quickstart" data-i18n="docs.sidebar.quickstart">Quick Start</a></li>
+                    <li><a href="#requirements" data-i18n="docs.sidebar.requirements">System Requirements</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.features">Features</h3>
+                <ul>
+                    <li><a href="#models" data-i18n="docs.sidebar.models">Whisper Models</a></li>
+                    <li><a href="#formats" data-i18n="docs.sidebar.formats">Output Formats</a></li>
+                    <li><a href="#translation" data-i18n="docs.sidebar.translation">Translation</a></li>
+                    <li><a href="#gpu" data-i18n="docs.sidebar.gpu">GPU Acceleration</a></li>
+                </ul>
+            </div>
+            <div class="sidebar-section">
+                <h3 data-i18n="docs.sidebar.advanced">Advanced</h3>
+                <ul>
+                    <li><a href="#cli" data-i18n="docs.sidebar.cli">Command Line</a></li>
+                    <li><a href="#data-storage" data-i18n="docs.sidebar.data-storage">Data Storage</a></li>
+                    <li><a href="#troubleshooting" data-i18n="docs.sidebar.troubleshooting">Troubleshooting</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <main>
+            <h1 data-i18n="docs.title">Documentation</h1>
+            <p class="intro" data-i18n="docs.intro">Complete guide to WhisperSubTranslate - from installation to advanced features.</p>
+
+            <section id="installation">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span data-i18n="docs.installation.title">Installation</span>
+                </h2>
+                <h3 data-i18n="docs.installation.windows">Windows (Portable)</h3>
+                <ol>
+                    <li data-i18n="docs.installation.step1">Download the latest .zip file from GitHub Releases</li>
+                    <li data-i18n="docs.installation.step2">Extract the ZIP file to your desired location</li>
+                    <li data-i18n="docs.installation.step3">Run WhisperSubTranslate.exe</li>
+                </ol>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.installation.note">The application includes all necessary components (whisper.cpp, ffmpeg). No additional installation required.</p>
+                </div>
+            </section>
+
+            <section id="quickstart">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span data-i18n="docs.quickstart.title">Quick Start</span>
+                </h2>
+                <ol>
+                    <li data-i18n="docs.quickstart.step1">Launch WhisperSubTranslate</li>
+                    <li data-i18n="docs.quickstart.step2">Drag and drop your video/audio file or click "Select File"</li>
+                    <li data-i18n="docs.quickstart.step3">Select the Whisper model (small recommended for most users)</li>
+                    <li data-i18n="docs.quickstart.step4">Choose the source language (or select "Auto Detect")</li>
+                    <li data-i18n="docs.quickstart.step5">Click "Extract Subtitles" and wait for processing</li>
+                    <li data-i18n="docs.quickstart.step6">Save the generated subtitle file</li>
+                </ol>
+            </section>
+
+            <section id="requirements">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                    </svg>
+                    <span data-i18n="docs.requirements.title">System Requirements</span>
+                </h2>
+                <table>
+                    <tr>
+                        <th data-i18n="docs.requirements.component">Component</th>
+                        <th data-i18n="docs.requirements.minimum">Minimum</th>
+                        <th data-i18n="docs.requirements.recommended">Recommended</th>
+                    </tr>
+                    <tr>
+                        <td>OS</td>
+                        <td>Windows 10</td>
+                        <td>Windows 10/11</td>
+                    </tr>
+                    <tr>
+                        <td>RAM</td>
+                        <td>4GB</td>
+                        <td>8GB+</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.requirements.storage">Storage</td>
+                        <td>2GB</td>
+                        <td>5GB+</td>
+                    </tr>
+                    <tr>
+                        <td>GPU</td>
+                        <td data-i18n="docs.requirements.optional">Optional</td>
+                        <td>NVIDIA GTX 1060+</td>
+                    </tr>
+                </table>
+            </section>
+
+            <section id="models">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    <span data-i18n="docs.models.title">Whisper Models</span>
+                </h2>
+                <p data-i18n="docs.models.intro">WhisperSubTranslate supports various Whisper models with different accuracy and speed trade-offs:</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                    <span data-i18n="docs.models.source">Source:</span>
+                    <a href="https://github.com/ggerganov/whisper.cpp" target="_blank" rel="noopener">whisper.cpp GitHub</a> -
+                    <span data-i18n="docs.models.sourceNote">VRAM requirements are lower than PyTorch Whisper due to GGML optimization</span>
+                </p>
+                <table>
+                    <tr>
+                        <th data-i18n="docs.models.model">Model</th>
+                        <th data-i18n="docs.models.size">Size</th>
+                        <th data-i18n="docs.models.vram">VRAM</th>
+                        <th data-i18n="docs.models.speed">Speed</th>
+                    </tr>
+                    <tr>
+                        <td>tiny</td>
+                        <td>75MB</td>
+                        <td>~1GB</td>
+                        <td data-i18n="docs.models.fastest">Fastest</td>
+                    </tr>
+                    <tr>
+                        <td>base</td>
+                        <td>142MB</td>
+                        <td>~1GB</td>
+                        <td data-i18n="docs.models.fast">Fast</td>
+                    </tr>
+                    <tr>
+                        <td>small</td>
+                        <td>466MB</td>
+                        <td>~2GB</td>
+                        <td data-i18n="docs.models.balanced">Balanced</td>
+                    </tr>
+                    <tr>
+                        <td>medium</td>
+                        <td>1.5GB</td>
+                        <td>~4GB</td>
+                        <td data-i18n="docs.models.accurate">Accurate</td>
+                    </tr>
+                    <tr>
+                        <td>large</td>
+                        <td>3GB</td>
+                        <td>~5GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
+                        <td>large-v2</td>
+                        <td>3GB</td>
+                        <td>~5GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
+                        <td>large-v3</td>
+                        <td>3GB</td>
+                        <td>~5GB</td>
+                        <td data-i18n="docs.models.best">Best Quality</td>
+                    </tr>
+                    <tr>
+                        <td>large-v3-turbo</td>
+                        <td>809MB</td>
+                        <td>~4GB</td>
+                        <td data-i18n="docs.models.turbo">Fast & Accurate ⭐</td>
+                    </tr>
+                </table>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.models.recommendation">For most users, the "small" or "large-v3-turbo" model provides the best balance of speed and accuracy.</p>
+                </div>
+
+                <h3 style="margin-top: 2rem;" data-i18n="docs.models.byHardware">Model Selection by Hardware</h3>
+                <table>
+                    <tr>
+                        <th data-i18n="docs.models.hardware">Hardware</th>
+                        <th data-i18n="docs.models.recommended">Recommended</th>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.models.cpuOnly">CPU Only / Integrated Graphics</td>
+                        <td>tiny, base</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.models.lowRam">Low RAM (4GB or less)</td>
+                        <td>tiny</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.models.midRam">8GB RAM (CPU mode)</td>
+                        <td>small</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.models.gpu4gb">GPU 4GB VRAM</td>
+                        <td>small, medium, large-v3-turbo ⭐</td>
+                    </tr>
+                    <tr>
+                        <td data-i18n="docs.models.gpu6gb">GPU 6GB+ VRAM</td>
+                        <td data-i18n="docs.models.anyModel">Any model (including large-v3)</td>
+                    </tr>
+                </table>
+                <div class="info-box" style="margin-top: 1rem;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.models.cpuTip">For CPU-only users: Start with "tiny" or "base" for faster processing. "small" is usable but slower.</p>
+                </div>
+            </section>
+
+            <section id="formats">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <path d="M14 2v6h6M16 13H8M16 17H8"/>
+                    </svg>
+                    <span data-i18n="docs.formats.title">Output Formats</span>
+                </h2>
+                <p data-i18n="docs.formats.intro">WhisperSubTranslate generates subtitles in the most compatible format:</p>
+                <ul>
+                    <li><strong>SRT</strong> - <span data-i18n="docs.formats.srt">Most widely compatible format, works with all video players. The app automatically generates SRT files with millisecond-precision timestamps.</span></li>
+                </ul>
+                <p data-i18n="docs.formats.note">Note: The underlying whisper.cpp engine supports additional formats (VTT, TXT, JSON) via command line, but the app interface focuses on SRT for maximum compatibility.</p>
+            </section>
+
+            <section id="translation">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span data-i18n="docs.translation.title">Translation</span>
+                </h2>
+                <p data-i18n="docs.translation.intro">WhisperSubTranslate can translate your subtitles using external APIs:</p>
+                <h3>DeepL</h3>
+                <ol>
+                    <li data-i18n="docs.translation.deepl1">Create an account at deepl.com</li>
+                    <li data-i18n="docs.translation.deepl2">Get your API key from the account settings</li>
+                    <li data-i18n="docs.translation.deepl3">Enter the API key in WhisperSubTranslate settings</li>
+                </ol>
+                <h3>MyMemory (Free)</h3>
+                <ol>
+                    <li data-i18n="docs.translation.mymemory1">No API key required for basic usage</li>
+                    <li data-i18n="docs.translation.mymemory2">Select MyMemory as translation service in settings</li>
+                    <li data-i18n="docs.translation.mymemory3">Free tier available with daily limits</li>
+                </ol>
+                <h3>GPT-5-nano (OpenAI)</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">Pricing: $0.05 input / $0.40 output per 1M tokens</p>
+                <ol>
+                    <li data-i18n="docs.translation.chatgpt1">Create an account at openai.com</li>
+                    <li data-i18n="docs.translation.chatgpt2">Get your API key from the API settings</li>
+                    <li data-i18n="docs.translation.chatgpt3">Enter the API key in WhisperSubTranslate settings</li>
+                </ol>
+                <h3>Gemini 3 Flash (Google)</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">Free: 250 subs/day (~20-30min video), Paid: unlimited</p>
+                <ol>
+                    <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a></li>
+                    <li>Create an API key (Google account required)</li>
+                    <li>Enter the API key in WhisperSubTranslate settings</li>
+                </ol>
+                <div class="warning-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <p data-i18n="docs.translation.warning">Translation APIs may incur costs based on usage. Check the pricing of each service.</p>
+                </div>
+            </section>
+
+            <section id="gpu">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                    <span data-i18n="docs.gpu.title">GPU Acceleration</span>
+                </h2>
+                <p data-i18n="docs.gpu.intro">GPU acceleration can dramatically speed up subtitle extraction. WhisperSubTranslate supports NVIDIA CUDA.</p>
+                <h3 data-i18n="docs.gpu.requirements">Requirements</h3>
+                <ul>
+                    <li data-i18n="docs.gpu.req1">NVIDIA GPU (GTX 1060 or higher recommended)</li>
+                    <li data-i18n="docs.gpu.req2">Latest NVIDIA drivers</li>
+                    <li data-i18n="docs.gpu.req3">CUDA Toolkit (included with drivers)</li>
+                </ul>
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.gpu.note">GPU acceleration can provide 5-10x faster processing compared to CPU-only mode.</p>
+                </div>
+            </section>
+
+            <section id="cli">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 17 10 11 4 5"/>
+                        <line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                    <span data-i18n="docs.cli.title">Command Line</span>
+                </h2>
+                <p data-i18n="docs.cli.intro">For advanced users, the underlying whisper.cpp can be used directly from the command line:</p>
+                <pre><code>whisper-cli.exe -m _models/ggml-small.bin -l auto input.wav</code></pre>
+                <h3 data-i18n="docs.cli.options">Common Options</h3>
+                <ul>
+                    <li><code>-m</code> - <span data-i18n="docs.cli.model">Model path</span></li>
+                    <li><code>-l</code> - <span data-i18n="docs.cli.language">Source language (auto, en, ko, ja, etc.)</span></li>
+                    <li><code>-osrt</code> - <span data-i18n="docs.cli.osrt">Output SRT format</span></li>
+                    <li><code>-ml</code> - <span data-i18n="docs.cli.ml">Maximum segment length in ms</span></li>
+                </ul>
+            </section>
+
+            <section id="data-storage">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <path d="M2 15h10"/>
+                        <path d="M9 18l3-3-3-3"/>
+                    </svg>
+                    <span data-i18n="docs.storage.title">Data Storage</span>
+                </h2>
+                <p data-i18n="docs.storage.intro">WhisperSubTranslate stores your settings and API keys locally on your computer. This data is never uploaded to any server.</p>
+
+                <h3 data-i18n="docs.storage.location">Storage Location</h3>
+                <p data-i18n="docs.storage.locationDesc">All settings are stored in your Windows AppData folder:</p>
+                <pre><code>%APPDATA%\whispersubtranslate\translation-config-encrypted.json</code></pre>
+                <p data-i18n="docs.storage.locationExample">Typical path:</p>
+                <pre><code>C:\Users\[YourUsername]\AppData\Roaming\whispersubtranslate\</code></pre>
+
+                <h3 data-i18n="docs.storage.whatStored">What is Stored</h3>
+                <ul>
+                    <li data-i18n="docs.storage.item1"><strong>API Keys</strong> - DeepL, OpenAI, Google Gemini keys (encrypted with AES)</li>
+                    <li data-i18n="docs.storage.item2"><strong>App Settings</strong> - Selected model, language, device, translation service</li>
+                    <li data-i18n="docs.storage.item3"><strong>UI Preferences</strong> - Interface language</li>
+                </ul>
+
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.storage.security">Your API keys are encrypted before storage. The settings file is stored outside the project folder and will NOT be uploaded when you share the project on GitHub.</p>
+                </div>
+
+                <h3 data-i18n="docs.storage.reset">Reset Settings</h3>
+                <p data-i18n="docs.storage.resetDesc">To reset all settings to defaults, delete the config folder:</p>
+                <ol>
+                    <li data-i18n="docs.storage.reset1">Close WhisperSubTranslate</li>
+                    <li data-i18n="docs.storage.reset2">Press <code>Win + R</code>, type <code>%APPDATA%</code> and press Enter</li>
+                    <li data-i18n="docs.storage.reset3">Delete the <code>whispersubtranslate</code> folder</li>
+                    <li data-i18n="docs.storage.reset4">Restart the application</li>
+                </ol>
+
+                <h3 data-i18n="docs.storage.backup">Backup Settings</h3>
+                <p data-i18n="docs.storage.backupDesc">To backup your settings (including API keys), copy the entire <code>whispersubtranslate</code> folder from AppData to a safe location.</p>
+
+                <div class="warning-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <p data-i18n="docs.storage.backupWarning">Keep your backup secure! The file contains your encrypted API keys.</p>
+                </div>
+            </section>
+
+            <section id="troubleshooting">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span data-i18n="docs.troubleshooting.title">Troubleshooting</span>
+                </h2>
+                <h3 data-i18n="docs.troubleshooting.q1">App won't start</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a1.1">Make sure you have Windows 10 or later</li>
+                    <li data-i18n="docs.troubleshooting.a1.2">Try running as administrator</li>
+                    <li data-i18n="docs.troubleshooting.a1.3">Check if antivirus is blocking the application</li>
+                </ul>
+                <h3 data-i18n="docs.troubleshooting.q2">Poor accuracy</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a2.1">Try a larger model (medium or large-v3)</li>
+                    <li data-i18n="docs.troubleshooting.a2.2">Make sure the audio is clear with minimal background noise</li>
+                    <li data-i18n="docs.troubleshooting.a2.3">Specify the source language instead of using auto-detect</li>
+                </ul>
+                <h3 data-i18n="docs.troubleshooting.q3">GPU not detected</h3>
+                <ul>
+                    <li data-i18n="docs.troubleshooting.a3.1">Update NVIDIA drivers to the latest version</li>
+                    <li data-i18n="docs.troubleshooting.a3.2">Verify GPU compatibility (CUDA 11.x support required)</li>
+                    <li data-i18n="docs.troubleshooting.a3.3">Restart the application after driver update</li>
+                </ul>
+            </section>
+        </main>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. MIT License.</p>
+    </footer>
+
+    <!-- Smooth scroll for sidebar links -->
+    <script>
+        document.querySelectorAll('.sidebar a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+    </script>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

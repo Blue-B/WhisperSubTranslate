@@ -77,6 +77,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   translateText: (data) => {
     return ipcRenderer.invoke('translate-text', data);
   },
+
+  // 외부 링크 열기 (기본 브라우저에서)
+  openExternal: (url) => {
+    return ipcRenderer.invoke('open-external', url);
+  },
+
+  // 앱 경로 반환 (리소스 접근용)
+  getAppPath: () => {
+    return ipcRenderer.invoke('get-app-path');
+  },
+
+  // 오디오 파일을 base64 data URL로 가져오기
+  getAudioData: (filename) => {
+    return ipcRenderer.invoke('get-audio-data', filename);
+  },
   
   
   // 안전한 파일 경로 추출 (개선된 버전)
@@ -92,21 +107,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     try {
       if (webUtils && webUtils.getPathForFile) {
         const filePath = webUtils.getPathForFile(file);
-        console.log('✅ webUtils.getPathForFile success:', filePath);
+        console.log('[OK] webUtils.getPathForFile success:', filePath);
         return filePath;
       }
     } catch (error) {
-      console.error('❌ webUtils.getPathForFile failed:', error);
+      console.error('[ERROR] webUtils.getPathForFile failed:', error);
     }
     
     // 방법 2: 직접 file.path 접근 (폴백)
     if (file.path && typeof file.path === 'string' && file.path.trim()) {
-      console.log('✅ Using file.path fallback:', file.path);
+      console.log('[OK] Using file.path fallback:', file.path);
       return file.path;
     }
     
     // 방법 3: 실패 시 파일명만이라도 반환
-    console.error('❌ Cannot extract file path, using name only:', file.name);
+    console.error('[ERROR] Cannot extract file path, using name only:', file.name);
     return file.name; // 최소한 파일명은 반환
   },
   

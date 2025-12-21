@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate Blog - Latest updates, guides, and tips about AI subtitles, speech recognition, and translation technology">
+    <title>Blog - WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.7;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* Custom Language Selector */
+        .lang-selector {
+            position: relative;
+        }
+        .lang-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            color: #ffffff;
+            font-size: 0.875rem;
+            font-family: 'Geist', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .lang-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: #1a1a1a;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0;
+            min-width: 140px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s;
+            z-index: 1000;
+        }
+        .lang-selector:hover .lang-dropdown,
+        .lang-dropdown:hover {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .lang-dropdown a {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: #a1a1a1;
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all 0.15s;
+        }
+        .lang-dropdown a:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+        .goog-te-banner-frame { display: none !important; }
+        body { top: 0 !important; }
+        #google_translate_element { display: none; }
+
+        /* Main Content */
+        main {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 7rem 2rem 4rem;
+        }
+
+        /* Header */
+        .page-header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+        .page-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.75rem;
+        }
+        .page-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.125rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Featured Section */
+        .featured {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        @media (max-width: 768px) {
+            .featured { grid-template-columns: 1fr; }
+        }
+
+        .featured-card {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 16px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s;
+        }
+        .featured-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+        .featured-card .blog-category {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--accent);
+        }
+        .featured-card h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 1rem 0;
+            letter-spacing: -0.02em;
+            line-height: 1.3;
+        }
+        .featured-card p {
+            color: var(--text-secondary);
+            flex: 1;
+            margin-bottom: 1.5rem;
+        }
+        .featured-card .read-more {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: gap 0.2s;
+        }
+        .featured-card .read-more svg {
+            width: 16px;
+            height: 16px;
+        }
+        .featured-card .read-more:hover {
+            gap: 0.75rem;
+        }
+
+        /* Sidebar Card */
+        .sidebar-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+        .sidebar-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .sidebar-card h3 svg {
+            width: 18px;
+            height: 18px;
+            color: var(--accent);
+        }
+
+        /* Tag Cloud */
+        .tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .tag {
+            background: var(--bg-tertiary);
+            padding: 0.375rem 0.875rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            border: 1px solid var(--border);
+            text-decoration: none;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        .tag:hover {
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-color: var(--accent);
+        }
+
+        /* Blog Category */
+        .blog-category {
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Blog Grid */
+        .blog-grid {
+            display: grid;
+            gap: 1.25rem;
+        }
+        .blog-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s;
+            text-decoration: none;
+            color: inherit;
+        }
+        .blog-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+        .blog-card-content {
+            padding: 1.5rem;
+        }
+        .blog-card h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin: 0.75rem 0 0.5rem;
+            letter-spacing: -0.02em;
+            line-height: 1.4;
+        }
+        .blog-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        .blog-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+        .read-more-link {
+            color: var(--accent);
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.8rem;
+        }
+        .read-more-link svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+            font-size: 0.875rem;
+        }
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        footer a:hover {
+            color: var(--text-primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .nav-links { gap: 1rem; }
+            .page-header h1 { font-size: 2rem; }
+            main { padding: 6rem 1.25rem 3rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#0a0a0a"/>
+                    <rect x="1" y="1" width="30" height="30" rx="7" stroke="#62DE61" stroke-opacity="0.3"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+                </svg>
+                <span>WhisperSubTranslate</span>
+            </a>
+            <div class="nav-links">
+                <a href="../" data-i18n="nav.home">Home</a>
+                <a href="../docs/" data-i18n="nav.docs">Docs</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        Language
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('es')">Español</a>
+                        <a href="#" onclick="translatePage('fr')">Français</a>
+                        <a href="#" onclick="translatePage('de')">Deutsch</a>
+                        <a href="#" onclick="translatePage('pt')">Português</a>
+                        <a href="#" onclick="translatePage('ru')">Русский</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <header class="page-header">
+            <h1 data-i18n="blog.title">Blog</h1>
+            <p class="page-subtitle" data-i18n="blog.subtitle">Latest updates, guides, and tips about subtitle extraction and translation.</p>
+        </header>
+
+        <div class="featured">
+            <div class="featured-card">
+                <span class="blog-category" data-i18n="blog.category.announcement">Announcement</span>
+                <h2 data-i18n="blog.featured.title">v1.3.0 Update: Faster and Lighter with whisper.cpp</h2>
+                <p data-i18n="blog.featured.desc">Migrated to whisper.cpp for smaller package size and millisecond timestamp support. Experience faster speeds and easier downloads.</p>
+                <a href="./whisper-cpp-migration.html" class="read-more">
+                    <span data-i18n="blog.readMore">Read more</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </a>
+            </div>
+            <div class="sidebar-card">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                        <line x1="7" y1="7" x2="7.01" y2="7"/>
+                    </svg>
+                    <span data-i18n="blog.popularTags">Popular Tags</span>
+                </h3>
+                <div class="tag-cloud">
+                    <a href="#" class="tag">Whisper</a>
+                    <a href="#" class="tag" data-i18n="blog.tag.subtitle">Subtitles</a>
+                    <a href="#" class="tag" data-i18n="blog.tag.translation">Translation</a>
+                    <a href="#" class="tag">GPU</a>
+                    <a href="#" class="tag">YouTube</a>
+                    <a href="#" class="tag" data-i18n="blog.tag.tips">Tips</a>
+                    <a href="#" class="tag">AI</a>
+                    <a href="#" class="tag" data-i18n="blog.tag.tutorial">Tutorial</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="blog-grid">
+            <a href="./whisper-cpp-migration.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.update">Update</span>
+                    <h2 data-i18n="blog.post1.title">whisper.cpp Migration Complete - What's Changed?</h2>
+                    <p data-i18n="blog.post1.desc">Switched from faster-whisper to whisper.cpp. Smaller package size with millisecond timestamp support.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post1.date">December 2024</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="./youtube-subtitle-guide.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.guide">Guide</span>
+                    <h2 data-i18n="blog.post2.title">Complete Guide to Adding Subtitles to YouTube Videos</h2>
+                    <p data-i18n="blog.post2.desc">Step-by-step instructions for uploading subtitles extracted with WhisperSubTranslate to YouTube.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post2.date">November 2024</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="./gpu-optimization.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.tips">Tips</span>
+                    <h2 data-i18n="blog.post3.title">Extract Subtitles 5-10x Faster with GPU Acceleration</h2>
+                    <p data-i18n="blog.post3.desc">Learn how to maximize subtitle extraction speed using NVIDIA GPU and optimal settings.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post3.date">October 2024</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="./model-comparison.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.comparison">Comparison</span>
+                    <h2 data-i18n="blog.post4.title">Whisper Model Comparison: From tiny to large</h2>
+                    <p data-i18n="blog.post4.desc">Compare accuracy, speed, and memory usage of each model with actual test results.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post4.date">September 2024</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="./translation-api-comparison.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.comparison">Comparison</span>
+                    <h2 data-i18n="blog.post5.title">Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano vs Gemini</h2>
+                    <p data-i18n="blog.post5.desc">Which translation service is best for subtitles? Analyzing quality, price, and usage limits.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post5.date">December 2025</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <a href="./music-video-subtitle.html" class="blog-card">
+                <div class="blog-card-content">
+                    <span class="blog-category" data-i18n="blog.category.tutorial">Tutorial</span>
+                    <h2 data-i18n="blog.post6.title">Creating Music Video Lyrics Subtitles</h2>
+                    <p data-i18n="blog.post6.desc">How to create perfectly synced subtitles for song lyrics using millisecond timestamps.</p>
+                    <div class="blog-meta">
+                        <span data-i18n="blog.post6.date">July 2024</span>
+                        <span class="read-more-link">
+                            <span data-i18n="blog.read">Read</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                <path d="M5 12h14M12 5l7 7-7 7"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. MIT License. |
+            <a href="../privacy.html" data-i18n="footer.privacy">Privacy Policy</a> |
+            <a href="../terms.html" data-i18n="footer.terms">Terms of Service</a>
+        </p>
+    </footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,es,fr,de,pt,ru',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>
