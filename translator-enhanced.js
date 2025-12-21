@@ -187,7 +187,13 @@ class EnhancedSubtitleTranslator {
             enableCache: config.enableCache !== false,
             batchTranslation: config.batchTranslation !== false,
             maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
-            uiLanguage: config.uiLanguage || 'ko'
+            uiLanguage: config.uiLanguage || 'ko',
+            // 앱 설정 (모델, 언어, 장치 등)
+            selectedModel: config.selectedModel || '',
+            selectedLanguage: config.selectedLanguage || '',
+            selectedDevice: config.selectedDevice || '',
+            selectedTranslation: config.selectedTranslation || '',
+            selectedTargetLanguage: config.selectedTargetLanguage || ''
           };
         }
       }

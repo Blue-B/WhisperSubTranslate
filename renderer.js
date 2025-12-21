@@ -22,6 +22,60 @@ const MIN_QUEUE_UPDATE_INTERVAL = 200; // 최소 200ms 간격으로 UI 업데이
 let soundVolume = parseFloat(localStorage.getItem('soundVolume') ?? '0.6');
 let soundMuted = localStorage.getItem('soundMuted') === 'true';
 
+// Toast notification (토스트 알림)
+function showToast(message, options = {}) {
+  // 기존 토스트 제거
+  const existingToast = document.querySelector('.toast-notification');
+  if (existingToast) existingToast.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #333;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    animation: slideIn 0.3s ease;
+  `;
+
+  const text = document.createElement('span');
+  text.textContent = message;
+  toast.appendChild(text);
+
+  if (options.label && options.onClick) {
+    const btn = document.createElement('button');
+    btn.textContent = options.label;
+    btn.style.cssText = `
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    `;
+    btn.onclick = () => {
+      options.onClick();
+      toast.remove();
+    };
+    toast.appendChild(btn);
+  }
+
+  document.body.appendChild(toast);
+
+  // 5초 후 자동 제거
+  setTimeout(() => toast.remove(), 5000);
+}
+
 // Utility: sleep function for delays (지연용 sleep 함수)
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -2613,17 +2667,153 @@ function initTranslationSelect() {
   update();
 }
 
+// 저장된 설정 불러오기 (앱 시작 시)
+async function loadSavedSettings() {
+  try {
+    const res = await window.electronAPI.loadApiKeys();
+    if (!res || !res.success || !res.keys) return;
+
+    const keys = res.keys;
+    console.log('[Settings] Loading saved settings:', Object.keys(keys));
+
+    // 모델 선택
+    if (keys.selectedModel) {
+      const modelSelect = document.getElementById('modelSelect');
+      if (modelSelect) {
+        // 옵션이 존재하는지 확인
+        const optionExists = Array.from(modelSelect.options).some(opt => opt.value === keys.selectedModel);
+        if (optionExists) {
+          modelSelect.value = keys.selectedModel;
+          // 모델 요구사항 표시 업데이트
+          if (typeof updateModelRequirements === 'function') {
+            updateModelRequirements(keys.selectedModel);
+          }
+          console.log('[Settings] Restored model:', keys.selectedModel);
+        } else {
+          console.log('[Settings] Saved model not available:', keys.selectedModel);
+        }
+      }
+    }
+
+    // 음성 언어 선택
+    if (keys.selectedLanguage) {
+      const languageSelect = document.getElementById('languageSelect');
+      if (languageSelect) {
+        languageSelect.value = keys.selectedLanguage;
+        console.log('[Settings] Restored language:', keys.selectedLanguage);
+      }
+    }
+
+    // 처리 장치 선택
+    if (keys.selectedDevice) {
+      const deviceSelect = document.getElementById('deviceSelect');
+      if (deviceSelect) {
+        deviceSelect.value = keys.selectedDevice;
+        console.log('[Settings] Restored device:', keys.selectedDevice);
+      }
+    }
+
+    // 번역 엔진 선택
+    if (keys.selectedTranslation) {
+      const translationSelect = document.getElementById('translationSelect');
+      if (translationSelect) {
+        // 옵션이 존재하는지 확인 후 설정
+        const optionExists = Array.from(translationSelect.options).some(opt => opt.value === keys.selectedTranslation);
+        if (optionExists) {
+          translationSelect.value = keys.selectedTranslation;
+          console.log('[Settings] Restored translation:', keys.selectedTranslation);
+        }
+      }
+    }
+
+    // 번역 대상 언어 선택
+    if (keys.selectedTargetLanguage) {
+      const targetLanguageSelect = document.getElementById('targetLanguageSelect');
+      if (targetLanguageSelect) {
+        targetLanguageSelect.value = keys.selectedTargetLanguage;
+        console.log('[Settings] Restored target language:', keys.selectedTargetLanguage);
+      }
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to load saved settings:', error.message);
+  }
+}
+
+// 설정 자동 저장 (select 변경 시)
+async function autoSaveSettings() {
+  try {
+    const res = await window.electronAPI.loadApiKeys();
+    const keys = res?.keys || {};
+
+    // 현재 선택값 저장
+    const modelSelect = document.getElementById('modelSelect');
+    const languageSelect = document.getElementById('languageSelect');
+    const deviceSelect = document.getElementById('deviceSelect');
+    const translationSelect = document.getElementById('translationSelect');
+    const targetLanguageSelect = document.getElementById('targetLanguageSelect');
+    const uiLanguageSelect = document.getElementById('uiLanguageSelect');
+
+    if (modelSelect) keys.selectedModel = modelSelect.value;
+    if (languageSelect) keys.selectedLanguage = languageSelect.value;
+    if (deviceSelect) keys.selectedDevice = deviceSelect.value;
+    if (translationSelect) keys.selectedTranslation = translationSelect.value;
+    if (targetLanguageSelect) keys.selectedTargetLanguage = targetLanguageSelect.value;
+    if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
+
+    await window.electronAPI.saveApiKeys(keys);
+    console.log('[Settings] Auto-saved settings');
+  } catch (error) {
+    console.error('[Settings] Auto-save failed:', error.message);
+  }
+}
+
+// 설정 변경 이벤트 연결
+function initSettingsAutoSave() {
+  const selects = [
+    'modelSelect',
+    'languageSelect',
+    'deviceSelect',
+    'translationSelect',
+    'targetLanguageSelect'
+  ];
+
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', () => {
+        console.log(`[Settings] ${id} changed to:`, el.value);
+        autoSaveSettings();
+      });
+    }
+  });
+  console.log('[Settings] Auto-save listeners initialized');
+}
+
 // 전역 초기화
-function initApp() {
+async function initApp() {
   try {
     initUiLanguageDropdown();
   } catch (error) {
     console.error('[Init] Failed to initialize UI language dropdown:', error.message);
   }
   try {
-    checkModelStatus();
+    // 모델 상태 체크 완료 대기 (옵션이 추가되어야 설정 복원 가능)
+    await checkModelStatus();
   } catch (error) {
     console.error('[Init] Failed to check model status:', error.message);
+  }
+  // 저장된 설정 불러오기 (모델 상태 체크 완료 후)
+  try {
+    await loadSavedSettings();
+    console.log('[Init] Settings loaded successfully');
+  } catch (error) {
+    console.error('[Init] Failed to load saved settings:', error.message);
+  }
+  // 설정 자동 저장 이벤트 리스너 연결
+  try {
+    initSettingsAutoSave();
+  } catch (error) {
+    console.error('[Init] Failed to initialize settings auto-save:', error.message);
   }
   try {
     updateQueueDisplay();
@@ -2784,26 +2974,50 @@ function hideSettingsModal() {
 
 // initApp은 첫 번째 DOMContentLoaded에서 호출됨
 
+// 오디오 data URL 캐시 (한 번만 로드)
+let cachedAudioDataUrl = null;
+
 async function playCompletionSound() {
+  console.log('[Audio] playCompletionSound called, muted:', soundMuted, 'volume:', soundVolume);
+
   // 음소거 상태면 재생 안 함
-  if (soundMuted || soundVolume <= 0) return;
+  if (soundMuted || soundVolume <= 0) {
+    console.log('[Audio] Skipping: muted or volume is 0');
+    return;
+  }
 
   try {
-    // 우선 WAV 파일 재생 시도 (앱 루트에 존재하는 경우)
-    // Electron에서는 file:// 프로토콜 또는 절대 경로가 필요할 수 있음
-    const audio = new Audio('./nya.wav');
-    audio.volume = soundVolume;
+    // base64 data URL 가져오기 (캐시 사용)
+    if (!cachedAudioDataUrl) {
+      console.log('[Audio] Fetching audio data from main process...');
+      cachedAudioDataUrl = await window.electronAPI.getAudioData('nya.wav');
+      console.log('[Audio] Got audio data:', cachedAudioDataUrl ? `${cachedAudioDataUrl.length} chars` : 'null');
+    }
 
-    // 로드 완료 대기 후 재생
-    await new Promise((resolve, reject) => {
-      audio.oncanplaythrough = resolve;
-      audio.onerror = reject;
-      audio.load();
-    });
+    if (cachedAudioDataUrl) {
+      console.log('[Audio] Playing nya.wav via data URL');
+      const audio = new Audio(cachedAudioDataUrl);
+      audio.volume = soundVolume;
 
-    await audio.play();
-    console.log('[Audio] nya.wav played successfully');
-    return;
+      // 로드 완료 대기 후 재생
+      await new Promise((resolve, reject) => {
+        audio.oncanplaythrough = () => {
+          console.log('[Audio] Audio loaded, ready to play');
+          resolve();
+        };
+        audio.onerror = (e) => {
+          console.error('[Audio] Audio load error:', e);
+          reject(e);
+        };
+        audio.load();
+      });
+
+      await audio.play();
+      console.log('[Audio] nya.wav played successfully');
+      return;
+    } else {
+      console.warn('[Audio] No audio data available, using fallback');
+    }
   } catch (error) {
     console.warn('[Audio] WAV file failed:', error.message);
     // 폴백: WebAudio로 간단한 3음 비프
@@ -2881,11 +3095,28 @@ async function saveApiKeys() {
   const deeplInput = document.getElementById('deeplApiKey');
   const openaiInput = document.getElementById('openaiApiKey');
   const geminiInput = document.getElementById('geminiApiKey');
+
+  // API 키
   const keys = {
     deepl: deeplInput ? (deeplInput.value || '').trim() : '',
     openai: openaiInput ? (openaiInput.value || '').trim() : '',
     gemini: geminiInput ? (geminiInput.value || '').trim() : ''
   };
+
+  // 앱 설정도 함께 저장
+  const modelSelect = document.getElementById('modelSelect');
+  const languageSelect = document.getElementById('languageSelect');
+  const deviceSelect = document.getElementById('deviceSelect');
+  const translationSelect = document.getElementById('translationSelect');
+  const targetLanguageSelect = document.getElementById('targetLanguageSelect');
+  const uiLanguageSelect = document.getElementById('uiLanguageSelect');
+
+  if (modelSelect) keys.selectedModel = modelSelect.value;
+  if (languageSelect) keys.selectedLanguage = languageSelect.value;
+  if (deviceSelect) keys.selectedDevice = deviceSelect.value;
+  if (translationSelect) keys.selectedTranslation = translationSelect.value;
+  if (targetLanguageSelect) keys.selectedTargetLanguage = targetLanguageSelect.value;
+  if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
 
   const successMsg = {
     ko: '설정이 저장되었습니다.',

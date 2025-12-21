@@ -377,6 +377,7 @@
                 <h3 data-i18n="docs.sidebar.advanced">Advanced</h3>
                 <ul>
                     <li><a href="#cli" data-i18n="docs.sidebar.cli">Command Line</a></li>
+                    <li><a href="#data-storage" data-i18n="docs.sidebar.data-storage">Data Storage</a></li>
                     <li><a href="#troubleshooting" data-i18n="docs.sidebar.troubleshooting">Troubleshooting</a></li>
                 </ul>
             </div>
@@ -678,6 +679,61 @@
                     <li><code>-osrt</code> - <span data-i18n="docs.cli.osrt">Output SRT format</span></li>
                     <li><code>-ml</code> - <span data-i18n="docs.cli.ml">Maximum segment length in ms</span></li>
                 </ul>
+            </section>
+
+            <section id="data-storage">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <path d="M2 15h10"/>
+                        <path d="M9 18l3-3-3-3"/>
+                    </svg>
+                    <span data-i18n="docs.storage.title">Data Storage</span>
+                </h2>
+                <p data-i18n="docs.storage.intro">WhisperSubTranslate stores your settings and API keys locally on your computer. This data is never uploaded to any server.</p>
+
+                <h3 data-i18n="docs.storage.location">Storage Location</h3>
+                <p data-i18n="docs.storage.locationDesc">All settings are stored in your Windows AppData folder:</p>
+                <pre><code>%APPDATA%\whispersubtranslate\translation-config-encrypted.json</code></pre>
+                <p data-i18n="docs.storage.locationExample">Typical path:</p>
+                <pre><code>C:\Users\[YourUsername]\AppData\Roaming\whispersubtranslate\</code></pre>
+
+                <h3 data-i18n="docs.storage.whatStored">What is Stored</h3>
+                <ul>
+                    <li data-i18n="docs.storage.item1"><strong>API Keys</strong> - DeepL, OpenAI, Google Gemini keys (encrypted with AES)</li>
+                    <li data-i18n="docs.storage.item2"><strong>App Settings</strong> - Selected model, language, device, translation service</li>
+                    <li data-i18n="docs.storage.item3"><strong>UI Preferences</strong> - Interface language</li>
+                </ul>
+
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.storage.security">Your API keys are encrypted before storage. The settings file is stored outside the project folder and will NOT be uploaded when you share the project on GitHub.</p>
+                </div>
+
+                <h3 data-i18n="docs.storage.reset">Reset Settings</h3>
+                <p data-i18n="docs.storage.resetDesc">To reset all settings to defaults, delete the config folder:</p>
+                <ol>
+                    <li data-i18n="docs.storage.reset1">Close WhisperSubTranslate</li>
+                    <li data-i18n="docs.storage.reset2">Press <code>Win + R</code>, type <code>%APPDATA%</code> and press Enter</li>
+                    <li data-i18n="docs.storage.reset3">Delete the <code>whispersubtranslate</code> folder</li>
+                    <li data-i18n="docs.storage.reset4">Restart the application</li>
+                </ol>
+
+                <h3 data-i18n="docs.storage.backup">Backup Settings</h3>
+                <p data-i18n="docs.storage.backupDesc">To backup your settings (including API keys), copy the entire <code>whispersubtranslate</code> folder from AppData to a safe location.</p>
+
+                <div class="warning-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <p data-i18n="docs.storage.backupWarning">Keep your backup secure! The file contains your encrypted API keys.</p>
+                </div>
             </section>
 
             <section id="troubleshooting">

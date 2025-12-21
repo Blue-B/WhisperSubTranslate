@@ -82,6 +82,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => {
     return ipcRenderer.invoke('open-external', url);
   },
+
+  // 앱 경로 반환 (리소스 접근용)
+  getAppPath: () => {
+    return ipcRenderer.invoke('get-app-path');
+  },
+
+  // 오디오 파일을 base64 data URL로 가져오기
+  getAudioData: (filename) => {
+    return ipcRenderer.invoke('get-audio-data', filename);
+  },
   
   
   // 안전한 파일 경로 추출 (개선된 버전)

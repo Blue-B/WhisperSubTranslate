@@ -1107,6 +1107,32 @@ ipcMain.handle('translate-text', async (event, { text, method, targetLang }) => 
   }
 });
 
+// 앱 경로 반환 (nya.wav 등 리소스 접근용)
+ipcMain.handle('get-app-path', async () => {
+  return app.isPackaged ? process.resourcesPath : __dirname;
+});
+
+// nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)
+ipcMain.handle('get-audio-data', async (event, filename) => {
+  try {
+    const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+    const filePath = path.join(basePath, filename);
+
+    if (!fs.existsSync(filePath)) {
+      console.log('[Audio] File not found:', filePath);
+      return null;
+    }
+
+    const buffer = fs.readFileSync(filePath);
+    const base64 = buffer.toString('base64');
+    console.log('[Audio] Loaded audio file:', filePath, '- size:', buffer.length);
+    return `data:audio/wav;base64,${base64}`;
+  } catch (error) {
+    console.error('[Audio] Failed to read audio file:', error.message);
+    return null;
+  }
+});
+
 // App Exit Cleanup
 app.on('before-quit', () => forceMemoryCleanup('cuda'));
 process.on('exit', () => forceMemoryCleanup('cuda'));
