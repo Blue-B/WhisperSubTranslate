@@ -2,7 +2,7 @@
 
 [English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文
 
-将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译支持 MyMemory（免费）、DeepL、GPT-5-nano（OpenAI）。
+将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译支持 MyMemory（免费）、DeepL、GPT-5-nano（OpenAI）、Gemini。
 
 > 重要：本应用使用 whisper.cpp 从视频音频新生成 SRT 字幕；不会提取已有的内嵌字幕轨道，也不会识别屏幕文字（无 OCR）。
 
@@ -64,7 +64,7 @@ npm run build-win
 | 打包 | electron-builder |
 | 网络 | axios |
 | 语音→文本 | whisper.cpp (GGML 模型) |
-| 翻译（可选） | DeepL API、OpenAI（GPT-5-nano）、MyMemory |
+| 翻译（可选） | DeepL API、OpenAI（GPT-5-nano）、Gemini、MyMemory |
 
 ## 翻译引擎
 
@@ -72,7 +72,8 @@ npm run build-win
 | --- | --- | --- | --- |
 | MyMemory | 免费 | 不需要 | 每 IP 约 5 万字/日 |
 | DeepL | 每月 50 万免费 | 需要 | 有付费档 |
-| GPT-5-nano（OpenAI） | 付费 | 需要 | 极低成本 ($0.05/1M 输入) |
+| GPT-5-nano（OpenAI） | 付费 | 需要 | 输入 $0.05 / 输出 $0.40 per 1M tokens |
+| Gemini 3 Flash | 免费/付费 | 需要 | 免费: 每日250字幕/20-30分钟，付费: 无限制 ([获取API密钥](https://aistudio.google.com/app/apikey)) |
 
 API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使用基本编码进行存储。即使在文件管理器中误打开，也不会以明文形式显示，并且绝不会包含在Git或发布文件中。
 
@@ -112,6 +113,8 @@ Trunk-based development：以 `main` 为唯一主干，所有工作在短生命�
 | feature/* | 小而聚焦的工作 | 从 `main` 分支，PR 合入 `main` |
 
 ## 贡献
+
+> **想添加新语言？** 请参阅[翻译指南](TRANSLATION.md)。
 
 ### 1) 分支/命名
 

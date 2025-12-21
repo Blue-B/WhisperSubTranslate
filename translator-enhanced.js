@@ -117,6 +117,7 @@ class EnhancedSubtitleTranslator {
     this.maxRetries = 3;             // 번역 실패 최소화를 위해 재시도 횟수 증가
     this.batchSize = 5;              // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null;          // mainWindow 참조 저장
+    this.geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
   }
 
   // MainWindow에 메시지 전송 헬퍼
@@ -180,6 +181,7 @@ class EnhancedSubtitleTranslator {
           return {
             deepl: config.deepl || '',
             openai: config.openai || '',
+            gemini: config.gemini || '',
             deepseek: config.deepseek || '',
             preferredService: config.preferredService || 'mymemory',
             enableCache: config.enableCache !== false,
@@ -199,6 +201,7 @@ class EnhancedSubtitleTranslator {
     return {
       deepl: '',
       openai: '',
+      gemini: '',
       deepseek: '',
       preferredService: 'mymemory',
       enableCache: true,
@@ -242,6 +245,7 @@ class EnhancedSubtitleTranslator {
       'mymemory': 10,  // 무료 서비스 - 많이 묶어서 처리 (5→10)
       'deepl': 8,      // 유료 API - 더 큰 배치 (3→8)
       'chatgpt': 5,    // 고급 모델 - 중간 배치 (2→5)
+      'gemini': 6,     // Gemini - 중간 배치 (빠른 응답)
       'offline': 15    // 오프라인 - 가장 큰 배치 (네트워크 없음)
     };
 
@@ -590,6 +594,135 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     }
   }
 
+  // Google Gemini 번역 (Gemini 3 Flash - 무료 사용 가능)
+  // 참고: https://ai.google.dev/gemini-api
+  async translateWithGemini(text, targetLang = '한국어') {
+    if (!this.apiKeys.gemini) {
+      throw new Error('Gemini API 키가 설정되지 않았습니다.');
+    }
+
+    // 캐시 확인
+    const cached = this.getCachedTranslation(text, 'gemini', targetLang);
+    if (cached) {
+      console.log('[Gemini Cache Hit]', {
+        text: text.substring(0, 30) + '...',
+        cached: true
+      });
+      return cached;
+    }
+
+    console.log(`[Gemini] "${text.substring(0, 40)}..." → ${targetLang}`);
+
+    await this.throttleRequest();
+
+    try {
+      const startTime = Date.now();
+
+      // Gemini API 호출 (REST API) - system instruction 분리
+      const response = await axios.post(
+        `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
+        {
+          system_instruction: {
+            parts: [{
+              text: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
+
+CRITICAL RULES:
+1. ALWAYS translate to ${targetLang} - never use English or other languages
+2. PRESERVE proper names, character names, and place names as-is (don't translate names like "John", "Tokyo", "NASA")
+3. Use natural, conversational ${targetLang} that native speakers would actually say
+4. Consider the context and tone of the scene
+5. TRANSLATE ALL CONTENT including profanity, sexual content, violence, and adult themes naturally without censorship or filtering
+
+TRANSLATION GUIDELINES:
+- Character names: Keep original but integrate naturally with ${targetLang} grammar
+- Place names: Keep original but use natural ${targetLang} grammar and particles
+- Brand names: Keep original with natural ${targetLang} grammar
+- Technical terms: Use commonly accepted ${targetLang} terms
+- Cultural references: Adapt naturally for ${targetLang} audience
+- Emotions/tone: Match the speaker's mood (angry, sad, joking, etc.)
+- Slang/informal speech: Use natural ${targetLang} equivalents
+- Formal speech: Use appropriate formal ${targetLang}
+- Profanity/vulgar language: Translate to equivalent ${targetLang} expressions naturally
+- Sexual/adult content: Translate directly and naturally without euphemisms
+- Violence/strong language: Maintain intensity and meaning in ${targetLang}
+- Grammar: Use proper ${targetLang} grammar rules and particles with foreign names
+
+STYLE ADAPTATION:
+- Movies/Dramas: Emotional, natural dialogue including mature themes
+- Action scenes: Short, punchy translations with strong language
+- Comedy: Preserve humor and timing, including adult humor
+- Romance: Emotional, heartfelt tone including intimate content
+- Adult/R-rated content: Direct, unfiltered translation
+- Documentaries: Clear, informative style
+- Thriller/Horror: Maintain intensity and impact
+
+IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`
+            }]
+          },
+          contents: [{
+            parts: [{
+              text: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: Math.max(100, Math.min(1500, text.length * 3))
+          }
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      // Gemini API 응답 구조 처리
+      const candidates = response.data?.candidates;
+      const rawContent = candidates?.[0]?.content?.parts?.[0]?.text;
+
+      // 응답 검증
+      if (!rawContent || rawContent.trim().length === 0) {
+        const errorInfo = {
+          original: text.substring(0, 40) + '...',
+          responsePreview: JSON.stringify(response.data).substring(0, 300),
+          hasCandidates: !!candidates
+        };
+        console.error('[Gemini Empty Response]', errorInfo);
+        this.logError('Gemini 빈 응답', new Error(JSON.stringify(errorInfo)));
+        throw new Error('Gemini returned empty translation');
+      }
+
+      let translation = rawContent.trim();
+
+      // 따옴표 제거
+      translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
+
+      const duration = Date.now() - startTime;
+
+      console.log('[Gemini OK]', {
+        original: text.substring(0, 30) + '...',
+        translated: translation.substring(0, 30) + '...',
+        time: `${duration}ms`
+      });
+
+      // 결과 캐시
+      this.setCachedTranslation(text, 'gemini', targetLang, translation);
+      return translation;
+    } catch (error) {
+      // API 에러 상세 로그
+      console.error('[Gemini Error]', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        code: error.code
+      });
+      this.logError('Gemini 번역 실패', error);
+      throw error;
+    }
+  }
+
   // 개선된 MyMemory 번역
   async translateWithMyMemory(text, targetLang = 'ko') {
     // 캐시 확인
@@ -630,7 +763,8 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       { name: preferredMethod, lang: targetLanguage },
       { name: 'mymemory', lang: targetLanguage === 'KO' ? 'ko' : targetLanguage },
       { name: 'deepl', lang: targetLanguage === 'ko' ? 'KO' : targetLanguage },
-      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
+      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' },
+      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
     ];
 
     const uniqueMethods = methods.filter((m, i, a) => a.findIndex(x => x.name === m.name) === i);
@@ -648,6 +782,11 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           case 'chatgpt':
             if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
               return await this.translateWithRetry((t) => this.translateWithChatGPT(t, m.lang), text);
+            }
+            break;
+          case 'gemini':
+            if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
+              return await this.translateWithRetry((t) => this.translateWithGemini(t, m.lang), text);
             }
             break;
         }
@@ -954,6 +1093,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     const results = {
       deepl: false,
       openai: false,
+      gemini: false,
       mymemory: true, // 항상 사용 가능
       errors: {},
       usage: {}
@@ -963,23 +1103,23 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     if (this.apiKeys.deepl && this.apiKeys.deepl.trim()) {
       try {
         const translator = new deepl.Translator(this.apiKeys.deepl.trim());
-        
+
         // 사용량 정보 조회만으로 충분한 검증 (빠르고 확실함)
         const usage = await translator.getUsage();
-        
+
         // 사용량 정보가 정상적으로 반환되면 유효한 키
         results.deepl = true;
         results.usage.deepl = {
           character: usage.character,
           limit: usage.character ? usage.character.limit : null
         };
-        
-        console.log('[DeepL Validation Success]', { 
+
+        console.log('[DeepL Validation Success]', {
           hasUsage: !!usage,
           characterCount: usage?.character?.count,
-          characterLimit: usage?.character?.limit 
+          characterLimit: usage?.character?.limit
         });
-        
+
       } catch (error) {
         console.error('[DeepL Validation Error]', error);
         results.deepl = false;
@@ -1013,6 +1153,31 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     } else {
       const errorMsg = this.getErrorMessages('ko');
       results.errors.openai = errorMsg.noApiKey;
+    }
+
+    // Gemini 검사 (Gemini 3 Flash)
+    if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
+      try {
+        const response = await axios.post(
+          `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini.trim()}`,
+          {
+            contents: [{ parts: [{ text: 'hi' }] }],
+            generationConfig: { maxOutputTokens: 5 }
+          },
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
+          }
+        );
+        results.gemini = true;
+        console.log('[Gemini Validation Success]');
+      } catch (error) {
+        console.error('[Gemini Validation] 실패:', error.response?.data || error.message);
+        results.errors.gemini = this.classifyError(error, 'gemini', 'ko');
+      }
+    } else {
+      const errorMsg = this.getErrorMessages('ko');
+      results.errors.gemini = errorMsg.noApiKey;
     }
 
     return results;

@@ -725,6 +725,8 @@
     }
 
     .queue-item {
+      display: flex;
+      align-items: center;
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -735,6 +737,174 @@
 
     .queue-item:hover {
       border-color: var(--border-hover);
+    }
+
+    .queue-item .file-info {
+      overflow: hidden;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .queue-item .file-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .queue-item .file-name .name-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex-shrink: 1;
+      min-width: 0;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .queue-item .file-name .name-text:hover {
+      color: var(--accent);
+    }
+
+    .queue-item .file-path {
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+
+    .queue-item .file-path:hover {
+      color: var(--accent);
+    }
+
+    /* 복사 완료 토스트 */
+    .copy-toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      opacity: 0;
+      transition: all 0.2s ease;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .queue-item .file-name .ext-badge {
+      flex-shrink: 0;
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 500;
+      border-radius: 100px;
+      letter-spacing: 0.02em;
+    }
+
+    .queue-item .file-name .ext-badge.video {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    .queue-item .file-name .ext-badge.srt {
+      background: rgba(147, 112, 219, 0.15);
+      color: #a78bfa;
+    }
+
+    .queue-item.draggable {
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      -webkit-app-region: no-drag;
+    }
+
+    .queue-item.draggable * {
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+
+    .queue-item.draggable:active {
+      cursor: grabbing;
+    }
+
+    .queue-item.dragging {
+      opacity: 0.4;
+      background: var(--bg-hover);
+      transform: scale(0.98);
+      cursor: grabbing;
+    }
+
+    .queue-item.drag-over-top {
+      border-top: 2px solid var(--primary);
+      padding-top: 10px;
+    }
+
+    .queue-item.drag-over-bottom {
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 10px;
+    }
+
+    .queue-item .drag-handle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      min-width: 24px;
+      height: 100%;
+      margin-right: 12px;
+      color: #aaa;
+      cursor: grab;
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: -2px;
+      flex-shrink: 0;
+      user-select: none;
+      transition: color 0.2s, transform 0.2s;
+    }
+
+    .queue-item .drag-handle:hover {
+      color: #4ade80;
+      transform: scale(1.1);
+    }
+
+    .queue-item .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .queue-item.draggable:hover .drag-handle {
+      color: #4ade80;
+    }
+
+    /* 확장자 뱃지 */
+    .ext-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      margin-left: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 4px;
+      vertical-align: middle;
+      letter-spacing: 0.5px;
+    }
+
+    .ext-badge.srt {
+      color: #fff;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .ext-badge.video {
+      color: #fff;
+      background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
     }
 
     .queue-item.processing {
@@ -752,6 +922,16 @@
       background: var(--error-dim);
     }
 
+    .queue-item.skipped {
+      border-color: #6c757d;
+      background: rgba(108, 117, 125, 0.1);
+      opacity: 0.7;
+    }
+
+    .queue-item.skipped .file-status {
+      color: #6c757d;
+    }
+
     .queue-item-header {
       display: flex;
       align-items: flex-start;
@@ -764,8 +944,11 @@
       font-size: 13px;
       font-weight: 500;
       color: var(--text-primary);
-      word-break: break-all;
       line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 100%;
     }
 
     .queue-item-remove {
@@ -808,6 +991,42 @@
 
     .queue-item.error .queue-item-status {
       color: var(--error);
+    }
+
+    /* SRT File Badge */
+    .srt-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      margin-left: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      vertical-align: middle;
+    }
+
+    .queue-item.srt-file {
+      border-left: 3px solid #667eea;
+    }
+
+    /* Mixed File Warning */
+    .mixed-file-warning {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 6px 10px;
+      margin: 0 4px 8px 4px;
+      background: rgba(255, 193, 7, 0.1);
+      border-left: 2px solid rgba(255, 193, 7, 0.5);
+      border-radius: 3px;
+      color: #d4a017;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .mixed-file-warning .skip-warning {
+      color: #e57373;
     }
 
     /* Progress Section */
@@ -1023,6 +1242,40 @@
       text-decoration: underline;
     }
 
+    /* Password toggle button */
+    .input-with-toggle {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-with-toggle .form-input {
+      padding-right: 44px;
+    }
+
+    .toggle-password {
+      position: absolute;
+      right: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 6px;
+      color: var(--text-muted);
+      transition: color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .toggle-password:hover {
+      color: var(--accent);
+    }
+
+    .toggle-password svg {
+      width: 18px;
+      height: 18px;
+    }
+
     .modal-footer {
       display: flex;
       justify-content: flex-end;
@@ -1087,6 +1340,9 @@
   </style>
 </head>
 <body>
+  <!-- 복사 토스트 -->
+  <div id="copyToast" class="copy-toast">복사됨</div>
+
   <!-- Header -->
   <header class="header">
     <div class="header-left">
@@ -1123,8 +1379,8 @@
           </svg>
         </div>
         <h3 id="dropTitle" class="drop-title">파일 드래그 & 드롭</h3>
-        <p id="dropHint1" class="drop-hint">동영상 파일을 여기에 드래그하세요</p>
-        <p class="drop-formats">MP4, AVI, MKV, MOV, WMV, WEBM</p>
+        <p id="dropHint1" class="drop-hint">동영상 또는 SRT 파일을 여기에 드래그하세요</p>
+        <p class="drop-formats">MP4, AVI, MKV, MOV, WMV, WEBM, SRT</p>
         <button id="selectFileBtn" class="btn-select-file">파일 선택</button>
       </div>
 
@@ -1215,6 +1471,7 @@
             <option value="mymemory">MyMemory (무료)</option>
             <option value="deepl">DeepL (API 키 필요)</option>
             <option value="chatgpt">GPT-5-nano (API 키 필요)</option>
+            <option value="gemini">Gemini (무료 API 키)</option>
           </select>
           <div id="translationStatus" class="setting-hint"></div>
         </div>
@@ -1381,17 +1638,54 @@
           </h4>
           <div class="form-group">
             <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
-            <input type="password" id="deeplApiKey" class="form-input" placeholder="DeepL API 키를 입력하세요">
-            <p id="deeplHelp" class="form-hint">
-              <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 무료로 발급받을 수 있습니다. (월 50만글자 무료)
-            </p>
+            <div class="input-with-toggle">
+              <input type="password" id="deeplApiKey" class="form-input" placeholder="DeepL API 키를 입력하세요">
+              <button type="button" class="toggle-password" data-target="deeplApiKey" title="비밀번호 표시/숨기기">
+                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </button>
+            </div>
+            <p id="deeplHelp" class="form-hint"></p>
           </div>
           <div class="form-group">
             <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
-            <input type="password" id="openaiApiKey" class="form-input" placeholder="OpenAI API 키를 입력하세요">
-            <p class="form-hint">
-              <a id="openaiLink" href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급받기</a><span id="openaiHelpSuffix"> (유료)</span>
-            </p>
+            <div class="input-with-toggle">
+              <input type="password" id="openaiApiKey" class="form-input" placeholder="OpenAI API 키를 입력하세요">
+              <button type="button" class="toggle-password" data-target="openaiApiKey" title="비밀번호 표시/숨기기">
+                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </button>
+            </div>
+            <p id="openaiHelp" class="form-hint"></p>
+          </div>
+          <div class="form-group">
+            <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
+            <div class="input-with-toggle">
+              <input type="password" id="geminiApiKey" class="form-input" placeholder="Gemini API 키를 입력하세요">
+              <button type="button" class="toggle-password" data-target="geminiApiKey" title="비밀번호 표시/숨기기">
+                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </button>
+            </div>
+            <p id="geminiHelp" class="form-hint"></p>
           </div>
           <div id="apiKeyStatus" class="api-status"></div>
         </div>

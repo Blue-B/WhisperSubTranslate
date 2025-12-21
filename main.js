@@ -290,6 +290,16 @@ function createWindow() {
     });
     mainWindow.loadFile('index.html');
 
+    // 개발 모드에서 캐시 비활성화 (파일 변경 즉시 반영)
+    mainWindow.webContents.session.clearCache();
+
+    // 개발 모드에서 F12로 DevTools 열기
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'F12') {
+            mainWindow.webContents.toggleDevTools();
+        }
+    });
+
     // Translator에 mainWindow 설정 (UI 업데이트용)
     translator.setMainWindow(mainWindow);
 

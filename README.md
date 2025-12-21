@@ -66,7 +66,7 @@ Artifacts are emitted to `dist2/`.
 | Packaging | electron‑builder |
 | Networking | axios |
 | Speech‑to‑text | whisper.cpp (GGML models) |
-| Translation (optional) | DeepL API, OpenAI (GPT-5-nano), MyMemory |
+| Translation (optional) | DeepL API, OpenAI (GPT-5-nano), Gemini, MyMemory |
 
 ## Translation engines
 
@@ -74,7 +74,8 @@ Artifacts are emitted to `dist2/`.
 | --- | --- | --- | --- |
 | MyMemory | Free | No | ~50K chars/day per IP |
 | DeepL | Free 500K/month | Yes | Paid tiers available |
-| GPT-5-nano (OpenAI) | Paid | Yes | Very low cost ($0.05/1M input) |
+| GPT-5-nano (OpenAI) | Paid | Yes | $0.05 input / $0.40 output per 1M tokens |
+| Gemini 3 Flash | Free/Paid | Yes | Free: 250 subs/day (~20-30min), Paid: unlimited ([Get key](https://aistudio.google.com/app/apikey)) |
 
 API keys and preferences are saved locally on your PC under `app.getPath('userData')` with basic encoding to prevent casual exposure. The configuration file is never uploaded to Git or included in builds.
 
@@ -114,6 +115,8 @@ Trunk-based development: keep a single `main` as the trunk; work in short‑live
 | feature/* | Small, focused work | Branch from `main`, merge via PR into `main` |
 
 ## Contributing
+
+> **Want to add a new language?** See the [Translation Guide](TRANSLATION.md).
 
 ### 1) Branching & naming
 

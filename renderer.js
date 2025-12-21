@@ -1,4 +1,5 @@
 // Queue-based renderer for multi-file processing (memory-leak safe) (대기열 기반 렌더러 - 다중 파일 처리)
+console.log('[Renderer] renderer.js v1.3.1 로드됨 - 드래그 핸들 지원');
 let fileQueue = []; // processing queue (처리 대기열)
 let isProcessing = false;
 let currentProcessingIndex = -1;
@@ -53,6 +54,93 @@ const SUPPORTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.
 function isVideoFile(filePath) {
   const ext = filePath.toLowerCase().substr(filePath.lastIndexOf('.'));
   return SUPPORTED_EXTENSIONS.includes(ext);
+}
+
+// Check if file is SRT subtitle file (SRT 파일 확인)
+function isSrtFile(filePath) {
+  const ext = filePath.toLowerCase().substr(filePath.lastIndexOf('.'));
+  return ext === '.srt';
+}
+
+// Check if queue contains only SRT files (큐에 SRT 파일만 있는지 확인)
+function hasOnlySrtFiles() {
+  if (fileQueue.length === 0) return false;
+  return fileQueue.every(file => isSrtFile(file.path));
+}
+
+// Check if queue contains any SRT files (큐에 SRT 파일이 있는지 확인)
+function hasAnySrtFiles() {
+  return fileQueue.some(file => isSrtFile(file.path));
+}
+
+// Update UI mode based on queue contents (큐 내용에 따라 UI 모드 전환)
+function updateUIMode() {
+  const modelCard = document.getElementById('modelSelect')?.closest('.setting-card');
+  const languageCard = document.getElementById('languageSelect')?.closest('.setting-card');
+  const deviceCard = document.getElementById('deviceSelect')?.closest('.setting-card');
+  const translationCard = document.getElementById('translationSelect')?.closest('.setting-card');
+  const targetLanguageCard = document.getElementById('targetLanguageGroup');
+  const translationSelect = document.getElementById('translationSelect');
+
+  const srtOnlyMode = hasOnlySrtFiles();
+  const hasSrt = hasAnySrtFiles();
+  const d = I18N[currentUiLang] || I18N.ko;
+
+  if (srtOnlyMode) {
+    // SRT 전용 모드: 모델/언어/장치 숨기고, 번역 필수
+    if (modelCard) modelCard.style.display = 'none';
+    if (languageCard) languageCard.style.display = 'none';
+    if (deviceCard) deviceCard.style.display = 'none';
+    if (translationCard) {
+      translationCard.style.display = '';
+      // 번역 안함이 선택되어 있으면 자동으로 첫 번째 번역 옵션 선택
+      if (translationSelect && translationSelect.value === 'none') {
+        translationSelect.value = 'mymemory';
+        // 대상 언어 표시
+        if (targetLanguageCard) targetLanguageCard.style.display = '';
+      }
+    }
+    // 드롭존 힌트 변경
+    const dropHint1 = document.getElementById('dropHint1');
+    if (dropHint1) dropHint1.textContent = d.srtModeHint || 'SRT 번역 모드 - 번역 방법을 선택하세요';
+  } else {
+    // 일반 모드: 모든 옵션 표시
+    if (modelCard) modelCard.style.display = '';
+    if (languageCard) languageCard.style.display = '';
+    if (deviceCard) deviceCard.style.display = '';
+    if (translationCard) translationCard.style.display = '';
+    // 드롭존 힌트 복원
+    const dropHint1 = document.getElementById('dropHint1');
+    if (dropHint1) dropHint1.textContent = d.dropHint1;
+  }
+
+  // 혼합 모드 경고 (동영상 + SRT 섞여 있을 때)
+  if (hasSrt && !srtOnlyMode && fileQueue.length > 0) {
+    let mixedWarning = document.getElementById('mixedFileWarning');
+    const warningText = d.mixedFileWarning || '동영상과 SRT 파일이 섞여 있습니다. 각 파일 유형에 맞게 처리됩니다.';
+
+    if (!mixedWarning) {
+      mixedWarning = document.createElement('div');
+      mixedWarning.id = 'mixedFileWarning';
+      mixedWarning.className = 'mixed-file-warning';
+      const queueContainer = document.getElementById('queueContainer');
+      if (queueContainer) {
+        queueContainer.insertBefore(mixedWarning, queueContainer.firstChild);
+      }
+    }
+    // 항상 내용 업데이트 (언어 변경 대응)
+    // "번역 안함" 선택 시 SRT 스킵 예고 경고 추가
+    const translationValue = translationSelect?.value;
+    if (translationValue === 'none') {
+      const skipWarningText = d.srtWillBeSkipped || 'SRT 파일은 번역 설정이 없어 스킵됩니다. 번역 방법을 선택하세요.';
+      mixedWarning.innerHTML = `<span>${warningText}</span><span class="skip-warning">${skipWarningText}</span>`;
+    } else {
+      mixedWarning.innerHTML = `<span>${warningText}</span>`;
+    }
+  } else {
+    const mixedWarning = document.getElementById('mixedFileWarning');
+    if (mixedWarning) mixedWarning.remove();
+  }
 }
 
 // Check model status and update UI (모델 상태 확인 및 UI 업데이트)
@@ -114,8 +202,22 @@ function updateQueueDisplay() {
   
   const d = I18N[currentUiLang] || I18N.ko;
   queueList.innerHTML = fileQueue.map((file, index) => {
-    const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
-    const isValid = isVideoFile(file.path);
+    const fullFileName = file.path.split('\\').pop() || file.path.split('/').pop();
+    const isValid = isVideoFile(file.path) || isSrtFile(file.path);
+    const isSrt = isSrtFile(file.path);
+
+    // 확장자 추출 및 표시 이름 생성
+    const ext = fullFileName.lastIndexOf('.') > 0 ? fullFileName.substring(fullFileName.lastIndexOf('.')) : '';
+    const nameWithoutExt = fullFileName.substring(0, fullFileName.length - ext.length);
+    const maxNameLength = 25;
+    let displayName = nameWithoutExt;
+    if (nameWithoutExt.length > maxNameLength) {
+      displayName = nameWithoutExt.substring(0, maxNameLength) + '...';
+    }
+    // 확장자 뱃지 (SRT는 보라색, 비디오는 초록색) - 인라인 스타일 적용
+    const extBadge = isSrt
+      ? `<span style="display:inline-block;padding:2px 8px;margin-left:6px;font-size:11px;font-weight:700;border-radius:4px;color:#fff;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)">${ext.toUpperCase().substring(1)}</span>`
+      : `<span style="display:inline-block;padding:2px 8px;margin-left:6px;font-size:11px;font-weight:700;border-radius:4px;color:#fff;background:linear-gradient(135deg,#4ade80 0%,#22c55e 100%)">${ext.toUpperCase().substring(1)}</span>`;
 
     let statusText = d.qWaiting;
     let itemClass = 'queue-item';
@@ -132,6 +234,9 @@ function updateQueueDisplay() {
     } else if (file.status === 'stopped') {
       statusText = d.qStopped;
       itemClass = 'queue-item error';
+    } else if (file.status === 'skipped') {
+      statusText = d.qSkipped || '스킵됨';
+      itemClass = 'queue-item skipped';
     } else if (file.status === 'error') {
       statusText = d.qError;
       itemClass = 'queue-item error';
@@ -139,19 +244,27 @@ function updateQueueDisplay() {
       statusText = d.qUnsupported;
       itemClass = 'queue-item error';
     }
-    
+
+    // SRT 파일 추가 배지 (번역 표시)
+    const srtBadge = isSrt ? `<span class="srt-badge">📄 ${d.srtBadge || 'SRT 번역'}</span>` : '';
+
     // Constrain filename to one line; ellipsis on overflow (파일명 한 줄 표시, 길면 ...)
     const maxPathLength = 80; // max path length (최대 경로 길이)
-    const displayPath = file.path.length > maxPathLength ? 
-      file.path.substring(0, maxPathLength) + '...' : 
+    const displayPath = file.path.length > maxPathLength ?
+      file.path.substring(0, maxPathLength) + '...' :
       file.path;
-    
+
+    // 처리 중이 아닌 경우에만 드래그 가능
+    const isDraggable = file.status !== 'processing' && file.status !== 'translating';
+    const dragAttr = isDraggable ? `draggable="true" data-index="${index}"` : '';
+
     return `
-      <div class="${itemClass}">
+      <div class="${itemClass}${isSrt ? ' srt-file' : ''}${isDraggable ? ' draggable' : ''}" ${dragAttr}>
+        ${isDraggable ? `<div class="drag-handle" title="${d.dragHandleTooltip || '드래그하여 순서 변경'}">☰</div>` : ''}
         <div class="file-info">
-          <div class="file-name">${fileName}</div>
-          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path}">${displayPath}</div>
-          <div class="file-status">${d.statusLabel}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
+          <div class="file-name"><span class="name-text" title="${fullFileName} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${fullFileName.replace(/'/g, "\\'")}', 'filename')">${displayName}</span>${extBadge} ${srtBadge}</div>
+          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', 'path')">${displayPath}</div>
+          <div class="file-status">${d.statusLabel || '상태'}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
         </div>
         <div>
           ${file.status === 'completed' ?
@@ -166,6 +279,133 @@ function updateQueueDisplay() {
       </div>
     `;
   }).join('');
+
+  // 드래그 앤 드롭 이벤트 설정
+  setupQueueDragAndDrop();
+}
+
+// 대기열 드래그 앤 드롭 설정
+let draggedItem = null;
+let draggedIndex = null;
+
+function setupQueueDragAndDrop() {
+  const queueList = document.getElementById('queueList');
+  if (!queueList) return;
+
+  const items = queueList.querySelectorAll('.queue-item.draggable');
+  const dragHandles = queueList.querySelectorAll('.drag-handle');
+  console.log('[DragDrop] 드래그 가능한 아이템:', items.length, '드래그 핸들:', dragHandles.length);
+
+  items.forEach(item => {
+    // 처음에는 드래그 비활성화 (핸들로만 드래그 가능하게)
+    item.setAttribute('draggable', 'false');
+
+    // 드래그 핸들에서만 드래그 시작 허용
+    const handle = item.querySelector('.drag-handle');
+    if (handle) {
+      handle.addEventListener('mousedown', (e) => {
+        console.log('[DragDrop] 핸들 mousedown - 드래그 활성화');
+        item.setAttribute('draggable', 'true');
+        e.stopPropagation(); // 이벤트 전파 방지
+      });
+
+      // 마우스 업 시 드래그 비활성화 복원
+      handle.addEventListener('mouseup', () => {
+        // dragend 에서 처리하므로 여기서는 불필요
+      });
+    }
+
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragend', function(e) {
+      // 드래그 끝나면 다시 비활성화
+      this.setAttribute('draggable', 'false');
+      handleDragEnd.call(this, e);
+    });
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('dragenter', handleDragEnter);
+    item.addEventListener('dragleave', handleDragLeave);
+    item.addEventListener('drop', handleDrop);
+  });
+}
+
+function handleDragStart(e) {
+  console.log('[DragDrop] dragstart 이벤트 발생, index:', this.dataset.index);
+  draggedItem = this;
+  draggedIndex = parseInt(this.dataset.index);
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggedIndex);
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  document.querySelectorAll('.queue-item').forEach(item => {
+    item.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+  });
+  draggedItem = null;
+  draggedIndex = null;
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+
+  const targetIndex = parseInt(this.dataset.index);
+  if (targetIndex === draggedIndex) return;
+
+  // 마우스 위치에 따라 위/아래 표시
+  const rect = this.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+
+  this.classList.remove('drag-over-top', 'drag-over-bottom');
+  if (e.clientY < midY) {
+    this.classList.add('drag-over-top');
+  } else {
+    this.classList.add('drag-over-bottom');
+  }
+}
+
+function handleDragEnter(e) {
+  e.preventDefault();
+  if (this !== draggedItem) {
+    this.classList.add('drag-over');
+  }
+}
+
+function handleDragLeave(e) {
+  this.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  console.log('[DragDrop] drop 이벤트 발생, target:', this.dataset.index, 'dragged:', draggedIndex);
+
+  const targetIndex = parseInt(this.dataset.index);
+  if (targetIndex === draggedIndex || isNaN(targetIndex) || isNaN(draggedIndex)) {
+    console.log('[DragDrop] drop 취소 - 같은 위치 또는 유효하지 않은 인덱스');
+    return;
+  }
+
+  // 마우스 위치에 따라 삽입 위치 결정
+  const rect = this.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  let insertIndex = e.clientY < midY ? targetIndex : targetIndex + 1;
+
+  // 드래그된 아이템이 타겟보다 앞에 있으면 인덱스 조정
+  if (draggedIndex < insertIndex) {
+    insertIndex--;
+  }
+
+  // 배열 순서 변경
+  const [movedItem] = fileQueue.splice(draggedIndex, 1);
+  fileQueue.splice(insertIndex, 0, movedItem);
+
+  // UI 업데이트
+  updateQueueDisplay();
+  updateUIMode();
+
+  this.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
 }
 
 function updateProgress(progress, text) {
@@ -272,16 +512,18 @@ async function selectFile() {
     const result = await window.electronAPI.showOpenDialog({
       properties: ['openFile', 'multiSelections'], // allow multi-selection (다중 선택 허용)
       filters: [
+        { name: '동영상 및 자막 파일', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'srt'] },
         { name: '동영상 파일', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
+        { name: '자막 파일 (SRT)', extensions: ['srt'] },
         { name: '모든 파일', extensions: ['*'] }
       ]
     });
-    
+
     if (!result.canceled && result.filePaths.length > 0) {
       result.filePaths.forEach(filePath => {
         addToQueue(filePath);
       });
-      
+
       addOutput(`${result.filePaths.length}개 파일이 대기열에 추가되었습니다.\n`);
     }
   } catch (error) {
@@ -304,8 +546,9 @@ function addToQueue(filePath) {
     progress: 0,
     addedAt: new Date()
   });
-  
+
   updateQueueDisplay();
+  updateUIMode(); // SRT/동영상 모드 전환
 }
 
 function removeFromQueue(index) {
@@ -328,6 +571,7 @@ function removeFromQueue(index) {
 
     addOutput(`${I18N[currentUiLang].removedFromQueue(fileName)}\n`);
     updateQueueDisplay();
+    updateUIMode(); // SRT/동영상 모드 전환
   }
 }
 
@@ -337,6 +581,7 @@ function clearQueue() {
     fileQueue = [];
     currentProcessingIndex = -1;
     updateQueueDisplay();
+    updateUIMode(); // SRT/동영상 모드 전환
     addOutput(`${I18N[currentUiLang].queueCleared}\n`);
   } else {
     // when busy: remove only pending items (처리 중엔 대기 항목만 삭제)
@@ -344,6 +589,7 @@ function clearQueue() {
     fileQueue = fileQueue.filter(file => file.status !== 'pending');
 
     updateQueueDisplay();
+    updateUIMode(); // SRT/동영상 모드 전환
     addOutput(`${I18N[currentUiLang].pendingFilesRemoved(pendingFiles.length)}\n`);
   }
 }
@@ -371,6 +617,21 @@ function stopProcessing() {
 
 function openFileLocation(filePath) {
   window.electronAPI.openFileLocation(filePath);
+}
+
+// 클립보드 복사 함수
+function copyToClipboard(text, type) {
+  const d = I18N[currentUiLang] || I18N.ko;
+  navigator.clipboard.writeText(text).then(() => {
+    const toast = document.getElementById('copyToast');
+    toast.textContent = type === 'filename' ? d.fileNameCopied : d.pathCopied;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 1500);
+  }).catch(err => {
+    console.error('복사 실패:', err);
+  });
 }
 
 async function openOutputFolder() {
@@ -406,6 +667,7 @@ async function continueProcessing() {
     if (file.status !== 'completed' &&
         file.status !== 'error' &&
         file.status !== 'stopped' &&
+        file.status !== 'skipped' &&
         file.status !== 'translating' &&
         file.status !== 'processing') {
       fileToProcess = file;
@@ -447,10 +709,139 @@ async function continueProcessing() {
     // 현재 시작 시점의 번역 사용 여부를 캡쳐 (중간 변경과 무관하게 처리 일관성 확보)
     const methodAtStart = (document.getElementById('translationSelect')?.value || 'none');
 
+    // SRT 파일 직접 번역 처리
+    if (isSrtFile(file.path)) {
+      const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
+
+      // SRT 파일은 번역만 수행 - 번역 방법이 선택되지 않으면 스킵
+      if (methodAtStart === 'none') {
+        file.status = 'skipped';
+        updateQueueDisplay();
+        const d = I18N[currentUiLang] || I18N.ko;
+        addOutput(`⏭️ ${d.srtSkippedNoTranslation || 'SRT 파일 스킵 (번역 설정 없음)'}: ${fileName}\n`);
+        // 다음 파일 처리 계속
+        setTimeout(() => continueProcessing(), 100);
+        return;
+      }
+
+      // 중지 요청 확인
+      if (shouldStop) {
+        addOutput(`${I18N[currentUiLang].userStopped}\n`);
+        return;
+      }
+
+      console.log('[continueProcessing] SRT 파일 직접 번역 시작, index:', i, 'fileName:', fileName);
+      currentProcessingIndex = i;
+      file.status = 'translating';
+      file.progress = 0;
+      updateQueueDisplay();
+
+      // 프로그래스바 초기화
+      resetProgress('prepare');
+      addOutput(`\n${I18N[currentUiLang].processingFile(i + 1, fileQueue.length, fileName)}\n`);
+
+      const srtDirectMsg = {
+        ko: 'SRT 파일 직접 번역 모드',
+        en: 'Direct SRT file translation mode',
+        ja: 'SRTファイル直接翻訳モード',
+        zh: 'SRT文件直接翻译模式'
+      };
+      addOutput(`${srtDirectMsg[currentUiLang] || srtDirectMsg.ko}\n`);
+
+      try {
+        translationSessionActive = true;
+        setProgressTarget(10, I18N[currentUiLang].translationStarting || '번역 시작 중...');
+
+        // 번역 방식에 따른 안내 메시지
+        let translationInfo = '';
+        switch (methodAtStart) {
+          case 'mymemory':
+            translationInfo = 'MyMemory (무료)';
+            break;
+          case 'deepl':
+            translationInfo = 'DeepL (API 키 확인 중...)';
+            break;
+          case 'chatgpt':
+            translationInfo = 'GPT-5-nano (API 키 확인 중...)';
+            break;
+          case 'gemini':
+            translationInfo = 'Gemini (API 키 확인 중...)';
+            break;
+          case 'offline':
+            translationInfo = 'Offline (오프라인 번역)';
+            break;
+          default:
+            translationInfo = methodAtStart;
+        }
+
+        addOutput(`번역 시작 (${translationInfo})...\n`);
+
+        const targetLang = (document.getElementById('targetLanguageSelect')?.value || 'ko');
+
+        const translationResult = await window.electronAPI.translateSubtitle({
+          filePath: file.path,
+          method: methodAtStart,
+          targetLang: targetLang
+        });
+
+        if (translationResult.success) {
+          file.status = 'completed';
+          file.progress = 100;
+          translationSessionActive = false;
+          setProgressTarget(100, I18N[currentUiLang].translationCompleted || '번역 완료!');
+          addOutput(`번역 완료: ${fileName.replace('.srt', '')}_${targetLang}.srt\n`);
+        } else {
+          file.status = 'error';
+          file.progress = 0;
+          translationSessionActive = false;
+          addOutput(`번역 실패: ${translationResult.error}\n`);
+        }
+      } catch (error) {
+        console.error('[continueProcessing] SRT translation error:', error);
+        translationSessionActive = false;
+        file.status = 'error';
+        file.progress = 0;
+        addOutput(`${I18N[currentUiLang].translationFailed || '번역 실패: '}${error.message}\n`);
+      }
+
+      updateQueueDisplay();
+
+      // 다음 파일 처리
+      const pendingFiles = fileQueue.filter(f => f.status === 'pending');
+      if (pendingFiles.length > 0 && !shouldStop) {
+        addOutput(`\n${I18N[currentUiLang].processingNext(pendingFiles.length)}\n`);
+        setTimeout(() => continueProcessing(), 500);
+      } else {
+        // 모든 파일 처리 완료
+        isProcessing = false;
+        shouldStop = false;
+        currentProcessingIndex = -1;
+        updateQueueDisplay();
+
+        const completedCount = fileQueue.filter(f => f.status === 'completed').length;
+        const errorCount = fileQueue.filter(f => f.status === 'error').length;
+        const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
+
+        setProgressTarget(100, I18N[currentUiLang].allDoneWithTr || '모두 완료!');
+        showToast(I18N[currentUiLang].allDoneWithTr || '모두 완료!', { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+        try {
+          playCompletionSound();
+        } catch (error) {
+          console.log('[Audio] Failed to play completion sound:', error.message);
+        }
+
+        addOutput(`\n${I18N[currentUiLang].allTasksComplete(completedCount, errorCount, stoppedCount)}\n`);
+      }
+      return;
+    }
+
+    // 일반 비디오 파일 처리
     if (!isVideoFile(file.path)) {
       file.status = 'error';
       updateQueueDisplay();
       addOutput(`${I18N[currentUiLang].unsupportedFormat(file.path.split('\\').pop())}\n`);
+      // 다음 파일 처리 계속
+      setTimeout(() => continueProcessing(), 100);
       return;
     }
 
@@ -532,6 +923,9 @@ async function continueProcessing() {
                 break;
               case 'chatgpt':
                 translationInfo = 'GPT-5-nano (API 키 확인 중...)';
+                break;
+              case 'gemini':
+                translationInfo = 'Gemini (API 키 확인 중...)';
                 break;
               case 'offline':
                 translationInfo = 'Offline (오프라인 번역)';
@@ -659,6 +1053,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // 비밀번호 표시/숨기기 토글 버튼
+  document.querySelectorAll('.toggle-password').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+
+      // 아이콘 토글
+      const eyeIcon = btn.querySelector('.eye-icon');
+      const eyeOffIcon = btn.querySelector('.eye-off-icon');
+      if (eyeIcon && eyeOffIcon) {
+        eyeIcon.style.display = isPassword ? 'none' : 'block';
+        eyeOffIcon.style.display = isPassword ? 'block' : 'none';
+      }
+
+      // 툴팁 업데이트
+      const d = I18N[currentUiLang] || I18N.ko;
+      btn.title = isPassword ? (d.togglePasswordHide || 'Hide password') : (d.togglePasswordShow || 'Show password');
+    });
+  });
+
   const dropZone = document.getElementById('dropZone');
   const runBtn = document.getElementById('runBtn');
   const clearBtn = document.getElementById('clearBtn');
@@ -671,19 +1089,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   dropZone.ondragover = (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
     dropZone.classList.add('dragover');
   };
-  
+
   dropZone.ondragleave = (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
     dropZone.classList.remove('dragover');
   };
-  
+
   dropZone.ondrop = (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) {
+      console.log('[DragDrop] 파일 드롭존에서 대기열 드래그 무시');
+      return;
+    }
     e.preventDefault();
     dropZone.classList.remove('dragover');
-    
+
     console.log('Drop event triggered');
     
     const files = Array.from(e.dataTransfer.files);
@@ -937,8 +1364,8 @@ const I18N = {
   ko: {
     titleText: 'WhisperSubTranslate',
     dropTitle: '파일 드래그 & 드롭',
-    dropHint1: '동영상 파일을 여기에 드래그하세요',
-    dropHint2: '지원 형식: MP4, AVI, MKV, MOV, WMV',
+    dropHint1: '동영상 또는 SRT 파일을 여기에 드래그하세요',
+    dropHint2: '지원 형식: MP4, AVI, MKV, MOV, WMV, SRT',
     queueTitle: '처리 대기열',
     clearQueueBtn: '대기열 삭제',
     openFolderBtn: '출력 폴더',
@@ -991,8 +1418,15 @@ const I18N = {
     trMyMemory: 'MyMemory (일 5만글자 무료, 추천)',
     trDeepL: 'DeepL (월 50만글자, API키 필요)',
     trChatGPT: 'GPT-5-nano (사용자 API 키 필요)',
+    trGemini: 'Gemini (무료 API 키)',
+    // SRT 모드 관련
+    srtModeHint: '📄 SRT 번역 모드 - 번역 방법을 선택하세요',
+    srtBadge: 'SRT 번역',
+    mixedFileWarning: '동영상과 SRT 파일이 섞여 있습니다. 각 파일 유형에 맞게 처리됩니다.',
     // 큐/버튼/상태
-    qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qUnsupported: '지원되지 않는 형식',
+    qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qSkipped: '스킵됨', qUnsupported: '지원되지 않는 형식',
+    srtSkippedNoTranslation: 'SRT 파일 스킵 (번역 설정 없음)',
+    srtWillBeSkipped: 'SRT 파일은 번역 설정이 없어 스킵됩니다. 번역 방법을 선택하세요.',
     btnOpen: '열기', btnRemove: '제거',
     // 진행 텍스트
     progressReady: '준비 중...', progressExtracting: '자막 추출 중...', progressTranslating: '번역 중...', progressPreparing: '자막 추출 준비 중...', progressCleaning: '메모리 정리 중...', progressProcessing: '처리 중...', progressComplete: '완료!',
@@ -1016,8 +1450,15 @@ const I18N = {
     openaiLinkText: 'OpenAI API 키 발급 받기',
     openaiHelpSuffix: ' (유료)',
     deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
-    deeplHelpHtml: '<strong>무료 가입 방법:</strong><br>1. <a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a> 접속<br>2. "API 무료로 시작하기" 클릭<br>3. 이메일 인증 후 API 키 복사<br>4. 월 50만글자 무료 사용!',
+    deeplHelpHtml: '<a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 무료로 발급받을 수 있습니다. (월 50만글자 무료)',
     openaiPlaceholder: 'OpenAI API 키를 입력하세요 (GPT-5-nano)',
+    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급받기</a><br>(GPT-5-nano, 유료 - 입력 $0.05 / 출력 $0.40 per 1M 토큰)',
+    labelGeminiKey: 'Gemini API 키 (선택사항)',
+    geminiPlaceholder: 'Gemini API 키를 입력하세요 (Gemini 3 Flash)',
+    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>에서 발급<br>(무료: 하루 250자막/20~30분, 유료: 무제한)',
+    togglePasswordShow: '비밀번호 표시',
+    togglePasswordHide: '비밀번호 숨기기',
+    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 번역, 무료 API 키<br><strong>빠른</strong> 번역 속도',
     queueEmpty: '파일을 드래그하여 추가하세요',
     soundLabel: '알림음',
     soundTest: '테스트',
@@ -1027,12 +1468,20 @@ const I18N = {
     soundEnabled: '알림음 사용',
     soundVolume: '볼륨',
     apiSectionTitle: '번역 API 키',
+    // 대기열 관련
+    dragHandleTooltip: '드래그하여 순서 변경',
+    clickToCopy: '클릭하여 복사',
+    fileNameCopied: '파일명 복사됨',
+    pathCopied: '경로 복사됨',
+    statusLabel: '상태',
+    copyFileName: '파일명',
+    copyPath: '경로',
   },
   en: {
     titleText: 'WhisperSubTranslate',
     dropTitle: 'Drag & Drop Files',
-    dropHint1: 'Drag your video files here',
-    dropHint2: 'Supported: MP4, AVI, MKV, MOV, WMV',
+    dropHint1: 'Drag video or SRT files here',
+    dropHint2: 'Supported: MP4, AVI, MKV, MOV, WMV, SRT',
     queueTitle: 'Processing Queue',
     clearQueueBtn: 'Clear Queue',
     openFolderBtn: 'Open Output Folder',
@@ -1083,7 +1532,14 @@ const I18N = {
     trMyMemory: 'MyMemory (Free ~50K/day)',
     trDeepL: 'DeepL (Free 500K/month with API key)',
     trChatGPT: 'GPT-5-nano (Requires API key)',
-    qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qUnsupported: 'Unsupported format',
+    trGemini: 'Gemini (Free API key)',
+    // SRT mode
+    srtModeHint: '📄 SRT Translation Mode - Select translation method',
+    srtBadge: 'SRT Translate',
+    mixedFileWarning: 'Video and SRT files are mixed. Each will be processed accordingly.',
+    qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qSkipped: 'Skipped', qUnsupported: 'Unsupported format',
+    srtSkippedNoTranslation: 'SRT file skipped (no translation configured)',
+    srtWillBeSkipped: 'SRT files will be skipped without translation. Please select a translation method.',
     btnOpen: 'Open', btnRemove: 'Remove',
     progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...', progressProcessing: 'Processing...', progressComplete: 'Complete!',
     allDoneNoTr: 'All files completed!', allDoneWithTr: 'All files (extract+translate) completed! You may close the window.',
@@ -1105,8 +1561,15 @@ const I18N = {
     openaiLinkText: 'Get OpenAI API Key',
     openaiHelpSuffix: ' (paid, low cost)',
     deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
-    deeplHelpHtml: '<strong>How to get free key:</strong><br>1. Visit <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a><br>2. Click "Start for free"<br>3. Verify email and copy API key<br>4. Enjoy 500K chars/month free',
+    deeplHelpHtml: 'Get a free key from <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a>. (500K chars/month free)',
     openaiPlaceholder: 'Enter OpenAI API key (GPT-5-nano)',
+    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">Get OpenAI API Key</a><br>(GPT-5-nano, paid - $0.05 input / $0.40 output per 1M tokens)',
+    labelGeminiKey: 'Gemini API Key (optional)',
+    geminiPlaceholder: 'Enter Gemini API key (Gemini 3 Flash)',
+    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>(Free: 250 subs/day ~20-30min, Paid: unlimited)',
+    togglePasswordShow: 'Show password',
+    togglePasswordHide: 'Hide password',
+    translationGeminiHtml: '<strong>Gemini:</strong> Google AI translation, free API key<br><strong>Fast</strong> translation speed',
     queueEmpty: 'Drag files here to add',
     soundLabel: 'Sound',
     soundTest: 'Test',
@@ -1116,12 +1579,20 @@ const I18N = {
     soundEnabled: 'Enable sound',
     soundVolume: 'Volume',
     apiSectionTitle: 'Translation API Keys',
+    // Queue related
+    dragHandleTooltip: 'Drag to reorder',
+    clickToCopy: 'Click to copy',
+    fileNameCopied: 'Filename copied',
+    pathCopied: 'Path copied',
+    statusLabel: 'Status',
+    copyFileName: 'Filename',
+    copyPath: 'Path',
   },
   ja: {
     titleText: 'WhisperSubTranslate',
     dropTitle: 'ファイルをドラッグ＆ドロップ',
-    dropHint1: 'ここに動画ファイルをドラッグしてください',
-    dropHint2: '対応形式: MP4, AVI, MKV, MOV, WMV',
+    dropHint1: 'ここに動画またはSRTファイルをドラッグしてください',
+    dropHint2: '対応形式: MP4, AVI, MKV, MOV, WMV, SRT',
     queueTitle: '処理キュー',
     clearQueueBtn: 'キューを削除',
     openFolderBtn: '出力フォルダ',
@@ -1172,7 +1643,14 @@ const I18N = {
     trMyMemory: 'MyMemory（無料 約5万/日）',
     trDeepL: 'DeepL（月50万/無料APIキー）',
     trChatGPT: 'GPT-5-nano（APIキー必要）',
-    qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qUnsupported: '未対応の形式',
+    trGemini: 'Gemini（無料APIキー）',
+    // SRTモード
+    srtModeHint: '📄 SRT翻訳モード - 翻訳方法を選択してください',
+    srtBadge: 'SRT翻訳',
+    mixedFileWarning: '動画とSRTファイルが混在しています。各ファイルタイプに応じて処理されます。',
+    qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qSkipped: 'スキップ', qUnsupported: '未対応の形式',
+    srtSkippedNoTranslation: 'SRTファイルをスキップしました（翻訳設定なし）',
+    srtWillBeSkipped: 'SRTファイルは翻訳設定がないためスキップされます。翻訳方法を選択してください。',
     btnOpen: '開く', btnRemove: '削除',
     progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...', progressProcessing: '処理中...', progressComplete: '完了！',
     allDoneNoTr: 'すべて完了！', allDoneWithTr: 'すべて完了（抽出＋翻訳）！ウィンドウを閉じても大丈夫です。',
@@ -1194,8 +1672,9 @@ const I18N = {
     openaiLinkText: 'OpenAI API キーを取得',
     openaiHelpSuffix: '（有料・低コスト）',
     deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
-    deeplHelpHtml: '<strong>無料登録手順:</strong><br>1. <a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>にアクセス<br>2. 「無料で開始」をクリック<br>3. メール認証後、API キーをコピー<br>4. 月 50 万文字まで無料',
+    deeplHelpHtml: '<a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>から無料で取得できます。（月50万文字無料）',
     openaiPlaceholder: 'OpenAI API キーを入力 (GPT-5-nano)',
+    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API キーを取得</a><br>（GPT-5-nano、有料 - 入力 $0.05 / 出力 $0.40 per 1Mトークン）',
     queueEmpty: 'ファイルをドラッグして追加',
     soundLabel: '通知音',
     soundTest: 'テスト',
@@ -1205,12 +1684,26 @@ const I18N = {
     soundEnabled: '通知音を使用',
     soundVolume: '音量',
     apiSectionTitle: '翻訳 API キー',
+    labelGeminiKey: 'Gemini API キー（任意）',
+    geminiPlaceholder: 'Gemini API キーを入力（Gemini 3 Flash）',
+    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得<br>（無料: 1日250字幕/20〜30分、有料: 無制限）',
+    togglePasswordShow: 'パスワードを表示',
+    togglePasswordHide: 'パスワードを隠す',
+    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 翻訳、無料 API キー<br><strong>高速</strong>翻訳',
+    // キュー関連
+    dragHandleTooltip: 'ドラッグして順序変更',
+    clickToCopy: 'クリックしてコピー',
+    fileNameCopied: 'ファイル名をコピーしました',
+    pathCopied: 'パスをコピーしました',
+    statusLabel: '状態',
+    copyFileName: 'ファイル名',
+    copyPath: 'パス',
   },
   zh: {
     titleText: 'WhisperSubTranslate',
     dropTitle: '拖拽文件到此',
-    dropHint1: '将视频文件拖到这里',
-    dropHint2: '支持: MP4, AVI, MKV, MOV, WMV',
+    dropHint1: '将视频或SRT文件拖到这里',
+    dropHint2: '支持: MP4, AVI, MKV, MOV, WMV, SRT',
     queueTitle: '处理队列',
     clearQueueBtn: '清空队列',
     openFolderBtn: '打开输出文件夹',
@@ -1261,7 +1754,14 @@ const I18N = {
     trMyMemory: 'MyMemory（免费 约5万/天）',
     trDeepL: 'DeepL（每月50万/需API密钥）',
     trChatGPT: 'GPT-5-nano（需API密钥）',
-    qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qUnsupported: '不支持的格式',
+    trGemini: 'Gemini（免费API密钥）',
+    // SRT模式
+    srtModeHint: '📄 SRT翻译模式 - 请选择翻译方法',
+    srtBadge: 'SRT翻译',
+    mixedFileWarning: '视频和SRT文件混合。将根据文件类型分别处理。',
+    qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qSkipped: '已跳过', qUnsupported: '不支持的格式',
+    srtSkippedNoTranslation: 'SRT文件已跳过（未配置翻译）',
+    srtWillBeSkipped: 'SRT文件因无翻译设置将被跳过。请选择翻译方法。',
     btnOpen: '打开', btnRemove: '移除',
     progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...', progressProcessing: '处理中...', progressComplete: '完成！',
     allDoneNoTr: '全部完成！', allDoneWithTr: '全部完成（提取+翻译）！可以关闭窗口。',
@@ -1283,8 +1783,9 @@ const I18N = {
     openaiLinkText: '获取 OpenAI API 密钥',
     openaiHelpSuffix: '（付费，成本低）',
     deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
-    deeplHelpHtml: '<strong>免费获取方式：</strong><br>1. 访问 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a><br>2. 点击"免费开始"<br>3. 邮箱验证后复制密钥<br>4. 每月 50 万字符免费',
+    deeplHelpHtml: '可从 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a>免费获取。（每月50万字符免费）',
     openaiPlaceholder: '输入 OpenAI API 密钥 (GPT-5-nano)',
+    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">获取 OpenAI API 密钥</a><br>（GPT-5-nano，付费 - 输入 $0.05 / 输出 $0.40 每1M令牌）',
     queueEmpty: '拖拽文件添加',
     soundLabel: '提示音',
     soundTest: '测试',
@@ -1294,6 +1795,20 @@ const I18N = {
     soundEnabled: '启用提示音',
     soundVolume: '音量',
     apiSectionTitle: '翻译 API 密钥',
+    labelGeminiKey: 'Gemini API 密钥（可选）',
+    geminiPlaceholder: '输入 Gemini API 密钥（Gemini 3 Flash）',
+    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 获取<br>（免费: 每日250字幕/20-30分钟，付费: 无限制）',
+    togglePasswordShow: '显示密码',
+    togglePasswordHide: '隐藏密码',
+    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 翻译，免费 API 密钥<br><strong>快速</strong>翻译',
+    // 队列相关
+    dragHandleTooltip: '拖动以重新排序',
+    clickToCopy: '点击复制',
+    fileNameCopied: '已复制文件名',
+    pathCopied: '已复制路径',
+    statusLabel: '状态',
+    copyFileName: '文件名',
+    copyPath: '路径',
   },
 };
 
@@ -1360,6 +1875,7 @@ const TR_METHOD_I18N = (lang) => ({
   mymemory: I18N[lang].trMyMemory,
   deepl: I18N[lang].trDeepL,
   chatgpt: I18N[lang].trChatGPT,
+  gemini: I18N[lang].trGemini,
 });
 
 function rebuildLanguageSelectOptions(lang) {
@@ -1397,7 +1913,7 @@ function rebuildTranslationSelectOptions(lang) {
   if (!sel) return;
   const original = sel.value;
   const map = TR_METHOD_I18N(lang);
-  ['none','mymemory','deepl','chatgpt'].forEach(v => {
+  ['none','mymemory','deepl','chatgpt','gemini'].forEach(v => {
     const o = sel.querySelector(`option[value="${v}"]`);
     if (o) o.textContent = map[v];
   });
@@ -1470,14 +1986,20 @@ function applyI18n(lang) {
   if (apiSection) apiSection.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> ${d.apiSectionTitle}`;
   setText('labelDeeplKey', d.labelDeeplKey);
   setText('labelOpenaiKey', d.labelOpenaiKey);
-  const oLink = document.getElementById('openaiLink'); if (oLink) oLink.textContent = d.openaiLinkText;
-  const oSuf = document.getElementById('openaiHelpSuffix'); if (oSuf) oSuf.textContent = d.openaiHelpSuffix;
+  setText('labelGeminiKey', d.labelGeminiKey);
   setText('testApiKeysBtn', d.testConnBtn);
   setText('saveSettingsBtn', d.saveBtn);
   // placeholders & help
   const deeplInput = document.getElementById('deeplApiKey'); if (deeplInput) deeplInput.placeholder = d.deeplPlaceholder;
   const deeplHelp = document.getElementById('deeplHelp'); if (deeplHelp) deeplHelp.innerHTML = d.deeplHelpHtml;
   const openaiInput = document.getElementById('openaiApiKey'); if (openaiInput) openaiInput.placeholder = d.openaiPlaceholder;
+  const openaiHelp = document.getElementById('openaiHelp'); if (openaiHelp) openaiHelp.innerHTML = d.openaiHelpHtml;
+  const geminiInput = document.getElementById('geminiApiKey'); if (geminiInput) geminiInput.placeholder = d.geminiPlaceholder;
+  const geminiHelp = document.getElementById('geminiHelp'); if (geminiHelp) geminiHelp.innerHTML = d.geminiHelpHtml;
+  // 토글 버튼 툴팁
+  document.querySelectorAll('.toggle-password').forEach(btn => {
+    btn.title = d.togglePasswordShow || 'Show password';
+  });
 
   // 동적 셀렉트/상태 갱신
   rebuildLanguageSelectOptions(currentUiLang);
@@ -1488,44 +2010,54 @@ function applyI18n(lang) {
 
   updateModelSelect();
   updateQueueDisplay(); // 언어 변경 시 큐 표시도 즉시 업데이트
+  updateUIMode(); // 언어 변경 시 혼합 파일 경고도 즉시 업데이트
 }
 
 // updateModelSelect를 현지화 지원하도록 보강
 function updateModelSelect() {
   const modelSelect = document.getElementById('modelSelect');
   const modelStatus = document.getElementById('modelStatus');
-  
+
+  // 현재 선택된 모델 저장 (언어 변경 시 유지)
+  const previousValue = modelSelect.value;
+
   modelSelect.innerHTML = '';
-  
+
   const ids = ['tiny','base','small','medium','large-v3-turbo','large','large-v2','large-v3'];
   const models = ids.map(id => ({ id, name: getModelDisplayName(currentUiLang, id) }));
-  
+
   const availableGroup = document.createElement('optgroup');
   availableGroup.label = I18N[currentUiLang].modelAvailableGroup;
-  
+
   const needDownloadGroup = document.createElement('optgroup');
   needDownloadGroup.label = I18N[currentUiLang].modelNeedDownloadGroup;
-  
+
   let hasAvailable = false;
   let hasNeedDownload = false;
-  
+
   models.forEach(model => {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = model.name;
-    
+
     if (availableModels[model.id]) {
       availableGroup.appendChild(option);
       hasAvailable = true;
-      if (model.id === 'medium') option.selected = true; // 기본 선택
     } else {
       needDownloadGroup.appendChild(option);
       hasNeedDownload = true;
     }
   });
-  
+
   if (hasAvailable) modelSelect.appendChild(availableGroup);
   if (hasNeedDownload) modelSelect.appendChild(needDownloadGroup);
+
+  // 이전 선택 복원, 없으면 medium 기본 선택
+  if (previousValue && ids.includes(previousValue)) {
+    modelSelect.value = previousValue;
+  } else if (availableModels['medium']) {
+    modelSelect.value = 'medium';
+  }
   
   // Update status message (localized) (상태 메시지 업데이트, 현지화)
   const availableCount = Object.keys(availableModels).length;
@@ -1634,11 +2166,26 @@ function updateQueueDisplayImmediate() {
     stopBtn.style.display = 'none';
     clearQueueBtn.textContent = d.clearQueueBtn;
   }
-  
+
   queueList.innerHTML = fileQueue.map((file, index) => {
-    const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
-    const isValid = isVideoFile(file.path);
-    
+    const fullFileName = file.path.split('\\').pop() || file.path.split('/').pop();
+    const ext = fullFileName.lastIndexOf('.') > 0 ? fullFileName.substring(fullFileName.lastIndexOf('.')) : '';
+    const isSrt = ext.toLowerCase() === '.srt';
+
+    // 파일명 표시: 이름 부분만 줄이고 확장자는 뱃지로 표시
+    const nameWithoutExt = fullFileName.substring(0, fullFileName.length - ext.length);
+    const maxNameLength = 25;
+    let displayName = nameWithoutExt;
+    if (nameWithoutExt.length > maxNameLength) {
+      displayName = nameWithoutExt.substring(0, maxNameLength) + '...';
+    }
+    // 확장자 뱃지 (SRT는 보라색, 동영상은 초록색)
+    const extBadge = isSrt
+      ? `<span class="ext-badge srt">SRT</span>`
+      : `<span class="ext-badge video">${ext.toUpperCase().substring(1)}</span>`;
+
+    const isValid = isVideoFile(file.path) || isSrtFile(file.path);
+
     let statusText = d.qWaiting;
     let itemClass = 'queue-item';
     
@@ -1651,6 +2198,9 @@ function updateQueueDisplayImmediate() {
     } else if (file.status === 'stopped') {
       statusText = d.qStopped;
       itemClass = 'queue-item error';
+    } else if (file.status === 'skipped') {
+      statusText = d.qSkipped || '스킵됨';
+      itemClass = 'queue-item skipped';
     } else if (file.status === 'error') {
       statusText = d.qError;
       itemClass = 'queue-item error';
@@ -1658,26 +2208,31 @@ function updateQueueDisplayImmediate() {
       statusText = d.qUnsupported;
       itemClass = 'queue-item error';
     }
-    
+
     const maxPathLength = 80;
-    const displayPath = file.path.length > maxPathLength ? 
-      file.path.substring(0, maxPathLength) + '...' : 
+    const displayPath = file.path.length > maxPathLength ?
+      file.path.substring(0, maxPathLength) + '...' :
       file.path;
-    
+
     const btnOpen = d.btnOpen;
     const btnRemove = d.btnRemove;
     const processingBadge = `<span style="color: #ffc107; font-size: 12px; font-weight: 600;">${d.qProcessing}</span>`;
-    
+
+    // 처리 중이 아닌 경우에만 드래그 가능
+    const isDraggable = file.status !== 'processing' && file.status !== 'translating';
+    const dragAttr = isDraggable ? `draggable="true" data-index="${index}"` : '';
+
     return `
-      <div class="${itemClass}">
+      <div class="${itemClass}${isDraggable ? ' draggable' : ''}" ${dragAttr}>
+        ${isDraggable ? `<div class="drag-handle" title="${d.dragHandleTooltip || '드래그하여 순서 변경'}">☰</div>` : ''}
         <div class="file-info">
-          <div class="file-name">${fileName}</div>
-          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path}">${displayPath}</div>
-          <div class="file-status">상태: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
+          <div class="file-name"><span class="name-text" title="${fullFileName} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${fullFileName.replace(/'/g, "\\'")}', 'filename')">${displayName}</span>${extBadge}</div>
+          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', 'path')">${displayPath}</div>
+          <div class="file-status">${d.statusLabel || '상태'}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
         </div>
         <div>
-          ${file.status === 'completed' ? 
-            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">${btnOpen}</button>` : 
+          ${file.status === 'completed' ?
+            `<button onclick="openFileLocation('${file.path.replace(/\\/g, '\\\\')}')" class="btn-success btn-sm">${btnOpen}</button>` :
             file.status === 'processing' ?
             processingBadge :
             (file.status === 'error' || file.status === 'stopped') ?
@@ -1688,6 +2243,9 @@ function updateQueueDisplayImmediate() {
       </div>
     `;
   }).join('');
+
+  // 드래그 앤 드롭 이벤트 설정
+  setupQueueDragAndDrop();
 }
 
 // 진행 단계 텍스트도 현지화 사용
@@ -1864,13 +2422,28 @@ if (window?.electronAPI) {
 
 
 
-// UI 언어 드롭다운 연동
+// UI 언어 드롭다운 연동 (설정 저장 포함)
 function initUiLanguageDropdown() {
   const sel = document.getElementById('uiLanguageSelect');
   if (!sel) return;
+
   const apply = (lang) => { applyI18n(lang); };
-  apply(sel.value || 'ko');
-  sel.addEventListener('change', () => apply(sel.value));
+
+  // 저장된 언어 설정 불러오기
+  const savedLang = localStorage.getItem('uiLanguage');
+  if (savedLang && ['ko', 'en', 'ja', 'zh'].includes(savedLang)) {
+    sel.value = savedLang;
+    apply(savedLang);
+  } else {
+    apply(sel.value || 'ko');
+  }
+
+  // 언어 변경 시 저장
+  sel.addEventListener('change', () => {
+    const newLang = sel.value;
+    localStorage.setItem('uiLanguage', newLang);
+    apply(newLang);
+  });
 }
 
 // 번역 설정 초기화 (번역 안함일 때 대상 언어 숨김)
@@ -1894,13 +2467,21 @@ function initTranslationSelect() {
           translationStatus.innerHTML = I18N[currentUiLang].translationDeeplHtml;
         } else if (method === 'chatgpt') {
           translationStatus.innerHTML = I18N[currentUiLang].translationChatgptHtml;
+        } else if (method === 'gemini') {
+          translationStatus.innerHTML = I18N[currentUiLang].translationGeminiHtml;
         } else {
           translationStatus.innerHTML = I18N[currentUiLang].translationEnabledHtml;
         }
       }
     }
   };
-  translationSelect.addEventListener('change', update);
+  translationSelect.addEventListener('change', () => {
+    update();
+    // 혼합 모드 경고 업데이트 (SRT 스킵 예고)
+    if (typeof updateUIMode === 'function') {
+      updateUIMode();
+    }
+  });
   update();
 }
 
@@ -2051,11 +2632,13 @@ function showSettingsModal() {
   try {
     window.electronAPI.loadApiKeys().then(res => {
       if (res && res.success && res.keys) {
-        const { deepl, openai } = res.keys;
+        const { deepl, openai, gemini } = res.keys;
         const deeplInput = document.getElementById('deeplApiKey');
         const openaiInput = document.getElementById('openaiApiKey');
+        const geminiInput = document.getElementById('geminiApiKey');
         if (deeplInput) deeplInput.value = deepl || '';
         if (openaiInput) openaiInput.value = openai || '';
+        if (geminiInput) geminiInput.value = gemini || '';
       }
     }).catch(() => {});
   } catch (_) {}
@@ -2132,12 +2715,16 @@ function initDragHighlight() {
   let dragCounter = 0;
 
   dropZone.addEventListener('dragenter', (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
     dragCounter++;
     dropZone.classList.add('drag-active');
   });
 
   dropZone.addEventListener('dragleave', (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
     dragCounter--;
     if (dragCounter === 0) {
@@ -2146,10 +2733,14 @@ function initDragHighlight() {
   });
 
   dropZone.addEventListener('dragover', (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
   });
 
   dropZone.addEventListener('drop', (e) => {
+    // 대기열 아이템 드래그 중이면 무시
+    if (draggedItem) return;
     e.preventDefault();
     dragCounter = 0;
     dropZone.classList.remove('drag-active');
@@ -2161,9 +2752,11 @@ async function saveApiKeys() {
   const status = document.getElementById('apiKeyStatus');
   const deeplInput = document.getElementById('deeplApiKey');
   const openaiInput = document.getElementById('openaiApiKey');
+  const geminiInput = document.getElementById('geminiApiKey');
   const keys = {
     deepl: deeplInput ? (deeplInput.value || '').trim() : '',
-    openai: openaiInput ? (openaiInput.value || '').trim() : ''
+    openai: openaiInput ? (openaiInput.value || '').trim() : '',
+    gemini: geminiInput ? (geminiInput.value || '').trim() : ''
   };
 
   const successMsg = {
@@ -2262,13 +2855,16 @@ async function testApiKeys() {
     const tempKeys = {};
     const deeplKey = document.getElementById('deeplApiKey')?.value?.trim();
     const openaiKey = document.getElementById('openaiApiKey')?.value?.trim();
+    const geminiKey = document.getElementById('geminiApiKey')?.value?.trim();
 
     if (deeplKey) tempKeys.deepl = deeplKey;
     if (openaiKey) tempKeys.openai = openaiKey;
+    if (geminiKey) tempKeys.gemini = geminiKey;
 
     console.log('[Frontend] Collected temp keys:', {
       hasDeepL: !!deeplKey,
       hasOpenAI: !!openaiKey,
+      hasGemini: !!geminiKey,
       keysToTest: Object.keys(tempKeys)
     });
 
@@ -2295,6 +2891,7 @@ async function testApiKeys() {
     const { results } = res;
     const deeplOk = results?.deepl === true;
     const openaiOk = results?.openai === true;
+    const geminiOk = results?.gemini === true;
 
     // Success/Failure messages (성공/실패 메시지)
     const successMsg = {
@@ -2336,6 +2933,17 @@ async function testApiKeys() {
         ? `✓ GPT-5-nano ${successMsg[currentUiLang]}`
         : `✗ GPT-5-nano ${failMsg[currentUiLang]}`;
       messages.push(openaiMsg);
+    }
+
+    // Gemini 키가 입력되어 있으면 결과 표시
+    const geminiInput = document.getElementById('geminiApiKey')?.value?.trim();
+    if (geminiInput) {
+      totalCount++;
+      if (geminiOk) successCount++;
+      const geminiMsg = geminiOk
+        ? `✓ Gemini ${successMsg[currentUiLang]}`
+        : `✗ Gemini ${failMsg[currentUiLang]}`;
+      messages.push(geminiMsg);
     }
 
     if (status && messages.length > 0) {

@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Compare translation APIs: DeepL vs MyMemory vs GPT-5-nano. Quality, pricing, and limits analysis for subtitle translation.">
-    <meta name="keywords" content="DeepL, MyMemory, GPT-5-nano, OpenAI, translation API, subtitle translation, API comparison">
-    <title>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano - WhisperSubTranslate Blog</title>
+    <meta name="description" content="Compare translation APIs: DeepL vs MyMemory vs GPT-5-nano vs Gemini. Quality, pricing, and limits analysis for subtitle translation.">
+    <meta name="keywords" content="DeepL, MyMemory, GPT-5-nano, OpenAI, Gemini, translation API, subtitle translation, API comparison">
+    <title>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano vs Gemini - WhisperSubTranslate Blog</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -128,12 +128,12 @@
 
         <header class="article-header">
             <span class="category">Comparison</span>
-            <h1>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano</h1>
+            <h1>Translation API Comparison: DeepL vs MyMemory vs GPT-5-nano vs Gemini</h1>
             <p class="meta">December 2025 &bull; 7 min read</p>
         </header>
 
         <div class="content">
-            <p>WhisperSubTranslate supports three translation services. Each has its strengths and limitations. This guide helps you choose the right one for your needs.</p>
+            <p>WhisperSubTranslate supports four translation services. Each has its strengths and limitations. This guide helps you choose the right one for your needs.</p>
 
             <h2>Quick Comparison</h2>
             <table class="comparison-table">
@@ -142,22 +142,26 @@
                     <th>MyMemory</th>
                     <th>DeepL</th>
                     <th>GPT-5-nano</th>
+                    <th>Gemini</th>
                 </tr>
                 <tr>
                     <td>Free Tier</td>
                     <td>50,000 chars/day</td>
                     <td>500,000 chars/month</td>
                     <td>Pay per use ($0.05/1M input)</td>
+                    <td>~250 subs/day free</td>
                 </tr>
                 <tr>
                     <td>API Key Required</td>
                     <td>No</td>
                     <td>Yes</td>
                     <td>Yes</td>
+                    <td>Yes (Free)</td>
                 </tr>
                 <tr>
                     <td>Quality</td>
                     <td>Good</td>
+                    <td>Excellent</td>
                     <td>Excellent</td>
                     <td>Excellent</td>
                 </tr>
@@ -166,11 +170,13 @@
                     <td>Fast</td>
                     <td>Fast</td>
                     <td>Very Fast</td>
+                    <td>Very Fast</td>
                 </tr>
                 <tr>
                     <td>Context Awareness</td>
                     <td>Low</td>
                     <td>High</td>
+                    <td>Very High</td>
                     <td>Very High</td>
                 </tr>
             </table>
@@ -252,6 +258,31 @@
                 </div>
             </div>
 
+            <div class="service-card">
+                <h3>Gemini 3 Flash <span class="badge">FREE API</span></h3>
+                <p>Google's fast and capable AI model. Free API key with generous daily limits, making it an excellent choice for most users.</p>
+                <div class="pros-cons">
+                    <div class="pros">
+                        <h4>Pros</h4>
+                        <ul>
+                            <li>Free API key available</li>
+                            <li>~250 subtitles/day free</li>
+                            <li>Very fast processing</li>
+                            <li>Excellent context awareness</li>
+                        </ul>
+                    </div>
+                    <div class="cons">
+                        <h4>Cons</h4>
+                        <ul>
+                            <li>API key required</li>
+                            <li>Daily request limits</li>
+                            <li>Google account needed</li>
+                            <li>Paid for heavy use</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <h2>Recommendations by Use Case</h2>
 
             <h3>Casual/Personal Use</h3>
@@ -291,8 +322,20 @@
                 <li>Paste it in WhisperSubTranslate settings</li>
             </ol>
 
+            <h3>Gemini (Google AI)</h3>
+            <ol>
+                <li>Visit <a href="https://aistudio.google.com/app/apikey" style="color: var(--accent);">Google AI Studio</a></li>
+                <li>Sign in with your Google account</li>
+                <li>Click "Create API key" to generate a free key</li>
+                <li>Paste it in WhisperSubTranslate settings</li>
+            </ol>
+
             <div class="info-box">
                 <p><strong>Why GPT-5-nano?</strong> It's the fastest and cheapest model in OpenAI's GPT-5 family. Perfect for subtitle translation: $0.05 per 1M input tokens, $0.40 per 1M output tokens. A typical 2-hour movie subtitle costs about $0.05 (less than 100 won) to translate!</p>
+            </div>
+
+            <div class="info-box">
+                <p><strong>Why Gemini?</strong> Free API key with ~250 subtitle lines per day (~20-30 min of video). Google's Gemini 3 Flash model offers excellent quality and speed. Great for casual users who want AI-quality translation without paying!</p>
             </div>
         </div>
     </article>
