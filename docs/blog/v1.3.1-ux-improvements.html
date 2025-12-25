@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate v1.3.1 Update: Resizable queue panel, improved log storage, and multilingual error messages.">
+    <meta name="keywords" content="WhisperSubTranslate, subtitle extraction, UI improvements, resizable panel, error logging">
+    <title>v1.3.1 UX Improvements - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* Custom Language Selector */
+        .lang-selector {
+            position: relative;
+        }
+        .lang-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            color: #ffffff;
+            font-size: 0.875rem;
+            font-family: 'Geist', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .lang-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.5rem 0;
+            min-width: 120px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s;
+            z-index: 100;
+        }
+        .lang-selector:hover .lang-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .lang-dropdown a {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .lang-dropdown a:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        /* Article */
+        article {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+        }
+        .article-header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+        .article-category {
+            display: inline-block;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 100px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+        }
+        .article-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+        .article-meta {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .article-meta svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Content */
+        .article-content {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+        }
+        .article-content h2 {
+            color: var(--text-primary);
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin: 3rem 0 1.5rem;
+            letter-spacing: -0.02em;
+        }
+        .article-content h3 {
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+        }
+        .article-content p {
+            margin-bottom: 1.5rem;
+        }
+        .article-content ul, .article-content ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+        .article-content li {
+            margin-bottom: 0.75rem;
+        }
+        .article-content a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .article-content a:hover {
+            text-decoration: underline;
+        }
+        .article-content strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .article-content code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: var(--accent-glow);
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 0 8px 8px 0;
+            margin: 2rem 0;
+        }
+        .highlight-box ul {
+            margin-bottom: 0;
+            margin-top: 1rem;
+        }
+
+        /* Feature Cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .feature-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .feature-card h4 {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            white-space: pre;
+            line-height: 1.6;
+        }
+        .code-block .comment {
+            color: var(--text-muted);
+        }
+        .code-block .path {
+            color: var(--accent);
+        }
+
+        /* Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison-table th {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: var(--bg-tertiary);
+        }
+        .comparison-table td {
+            color: var(--text-secondary);
+        }
+        .comparison-table .check {
+            color: var(--success);
+        }
+        .comparison-table .new-badge {
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+        }
+
+        /* Footer */
+        .article-footer {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .share-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .share-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+        .share-btn.twitter {
+            background: #1da1f2;
+            color: white;
+        }
+        .share-btn.twitter:hover {
+            background: #0d8ddb;
+        }
+        .share-btn.facebook {
+            background: #4267B2;
+            color: white;
+        }
+        .share-btn.facebook:hover {
+            background: #365899;
+        }
+
+        .related-posts {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .related-posts h3 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        .related-posts h3 svg {
+            width: 18px;
+            height: 18px;
+        }
+        .related-post-link {
+            display: block;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+            transition: color 0.2s;
+        }
+        .related-post-link:last-child {
+            border-bottom: none;
+        }
+        .related-post-link:hover {
+            color: var(--accent);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            border-top: 1px solid var(--border);
+        }
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        footer a:hover {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .article-header h1 {
+                font-size: 1.75rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            article {
+                padding: 6rem 1rem 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#111"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#22c55e"/>
+                </svg>
+                WhisperSubTranslate
+            </a>
+            <div class="nav-links">
+                <a href="../" data-i18n="nav.home">Home</a>
+                <a href="../docs/" data-i18n="nav.docs">Docs</a>
+                <a href="./" data-i18n="nav.blog">Blog</a>
+                <a href="https://github.com/Blue-B/WhisperSubTranslate" target="_blank">GitHub</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span>EN</span>
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('pl')">Polski</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category" data-i18n="article.category">Update</span>
+            <h1 data-i18n="article.title">v1.3.1: Resizable Queue Panel & Better Logging</h1>
+            <p class="article-meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span data-i18n="article.date">December 2024</span>
+                <span>|</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span data-i18n="article.readTime">3 min read</span>
+            </p>
+        </header>
+
+        <div class="article-content">
+            <p data-i18n="article.intro">WhisperSubTranslate v1.3.1 focuses on user experience improvements based on community feedback. This update brings a resizable queue panel, better error logging, and multilingual error messages.</p>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.tldr">What's New in v1.3.1:</strong>
+                <ul>
+                    <li data-i18n="article.tldr1"><strong>Resizable Queue Panel</strong> - Drag to adjust width (280px to 70% of screen)</li>
+                    <li data-i18n="article.tldr2"><strong>Improved Log Storage</strong> - Logs now saved to %APPDATA% for easier access</li>
+                    <li data-i18n="article.tldr3"><strong>Multilingual Error Messages</strong> - MyMemory quota errors in 5 languages</li>
+                </ul>
+            </div>
+
+            <h2 data-i18n="article.section1.title">Resizable Queue Panel</h2>
+
+            <p data-i18n="article.section1.p1">One of the most requested features was the ability to resize the queue panel. On large screens, the fixed-width panel felt too narrow, making it hard to see file names and status information.</p>
+
+            <h3 data-i18n="article.section1.sub1">How It Works</h3>
+            <ul>
+                <li data-i18n="article.section1.li1"><strong>Drag Handle:</strong> A vertical bar (⋮) between the main area and queue panel</li>
+                <li data-i18n="article.section1.li2"><strong>Width Range:</strong> Resize from 280px (minimum) to 70% of viewport (maximum)</li>
+                <li data-i18n="article.section1.li3"><strong>Persistent:</strong> Your preferred width is saved automatically</li>
+                <li data-i18n="article.section1.li4"><strong>Visual Feedback:</strong> Handle highlights green when dragging</li>
+            </ul>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l4-4 4 4M5 15l4 4 4-4"/><line x1="9" y1="5" x2="9" y2="19"/><path d="M15 9l4-4 4 4M15 15l4 4 4-4"/><line x1="19" y1="5" x2="19" y2="19"/></svg> Intuitive Drag</h4>
+                    <p>Simply drag the vertical bar to resize. No settings needed.</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Auto-Save</h4>
+                    <p>Your preferred width is remembered across sessions via localStorage.</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Flexible Range</h4>
+                    <p>From compact 280px to spacious 70% of your screen width.</p>
+                </div>
+            </div>
+
+            <h2 data-i18n="article.section2.title">Improved Log Storage</h2>
+
+            <p data-i18n="article.section2.p1">Previously, error logs were saved in the application folder, which could be hard to find and might get deleted during updates. Now all logs are stored in a standard Windows location:</p>
+
+            <div class="code-block"><span class="comment"># New log location</span>
+<span class="path">%APPDATA%\whispersubtranslate\logs\translation-errors.log</span>
+
+<span class="comment"># Example full path</span>
+C:\Users\YourName\AppData\Roaming\whispersubtranslate\logs\translation-errors.log</div>
+
+            <h3 data-i18n="article.section2.sub1">Benefits</h3>
+            <ul>
+                <li data-i18n="article.section2.li1"><strong>Survives Updates:</strong> Logs persist even when you update the app</li>
+                <li data-i18n="article.section2.li2"><strong>Easy to Find:</strong> Standard Windows AppData location</li>
+                <li data-i18n="article.section2.li3"><strong>Consistent Location:</strong> Same folder as settings and API keys</li>
+            </ul>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th data-i18n="table.data">Data</th>
+                        <th data-i18n="table.location">Location</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Settings & API Keys</td>
+                        <td><code>%APPDATA%\whispersubtranslate\translation-config-encrypted.json</code></td>
+                    </tr>
+                    <tr>
+                        <td>Error Logs <span class="new-badge">NEW</span></td>
+                        <td><code>%APPDATA%\whispersubtranslate\logs\translation-errors.log</code></td>
+                    </tr>
+                    <tr>
+                        <td>Models</td>
+                        <td><code>_models/</code> (in app folder)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 data-i18n="article.section3.title">Multilingual Error Messages</h2>
+
+            <p data-i18n="article.section3.p1">Error messages are now displayed in your selected UI language. This is especially helpful for the MyMemory daily quota error, which was previously shown only in English.</p>
+
+            <div class="code-block"><span class="comment"># Error message examples by language</span>
+
+<span class="path">Korean:</span>   MyMemory 일일 할당량이 초과되었습니다. 내일 다시 시도하거나 DeepL/OpenAI를 사용하세요.
+<span class="path">English:</span>  MyMemory daily quota exceeded. Please try again tomorrow or use DeepL/OpenAI.
+<span class="path">Japanese:</span> MyMemory日次クォータを超えました。明日再試行するか、DeepL/OpenAIをご利用ください。
+<span class="path">Chinese:</span>  MyMemory 每日配额已用完。请明天重试或使用 DeepL/OpenAI。
+<span class="path">Polish:</span>   Przekroczono dzienny limit MyMemory. Spróbuj ponownie jutro lub użyj DeepL/OpenAI.</div>
+
+            <h2 data-i18n="article.section4.title">How to Update</h2>
+
+            <ol>
+                <li data-i18n="article.section4.li1"><a href="https://github.com/Blue-B/WhisperSubTranslate/releases/latest">Download</a> v1.3.1 from Releases</li>
+                <li data-i18n="article.section4.li2">Extract and replace your existing installation</li>
+                <li data-i18n="article.section4.li3">Your settings and models are preserved</li>
+            </ol>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.note.title">Note:</strong>
+                <span data-i18n="article.note.text"> All your settings, API keys, and downloaded models are preserved during the update. No reconfiguration needed!</span>
+            </div>
+
+            <p data-i18n="article.thanks">Thank you for using WhisperSubTranslate!</p>
+        </div>
+
+        <footer class="article-footer">
+            <div class="share-buttons">
+                <a href="https://twitter.com/intent/tweet?text=WhisperSubTranslate%20v1.3.1%20-%20Resizable%20queue%20panel%20and%20better%20logging" class="share-btn twitter" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                    <span data-i18n="share.twitter">Share on X</span>
+                </a>
+                <a href="https://www.facebook.com/sharer/sharer.php?u=https://blue-b.github.io/WhisperSubTranslate/blog/v1.3.1-ux-improvements.html" class="share-btn facebook" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    <span data-i18n="share.facebook">Share on Facebook</span>
+                </a>
+            </div>
+
+            <div class="related-posts">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span data-i18n="related.title">Related Posts</span>
+                </h3>
+                <a href="./whisper-cpp-migration.html" class="related-post-link" data-i18n="related.post1">v1.3.0: whisper.cpp Migration Complete</a>
+                <a href="./gpu-optimization.html" class="related-post-link" data-i18n="related.post2">Extract Subtitles 10x Faster with GPU Acceleration</a>
+                <a href="./model-comparison.html" class="related-post-link" data-i18n="related.post3">Whisper Model Comparison: From tiny to large</a>
+            </div>
+        </footer>
+    </article>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. GPL-3.0 License. |
+            <a href="../privacy.html" data-i18n="footer.privacy">Privacy Policy</a> |
+            <a href="../terms.html" data-i18n="footer.terms">Terms of Service</a>
+        </p>
+    </footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,pl',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

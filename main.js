@@ -1113,6 +1113,16 @@ ipcMain.handle('get-app-path', async () => {
   return app.isPackaged ? process.resourcesPath : __dirname;
 });
 
+// 로그 디렉터리 경로 반환 (%APPDATA%\whispersubtranslate\logs)
+ipcMain.handle('get-log-dir', async () => {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  // 디렉터리가 없으면 생성
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  return logsDir;
+});
+
 // nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)
 ipcMain.handle('get-audio-data', async (event, filename) => {
   try {

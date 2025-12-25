@@ -285,7 +285,7 @@
     /* Main Layout */
     .main-container {
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: 1fr 340px;
       height: calc(100vh - 53px);
       overflow: hidden;
     }
@@ -628,47 +628,13 @@
       background: var(--bg-card);
     }
 
-    /* Resize Handle */
-    .resize-handle {
-      width: 8px;
-      background: var(--border);
-      cursor: col-resize;
-      position: relative;
-      transition: background 0.2s;
-      flex-shrink: 0;
-    }
-
-    .resize-handle:hover,
-    .resize-handle.dragging {
-      background: var(--accent);
-    }
-
-    .resize-handle::before {
-      content: '⋮';
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: var(--text-muted);
-      font-size: 14px;
-      letter-spacing: -2px;
-    }
-
-    .resize-handle:hover::before,
-    .resize-handle.dragging::before {
-      color: #000;
-    }
-
     /* Right Panel - Queue */
     .right-panel {
       background: var(--bg-secondary);
-      border-left: none;
+      border-left: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      width: 340px;
-      min-width: 280px;
-      max-width: 70vw;
     }
 
     .panel-header {
@@ -1387,7 +1353,7 @@
         </svg>
         <span class="logo-text">WhisperSubTranslate</span>
       </div>
-      <span class="version-badge">v1.3.1</span>
+      <span class="version-badge">v1.3.0</span>
     </div>
     <div class="header-right">
       <select id="uiLanguageSelect" class="lang-select" title="UI Language">
@@ -1562,9 +1528,6 @@
         </button>
       </div>
     </section>
-
-    <!-- Resize Handle -->
-    <div id="resizeHandle" class="resize-handle" title="Drag to resize"></div>
 
     <!-- Right Panel - Queue & Log -->
     <aside id="queueContainer" class="right-panel">

@@ -704,7 +704,13 @@
                     <li data-i18n="docs.storage.item1"><strong>API Keys</strong> - DeepL, OpenAI, Google Gemini keys (encrypted with AES)</li>
                     <li data-i18n="docs.storage.item2"><strong>App Settings</strong> - Selected model, language, device, translation service</li>
                     <li data-i18n="docs.storage.item3"><strong>UI Preferences</strong> - Interface language</li>
+                    <li data-i18n="docs.storage.item4"><strong>Error Logs</strong> - Translation error logs stored in <code>logs/</code> subfolder</li>
                 </ul>
+
+                <h3 data-i18n="docs.storage.logs">Log Files</h3>
+                <p data-i18n="docs.storage.logsDesc">Translation error logs are saved to help with troubleshooting:</p>
+                <pre><code>%APPDATA%\whispersubtranslate\logs\translation-errors.log</code></pre>
+                <p data-i18n="docs.storage.logsNote">These logs contain only error information for debugging purposes and do not include any personal data or API keys.</p>
 
                 <div class="info-box">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -768,7 +774,7 @@
     </div>
 
     <footer>
-        <p>&copy; 2025 WhisperSubTranslate. MIT License.</p>
+        <p>&copy; 2025 WhisperSubTranslate. GPL-3.0 License.</p>
     </footer>
 
     <!-- Smooth scroll for sidebar links -->

@@ -33,7 +33,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.0-win-x64.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.1-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
@@ -78,6 +78,14 @@ Artifacts are emitted to `dist2/`.
 | Gemini 3 Flash | Free/Paid | Yes | Free: 250 subs/day (~20-30min), Paid: unlimited ([Get key](https://aistudio.google.com/app/apikey)) |
 
 API keys and preferences are saved locally on your PC under `app.getPath('userData')` with basic encoding to prevent casual exposure. The configuration file is never uploaded to Git or included in builds.
+
+### Data Storage
+
+| Data | Location |
+| --- | --- |
+| Settings & API Keys | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json` |
+| Error Logs | `%APPDATA%\whispersubtranslate\logs\translation-errors.log` |
+| Models | `_models/` (in app folder) |
 
 ## Language support
 
@@ -190,4 +198,4 @@ If this project saves you time or helps you publish better subtitles, supporting
 
 ## License
 
-ISC. External APIs/services (DeepL, OpenAI, etc.) require compliance with their own terms.
+GPL-3.0. External APIs/services (DeepL, OpenAI, etc.) require compliance with their own terms.

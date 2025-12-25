@@ -31,7 +31,7 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.3.0-win-x64.zip`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.3.1-win-x64.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(무료 MyMemory 기본 제공, DeepL/OpenAI는 본인 API 키 필요).
@@ -76,6 +76,14 @@ npm run build-win
 | Gemini 3 Flash | 무료/유료 | 필요 | 무료: 하루 250자막/20-30분, 유료: 무제한 ([API 키 발급](https://aistudio.google.com/app/apikey)) |
 
 API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 인코딩을 적용하여 저장됩니다. 파일 탐색기에서 우연히 열어도 평문으로 노출되지 않도록 보호하며, Git이나 배포 파일에는 절대 포함되지 않습니다.
+
+### 데이터 저장 위치
+
+| 데이터 | 위치 |
+| --- | --- |
+| 설정 & API 키 | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json` |
+| 오류 로그 | `%APPDATA%\whispersubtranslate\logs\translation-errors.log` |
+| 모델 | `_models/` (앱 폴더 내) |
 
 ## 언어 지원
 
@@ -188,4 +196,4 @@ fix: localize target language note
 
 ## 라이선스
 
-ISC. 외부 API/서비스(DeepL, OpenAI 등)는 각 약관을 준수해야 합니다.
+GPL-3.0. 외부 API/서비스(DeepL, OpenAI 등)는 각 약관을 준수해야 합니다.

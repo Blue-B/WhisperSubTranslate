@@ -1,14 +1,14 @@
 const axios = require('axios');
 
-// Free translation via MyMemory API (≈50K chars/day/IP) (MyMemory API를 사용한 무료 번역)
+// Free translation via MyMemory API (≈50K chars/day/IP)
 class MyMemoryTranslator {
     constructor() {
         this.apiUrl = 'https://api.mymemory.translated.net/get';
         this.emailIndex = 1;
-        this.maxRetries = 10; // 최대 10개 이메일 시도
+        this.maxRetries = 10;
     }
 
-    // Generate pseudo emails; rotate on quota exceed (이메일 생성, 한도 초과 시 변경)
+    // Generate pseudo emails; rotate on quota exceed
     generateEmail() {
         const emailTemplates = [
             `user${this.emailIndex}@example.com`,
@@ -27,9 +27,9 @@ class MyMemoryTranslator {
         while (attempts < this.maxRetries) {
             try {
                 const email = this.generateEmail();
-                console.log(`Translation attempt ${attempts + 1} (번역 시도): ${email.substring(0, 10)}...`);
+                console.log(`[MyMemory] Attempt ${attempts + 1}/${this.maxRetries}: ${email.substring(0, 10)}...`);
                 
-                // Language code mapping (언어 코드 변환)
+                // Language code mapping
                 const fromLang = this.getLanguageCode(sourceLang);
                 const toLang = this.getLanguageCode(targetLang);
                 
@@ -42,32 +42,31 @@ class MyMemoryTranslator {
                 const response = await axios.get(this.apiUrl, { params });
                 
                 if (response.data && response.data.responseData) {
-                    // Keep current email index on success (성공 시 현재 이메일 유지)
                     return response.data.responseData.translatedText;
                 } else if (response.data && response.data.responseStatus === 403) {
-                    // On quota exceed, rotate to next email (한도 초과 시 다음 이메일 사용)
-                    console.log('한도 초과, 다음 이메일로 시도...');
+                    // Quota exceeded, try next email
+                    console.log('[MyMemory] Quota exceeded, trying next email...');
                     this.emailIndex++;
                     attempts++;
                     continue;
                 } else {
-                    throw new Error('Unable to get translation result (번역 결과 수신 실패)');
+                    throw new Error('Unable to get translation result');
                 }
             } catch (error) {
-                console.log(`Translation failed: ${error.message} (번역 실패), retrying with next email...`);
+                console.log(`[MyMemory] Failed: ${error.message}, retrying...`);
                 this.emailIndex++;
                 attempts++;
-                
+
                 if (attempts >= this.maxRetries) {
-                    throw new Error(`All email attempts failed (${this.maxRetries}) (모든 이메일 시도 실패)`);
+                    throw new Error(`MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.`);
                 }
-                
-                // Wait briefly then retry (잠시 대기 후 재시도)
+
+                // Wait briefly then retry
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
-        
-        throw new Error('Translation quota exceeded, please try again later (번역 한도 초과)');
+
+        throw new Error('MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.');
     }
 
     getLanguageCode(lang) {

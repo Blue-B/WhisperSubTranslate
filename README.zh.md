@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.0-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.1-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
@@ -76,6 +76,14 @@ npm run build-win
 | Gemini 3 Flash | 免费/付费 | 需要 | 免费: 每日250字幕/20-30分钟，付费: 无限制 ([获取API密钥](https://aistudio.google.com/app/apikey)) |
 
 API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使用基本编码进行存储。即使在文件管理器中误打开，也不会以明文形式显示，并且绝不会包含在Git或发布文件中。
+
+### 数据存储位置
+
+| 数据 | 位置 |
+| --- | --- |
+| 设置 & API 密钥 | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json` |
+| 错误日志 | `%APPDATA%\whispersubtranslate\logs\translation-errors.log` |
+| 模型 | `_models/`（应用文件夹内） |
 
 ## 语言支持
 
@@ -188,4 +196,4 @@ fix: localize target language note
 
 ## 许可证
 
-ISC。使用外部服务（DeepL、OpenAI 等）时请遵守其各自条款。
+GPL-3.0。使用外部服务（DeepL、OpenAI 等）时请遵守其各自条款。

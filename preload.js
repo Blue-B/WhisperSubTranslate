@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOfflineModelDir: () => {
     return ipcRenderer.invoke('get-offline-model-dir');
   },
+
+  // 로그 디렉터리 경로 조회 (%APPDATA%\whispersubtranslate\logs)
+  getLogDir: () => {
+    return ipcRenderer.invoke('get-log-dir');
+  },
   
   // 텍스트 번역 (테스트용)
   translateText: (data) => {

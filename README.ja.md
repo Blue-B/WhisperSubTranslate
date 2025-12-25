@@ -31,7 +31,7 @@
 
 ### 一般ユーザー: ポータブル版で実行
 
-- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.3.0-win-x64.zip`
+- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.3.1-win-x64.zip`
 - 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
 すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション（無料MyMemoryがデフォルト、DeepL/OpenAIは自分のAPIキーが必要）。
@@ -76,6 +76,14 @@ npm run build-win
 | Gemini 3 Flash | 無料/有料 | 必要 | 無料: 1日250字幕/20-30分、有料: 無制限 ([APIキー取得](https://aistudio.google.com/app/apikey)) |
 
 APIキーと設定は、ユーザーPCの `app.getPath('userData')` パスに基本的なエンコーディングを適用して保存されます。ファイルエクスプローラーで誤って開いても平文で表示されないように保護され、Gitや配布ファイルには一切含まれません。
+
+### データ保存場所
+
+| データ | 場所 |
+| --- | --- |
+| 設定 & API キー | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json` |
+| エラーログ | `%APPDATA%\whispersubtranslate\logs\translation-errors.log` |
+| モデル | `_models/`（アプリフォルダ内） |
 
 ## 言語サポート
 
@@ -188,4 +196,4 @@ fix: localize target language note
 
 ## ライセンス
 
-ISC。外部サービス（DeepL, OpenAI など）の規約に従ってください。
+GPL-3.0。外部サービス（DeepL, OpenAI など）の規約に従ってください。

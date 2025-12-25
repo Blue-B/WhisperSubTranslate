@@ -33,7 +33,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ## Szybki start (Przenośna)
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.0-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.1-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
@@ -78,6 +78,14 @@ Artefakty są generowane do `dist2/`.
 | Gemini 3 Flash | Darmowy/Płatny | Tak | Darmowy: 250 napisów/dzień (~20-30min), Płatny: bez limitu ([Pobierz klucz](https://aistudio.google.com/app/apikey)) |
 
 Klucze API i preferencje są zapisywane lokalnie na Twoim PC w `app.getPath('userData')` z podstawowym kodowaniem, aby zapobiec przypadkowemu ujawnieniu. Plik konfiguracyjny nigdy nie jest przesyłany do Git ani dołączany do buildów.
+
+### Lokalizacja danych
+
+| Dane | Lokalizacja |
+| --- | --- |
+| Ustawienia & klucze API | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json` |
+| Logi błędów | `%APPDATA%\whispersubtranslate\logs\translation-errors.log` |
+| Modele | `_models/` (w folderze aplikacji) |
 
 ## Obsługa języków
 
@@ -190,4 +198,4 @@ Jeśli ten projekt oszczędza Twój czas lub pomaga publikować lepsze napisy, w
 
 ## Licencja
 
-ISC. Zewnętrzne API/usługi (DeepL, OpenAI itp.) wymagają przestrzegania ich własnych warunków.
+GPL-3.0. Zewnętrzne API/usługi (DeepL, OpenAI itp.) wymagają przestrzegania ich własnych warunków.

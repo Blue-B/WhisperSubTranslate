@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "main": "main.js",
   "scripts": {
     "start": "electron --expose-gc .",
@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "GTPS Team",
-  "license": "ISC",
+  "license": "GPL-3.0",
   "description": "Whisper 기반 자막 추출·번역 도구 (whisper.cpp)",
   "build": {
     "appId": "com.whispersubtranslate.app",

@@ -848,14 +848,14 @@ async function continueProcessing() {
           file.status = 'error';
           file.progress = 0;
           translationSessionActive = false;
-          addOutput(`번역 실패: ${translationResult.error}\n`);
+          addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(translationResult.error)}\n`);
         }
       } catch (error) {
         console.error('[continueProcessing] SRT translation error:', error);
         translationSessionActive = false;
         file.status = 'error';
         file.progress = 0;
-        addOutput(`${I18N[currentUiLang].translationFailed || '번역 실패: '}${error.message}\n`);
+        addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(error.message)}\n`);
       }
 
       updateQueueDisplay();
@@ -1010,15 +1010,15 @@ async function continueProcessing() {
             if (translationResult.success) {
               addOutput(`번역 완료: ${fileName}_${targetLang}.srt\n`);
             } else {
-              addOutput(`번역 실패: ${translationResult.error}\n`);
+              addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(translationResult.error)}\n`);
             }
           } catch (error) {
             console.error('[continueProcessing] Translation error:', error);
             translationSessionActive = false;
             file.status = 'error';
             file.progress = 0;
-            addOutput(`${I18N[currentUiLang].translationError}: ${error.message}\n`);
-            setProgressTarget(Math.max(lastProgress, 95), I18N[currentUiLang].translationFailed + (error.message || ''));
+            addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(error.message)}\n`);
+            setProgressTarget(Math.max(lastProgress, 95), I18N[currentUiLang].translationFailed + getLocalizedError(error.message || ''));
             updateQueueDisplay();
           }
 
@@ -1454,6 +1454,7 @@ const I18N = {
     translationTranslating: '번역 중...',
     translationCompleted: '번역 완료!',
     translationFailed: '번역 실패: ',
+    myMemoryQuotaExceeded: 'MyMemory 일일 한도 초과. 내일 다시 시도하거나 DeepL/OpenAI를 사용하세요.',
     // 동적 텍스트
     modelAvailableGroup: '사용 가능한 모델',
     modelNeedDownloadGroup: '다운로드 필요 (자동 다운로드됨)',
@@ -1570,6 +1571,7 @@ const I18N = {
     translationTranslating: 'Translating...',
     translationCompleted: 'Translation completed!',
     translationFailed: 'Translation failed: ',
+    myMemoryQuotaExceeded: 'MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.',
     modelAvailableGroup: 'Available Models',
     modelNeedDownloadGroup: 'Download Required (auto-download)',
     modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
@@ -1681,6 +1683,7 @@ const I18N = {
     translationTranslating: '翻訳中...',
     translationCompleted: '翻訳完了！',
     translationFailed: '翻訳失敗: ',
+    myMemoryQuotaExceeded: 'MyMemory の1日の上限を超えました。明日再試行するか、DeepL/OpenAI をご利用ください。',
     modelAvailableGroup: '利用可能なモデル',
     modelNeedDownloadGroup: 'ダウンロードが必要（自動ダウンロード）',
     modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます` ,
@@ -1792,6 +1795,7 @@ const I18N = {
     translationTranslating: '翻译中...',
     translationCompleted: '翻译完成！',
     translationFailed: '翻译失败: ',
+    myMemoryQuotaExceeded: 'MyMemory 每日配额已用完。请明天重试或使用 DeepL/OpenAI。',
     modelAvailableGroup: '可用模型',
     modelNeedDownloadGroup: '需要下载（自动）',
     modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载` ,
@@ -1903,6 +1907,7 @@ const I18N = {
     translationTranslating: 'Tłumaczenie...',
     translationCompleted: 'Tłumaczenie zakończone!',
     translationFailed: 'Tłumaczenie nieudane: ',
+    myMemoryQuotaExceeded: 'Dzienny limit MyMemory został przekroczony. Spróbuj jutro lub użyj DeepL/OpenAI.',
     modelAvailableGroup: 'Dostępne modele',
     modelNeedDownloadGroup: 'Wymagane pobranie (automatyczne)',
     modelStatusText: (count) => `${count} modeli dostępnych | Brakujące modele zostaną pobrane automatycznie`,
@@ -1973,6 +1978,15 @@ const I18N = {
     copyPath: 'Ścieżka',
   },
 };
+
+// 에러 메시지 다국어 변환 헬퍼
+function getLocalizedError(errorMessage) {
+  // MyMemory quota exceeded 에러 감지
+  if (errorMessage && errorMessage.includes('MyMemory daily quota exceeded')) {
+    return I18N[currentUiLang].myMemoryQuotaExceeded || errorMessage;
+  }
+  return errorMessage;
+}
 
 // 모델 이름 현지화
 const MODEL_I18N = {
@@ -2504,7 +2518,7 @@ if (window?.electronAPI) {
       } else if (data?.stage === 'completed') {
         msg = I18N[currentUiLang].translationCompleted;
       } else if (data?.stage === 'error') {
-        msg = I18N[currentUiLang].translationFailed + (data?.errorMessage || '');
+        msg = I18N[currentUiLang].translationFailed + getLocalizedError(data?.errorMessage || '');
       }
 
       if (msg) {
@@ -3355,3 +3369,64 @@ async function testApiKeys() {
     }
   }
 }
+
+// =============================================
+// Panel Resize Functionality (패널 리사이즈 기능)
+// =============================================
+(function initPanelResize() {
+  const resizeHandle = document.getElementById('resizeHandle');
+  const rightPanel = document.getElementById('queueContainer');
+
+  if (!resizeHandle || !rightPanel) return;
+
+  let isResizing = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  // Load saved width from localStorage
+  const savedWidth = localStorage.getItem('queuePanelWidth');
+  if (savedWidth) {
+    const width = parseInt(savedWidth, 10);
+    if (width >= 280 && width <= 600) {
+      rightPanel.style.width = width + 'px';
+    }
+  }
+
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = rightPanel.offsetWidth;
+    resizeHandle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+
+    // Calculate new width (dragging left increases width)
+    const deltaX = startX - e.clientX;
+    let newWidth = startWidth + deltaX;
+
+    // Clamp to min/max (280px ~ 70% of viewport)
+    const maxWidth = Math.floor(window.innerWidth * 0.7);
+    newWidth = Math.max(280, Math.min(maxWidth, newWidth));
+
+    rightPanel.style.width = newWidth + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!isResizing) return;
+
+    isResizing = false;
+    resizeHandle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    // Save width to localStorage
+    localStorage.setItem('queuePanelWidth', rightPanel.offsetWidth);
+  });
+
+  console.log('[Renderer] Panel resize initialized');
+})();

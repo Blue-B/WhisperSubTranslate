@@ -41,6 +41,27 @@ function getEncryptedConfigPath() {
   return path.join(__dirname, 'translation-config-encrypted.json');
 }
 
+function getLogPath() {
+  try {
+    if (electronApp && electronApp.getPath) {
+      const base = electronApp.getPath('userData');
+      const logsDir = path.join(base, 'logs');
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+        console.log('[Logs] Created logs directory:', logsDir);
+      }
+
+      return path.join(logsDir, 'translation-errors.log');
+    }
+  } catch (error) {
+    console.log('[Logs] Failed to get log path:', error.message);
+  }
+  // Fallback to current directory
+  return path.join(__dirname, 'translation-errors.log');
+}
+
 // Encrypt data (데이터 암호화)
 function encryptData(text) {
   try {
@@ -375,12 +396,14 @@ class EnhancedSubtitleTranslator {
     console.error('[Translation Error / 번역 오류]', errorInfo);
 
     // 파일에도 에러 로그 저장 (디버깅용)
+    // 로그 위치: %APPDATA%\whispersubtranslate\logs\translation-errors.log
     try {
-      const logPath = path.join(process.cwd(), 'translation-errors.log');
+      const logPath = getLogPath();
       const logEntry = `[${errorInfo.timestamp}] ${context}: ${error.message}\n${error.stack || ''}\n---\n`;
       fs.appendFileSync(logPath, logEntry, 'utf8');
     } catch (fileErr) {
       // 파일 로그 실패 시 무시
+      console.warn('[Logs] Failed to write error log:', fileErr.message);
     }
   }
 
