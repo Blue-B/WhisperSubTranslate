@@ -378,6 +378,7 @@
                 <ul>
                     <li><a href="#cli" data-i18n="docs.sidebar.cli">Command Line</a></li>
                     <li><a href="#data-storage" data-i18n="docs.sidebar.data-storage">Data Storage</a></li>
+                    <li><a href="#technical-notes" data-i18n="docs.sidebar.technical">Technical Notes</a></li>
                     <li><a href="#troubleshooting" data-i18n="docs.sidebar.troubleshooting">Troubleshooting</a></li>
                 </ul>
             </div>
@@ -740,6 +741,49 @@
                     </svg>
                     <p data-i18n="docs.storage.backupWarning">Keep your backup secure! The file contains your encrypted API keys.</p>
                 </div>
+            </section>
+
+            <section id="technical-notes">
+                <h2>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                    <span data-i18n="docs.technical.title">Technical Notes</span>
+                </h2>
+
+                <h3 data-i18n="docs.technical.unicode">Unicode Path Support</h3>
+                <p data-i18n="docs.technical.unicodeDesc">WhisperSubTranslate fully supports non-ASCII file paths and folder names, including Chinese (中文), Korean (한국어), Japanese (日本語), and other Unicode characters.</p>
+                <p data-i18n="docs.technical.unicodeHow">When processing files with Unicode paths, the app automatically:</p>
+                <ol>
+                    <li data-i18n="docs.technical.unicode1">Creates temporary WAV/SRT files in a safe ASCII-only directory</li>
+                    <li data-i18n="docs.technical.unicode2">Processes the audio using whisper.cpp</li>
+                    <li data-i18n="docs.technical.unicode3">Copies the final SRT file back to the original location</li>
+                    <li data-i18n="docs.technical.unicode4">Automatically cleans up all temporary files</li>
+                </ol>
+
+                <h4 data-i18n="docs.technical.tempLocation">Temporary Directory Location</h4>
+                <p data-i18n="docs.technical.tempLocationDesc">The app uses the following priority for temporary file storage:</p>
+                <ol>
+                    <li data-i18n="docs.technical.temp1"><strong>Primary:</strong> <code>[App folder]\temp\</code> - Used if the app is installed in an ASCII-only path</li>
+                    <li data-i18n="docs.technical.temp2"><strong>Fallback:</strong> <code>C:\Users\Public\WhisperSubTranslate\temp\</code> - Used when the app path contains Unicode characters</li>
+                </ol>
+                <p data-i18n="docs.technical.tempCleanup">All temporary files are automatically deleted after processing completes.</p>
+
+                <div class="info-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 16v-4M12 8h.01"/>
+                    </svg>
+                    <p data-i18n="docs.technical.unicodeNote">This process is completely transparent - just drag and drop your files regardless of the filename or folder path language.</p>
+                </div>
+
+                <h3 data-i18n="docs.technical.logCleanup">Automatic Log Cleanup</h3>
+                <p data-i18n="docs.technical.logCleanupDesc">The translation error log file is automatically managed to prevent excessive disk usage:</p>
+                <ul>
+                    <li data-i18n="docs.technical.log1"><strong>Size limit:</strong> 2MB maximum</li>
+                    <li data-i18n="docs.technical.log2"><strong>Auto-trim:</strong> When exceeded, only the most recent 1,000 lines are kept</li>
+                    <li data-i18n="docs.technical.log3"><strong>Location:</strong> <code>%APPDATA%\whispersubtranslate\logs\translation-errors.log</code></li>
+                </ul>
             </section>
 
             <section id="troubleshooting">

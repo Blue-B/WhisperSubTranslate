@@ -33,7 +33,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ## Szybki start (Przenośna)
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.1-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.2-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
@@ -92,8 +92,8 @@ Klucze API i preferencje są zapisywane lokalnie na Twoim PC w `app.getPath('use
 ### Języki interfejsu
 Koreański, Angielski, Japoński, Chiński, Polski (5 języków)
 
-### Języki docelowe tłumaczenia (13)
-Koreański (ko), Angielski (en), Japoński (ja), Chiński (zh), Hiszpański (es), Francuski (fr), Niemiecki (de), Włoski (it), Portugalski (pt), Rosyjski (ru), Węgierski (hu), Arabski (ar), **Polski (pl)**
+### Języki docelowe tłumaczenia (14)
+Koreański (ko), Angielski (en), Japoński (ja), Chiński (zh), Hiszpański (es), Francuski (fr), Niemiecki (de), Włoski (it), Portugalski (pt), Rosyjski (ru), Węgierski (hu), Arabski (ar), Polski (pl), **Perski (fa)**
 
 ### Języki rozpoznawania audio
 whisper.cpp obsługuje ponad 100 języków, w tym wszystkie główne języki świata (angielski, hiszpański, francuski, niemiecki, włoski, portugalski, rosyjski, chiński, japoński, koreański, arabski, hindi, turecki i wiele innych).

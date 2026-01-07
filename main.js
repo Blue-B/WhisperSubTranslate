@@ -366,15 +366,59 @@ app.on('activate', () => {
     }
 });
 
+// ===== Safe Temp Directory (유니코드 경로 문제 해결) =====
+// spawn()으로 whisper-cli 호출 시 유니코드 경로가 깨지는 문제 해결
+// WAV/SRT를 ASCII 경로에 생성 후 원본 위치로 복사
+function getSafeTempDir() {
+    // 1순위: 앱 실행 경로 내 temp (대부분 영어 경로)
+    const basePath = app.isPackaged ? path.dirname(process.execPath) : __dirname;
+    const appTemp = path.join(basePath, 'temp');
+
+    // ASCII 문자만 있는지 체크 (유니코드 없으면 안전)
+    if (/^[\x00-\x7F]*$/.test(appTemp)) {
+        if (!fs.existsSync(appTemp)) {
+            fs.mkdirSync(appTemp, { recursive: true });
+        }
+        return appTemp;
+    }
+
+    // 2순위: C:\Users\Public (모든 Windows에서 항상 영어)
+    const publicTemp = path.join('C:', 'Users', 'Public', 'WhisperSubTranslate', 'temp');
+    if (!fs.existsSync(publicTemp)) {
+        fs.mkdirSync(publicTemp, { recursive: true });
+    }
+    return publicTemp;
+}
+
+// 경로가 ASCII만 포함하는지 체크
+function isAsciiPath(filePath) {
+    return /^[\x00-\x7F]*$/.test(filePath);
+}
+
 // ===== Audio Conversion Helper (오디오 변환 헬퍼) =====
+// 유니코드 경로 문제 해결: 안전한 temp 경로에 WAV 생성
 function convertToWav(inputPath) {
     return new Promise((resolve, reject) => {
-        const wavPath = inputPath.replace(/\.[^/.]+$/, '.wav');
+        // 원본 경로가 ASCII인지 확인
+        const originalWavPath = inputPath.replace(/\.[^/.]+$/, '.wav');
+        let wavPath;
+        let usingSafeTemp = false;
 
-        // WAV 파일이 이미 존재하면 스킵
-        if (fs.existsSync(wavPath)) {
+        if (isAsciiPath(inputPath)) {
+            // ASCII 경로면 원본 위치에 생성
+            wavPath = originalWavPath;
+        } else {
+            // 유니코드 경로면 안전한 temp에 생성
+            const safeTempDir = getSafeTempDir();
+            wavPath = path.join(safeTempDir, `whisper_${Date.now()}.wav`);
+            usingSafeTemp = true;
+            console.log(`[Audio] Unicode path detected, using safe temp: ${wavPath}`);
+        }
+
+        // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크)
+        if (!usingSafeTemp && fs.existsSync(wavPath)) {
             console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
-            resolve(wavPath);
+            resolve({ wavPath, usingSafeTemp, originalWavPath });
             return;
         }
 
@@ -431,7 +475,8 @@ function convertToWav(inputPath) {
             if (code === 0 && fs.existsSync(wavPath)) {
                 console.log(`[Audio] WAV conversion successful: ${path.basename(wavPath)}`);
                 mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
-                resolve(wavPath);
+                // 객체로 반환: wavPath, usingSafeTemp 플래그, 원본 경로
+                resolve({ wavPath, usingSafeTemp, originalWavPath });
             } else {
                 reject(new Error(`Audio conversion failed (code: ${code})`));
             }
@@ -534,9 +579,12 @@ function extractSingleFile(filePath, model, language, device) {
         const exePath = path.join(whisperDir, 'whisper-cli.exe');
 
         // WAV 변환 (whisper.cpp는 WAV만 지원)
-        let wavPath;
+        let wavPath, usingSafeTemp = false, originalWavPath;
         try {
-            wavPath = await convertToWav(filePath);
+            const wavResult = await convertToWav(filePath);
+            wavPath = wavResult.wavPath;
+            usingSafeTemp = wavResult.usingSafeTemp;
+            originalWavPath = wavResult.originalWavPath;
         } catch (convErr) {
             return reject(convErr);
         }
@@ -551,9 +599,24 @@ function extractSingleFile(filePath, model, language, device) {
             ));
         }
 
-        // SRT 출력 경로 (원본 파일 기준)
-        const srtPath = filePath.replace(/\.[^/.]+$/, '.srt');
-        const outputBase = filePath.replace(/\.[^/.]+$/, ''); // 확장자 제외
+        // SRT 출력 경로
+        // 유니코드 경로면 temp에 생성 후 원본 위치로 복사
+        const originalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+        let srtPath, outputBase;
+
+        if (usingSafeTemp) {
+            // Safe temp 경로에 SRT 생성
+            const safeTempDir = getSafeTempDir();
+            const tempBaseName = `whisper_${Date.now()}`;
+            outputBase = path.join(safeTempDir, tempBaseName);
+            srtPath = outputBase + '.srt';
+            console.log(`[Unicode] SRT will be generated at: ${srtPath}`);
+            console.log(`[Unicode] Will copy to: ${originalSrtPath}`);
+        } else {
+            // 원본 경로가 ASCII면 직접 생성
+            srtPath = originalSrtPath;
+            outputBase = filePath.replace(/\.[^/.]+$/, ''); // 확장자 제외
+        }
 
         // whisper.cpp 인자 구성
         const args = [
@@ -636,8 +699,29 @@ function extractSingleFile(filePath, model, language, device) {
             const srtExists = fs.existsSync(srtPath);
 
             if (code === 0 || srtExists) {
+                let finalSrtPath = srtPath;
+
+                // 유니코드 경로면 temp에서 원본 위치로 복사
+                if (usingSafeTemp && srtExists) {
+                    try {
+                        fs.copyFileSync(srtPath, originalSrtPath);
+                        console.log(`[Unicode] Copied SRT to original location: ${originalSrtPath}`);
+
+                        // temp SRT 파일 정리
+                        fs.unlinkSync(srtPath);
+                        console.log(`[Cleanup] Removed temp SRT: ${srtPath}`);
+
+                        finalSrtPath = originalSrtPath;
+                    } catch (copyErr) {
+                        console.log(`[Unicode] Failed to copy SRT: ${copyErr.message}`);
+                        // 복사 실패해도 temp에 있는 SRT는 유효
+                        mainWindow.webContents.send('output-update',
+                            `[Warning] SRT created at temp location: ${srtPath}\n`);
+                    }
+                }
+
                 console.log('[SUCCESS] ' + path.basename(filePath) + ' completed (code: ' + code + ', fileExists: ' + srtExists + ')');
-                resolve(srtPath);
+                resolve(finalSrtPath);
             } else {
                 let errorMessage = `Error code: ${code}`;
                 if (code === 3221226505) {

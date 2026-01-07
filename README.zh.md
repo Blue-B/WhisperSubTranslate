@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.1-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.2-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
@@ -90,8 +90,8 @@ API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使
 ### UI 语言
 韩语、英语、日语、中文、波兰语（5种语言）
 
-### 翻译目标语言（13种）
-韩语 (ko)、英语 (en)、日语 (ja)、中文 (zh)、西班牙语 (es)、法语 (fr)、德语 (de)、意大利语 (it)、葡萄牙语 (pt)、俄语 (ru)、匈牙利语 (hu)、阿拉伯语 (ar)、**波兰语 (pl)**
+### 翻译目标语言（14种）
+韩语 (ko)、英语 (en)、日语 (ja)、中文 (zh)、西班牙语 (es)、法语 (fr)、德语 (de)、意大利语 (it)、葡萄牙语 (pt)、俄语 (ru)、匈牙利语 (hu)、阿拉伯语 (ar)、波兰语 (pl)、**波斯语 (fa)**
 
 ### 音频识别语言
 whisper.cpp 支持100多种语言，包括所有主要世界语言（英语、西班牙语、法语、德语、意大利语、葡萄牙语、俄语、中文、日语、韩语、阿拉伯语、印地语、土耳其语等）。
@@ -157,7 +157,7 @@ fix: localize target language note
 | I18N | UI/日志文案不要写在代码里，放入 I18N 表并通过键引用 |
 | 体验 | 保持进度/ETA/队列一致性，避免回归 |
 | 范围 | 小步、聚焦的修改，函数命名清晰 |
-| 多语言 UI | 新 UI 需同步更新 ko/en/ja/zh |
+| 多语言 UI | 新 UI 需同步更新 ko/en/ja/zh/pl |
 
 ### 4) 手动测试清单
 

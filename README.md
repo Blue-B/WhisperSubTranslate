@@ -33,7 +33,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.1-win-x64.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.3.2-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
@@ -92,8 +92,8 @@ API keys and preferences are saved locally on your PC under `app.getPath('userDa
 ### UI Languages
 Korean, English, Japanese, Chinese, Polish (5 languages)
 
-### Translation Target Languages (13)
-Korean (ko), English (en), Japanese (ja), Chinese (zh), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Russian (ru), Hungarian (hu), Arabic (ar), **Polish (pl)**
+### Translation Target Languages (14)
+Korean (ko), English (en), Japanese (ja), Chinese (zh), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Russian (ru), Hungarian (hu), Arabic (ar), Polish (pl), **Persian (fa)**
 
 ### Audio Recognition Languages
 whisper.cpp supports 100+ languages including all major world languages (English, Spanish, French, German, Italian, Portuguese, Russian, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, and many more).
@@ -159,7 +159,7 @@ fix: localize target language note
 | I18N | Don't inline UI/log strings. Add them to I18N tables and reference by key |
 | UX | Keep progress/ETA/queue states consistent; avoid regressions |
 | Scope | Prefer small, focused changes with clear function names |
-| Multi‑language UI | Update ko/en/ja/zh together when adding UI |
+| Multi‑language UI | Update ko/en/ja/zh/pl together when adding UI |
 
 ### 4) Manual test checklist
 

@@ -62,6 +62,34 @@ function getLogPath() {
   return path.join(__dirname, 'translation-errors.log');
 }
 
+// 로그 파일 크기 체크 및 정리 (2MB 초과 시 최근 1000줄만 유지)
+const LOG_MAX_SIZE = 2 * 1024 * 1024; // 2MB
+const LOG_KEEP_LINES = 1000;
+
+function cleanupLogFile(logPath) {
+  try {
+    if (!fs.existsSync(logPath)) return;
+
+    const stats = fs.statSync(logPath);
+    if (stats.size <= LOG_MAX_SIZE) return;
+
+    console.log(`[Logs] Log file exceeds ${LOG_MAX_SIZE / 1024 / 1024}MB (${(stats.size / 1024 / 1024).toFixed(2)}MB), cleaning up...`);
+
+    // 파일 읽어서 최근 1000줄만 유지
+    const content = fs.readFileSync(logPath, 'utf8');
+    const lines = content.split('\n');
+
+    if (lines.length > LOG_KEEP_LINES) {
+      const keptLines = lines.slice(-LOG_KEEP_LINES);
+      const header = `[Log Cleanup] Trimmed from ${lines.length} lines to ${LOG_KEEP_LINES} lines at ${new Date().toISOString()}\n---\n`;
+      fs.writeFileSync(logPath, header + keptLines.join('\n'), 'utf8');
+      console.log(`[Logs] Cleaned up: ${lines.length} -> ${LOG_KEEP_LINES} lines`);
+    }
+  } catch (err) {
+    console.warn('[Logs] Failed to cleanup log file:', err.message);
+  }
+}
+
 // Encrypt data (데이터 암호화)
 function encryptData(text) {
   try {
@@ -399,6 +427,10 @@ class EnhancedSubtitleTranslator {
     // 로그 위치: %APPDATA%\whispersubtranslate\logs\translation-errors.log
     try {
       const logPath = getLogPath();
+
+      // 로그 쓰기 전에 크기 체크 및 정리 (2MB 초과 시 최근 1000줄 유지)
+      cleanupLogFile(logPath);
+
       const logEntry = `[${errorInfo.timestamp}] ${context}: ${error.message}\n${error.stack || ''}\n---\n`;
       fs.appendFileSync(logPath, logEntry, 'utf8');
     } catch (fileErr) {

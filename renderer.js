@@ -2044,11 +2044,11 @@ const MODEL_I18N = {
 
 // 언어 이름 현지화 (대상/소스 공통 표시용)
 const LANG_NAMES_I18N = {
-  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', hu: '헝가리어', ar: '아랍어', pl: '폴란드어' },
-  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', hu: 'Hungarian', ar: 'Arabic', pl: 'Polish' },
-  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語', hu: 'ハンガリー語', ar: 'アラビア語', pl: 'ポーランド語' },
-  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语', hu: '匈牙利语', ar: '阿拉伯语', pl: '波兰语' },
-  pl: { ko: 'Koreański', en: 'Angielski', ja: 'Japoński', zh: 'Chiński', es: 'Hiszpański', fr: 'Francuski', de: 'Niemiecki', it: 'Włoski', pt: 'Portugalski', ru: 'Rosyjski', hu: 'Węgierski', ar: 'Arabski', pl: 'Polski' },
+  ko: { ko: '한국어', en: '영어', ja: '일본어', zh: '중국어', es: '스페인어', fr: '프랑스어', de: '독일어', it: '이탈리아어', pt: '포르투갈어', ru: '러시아어', hu: '헝가리어', ar: '아랍어', pl: '폴란드어', fa: '페르시아어' },
+  en: { ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', hu: 'Hungarian', ar: 'Arabic', pl: 'Polish', fa: 'Persian' },
+  ja: { ko: '韓国語', en: '英語', ja: '日本語', zh: '中国語', es: 'スペイン語', fr: 'フランス語', de: 'ドイツ語', it: 'イタリア語', pt: 'ポルトガル語', ru: 'ロシア語', hu: 'ハンガリー語', ar: 'アラビア語', pl: 'ポーランド語', fa: 'ペルシア語' },
+  zh: { ko: '韩语', en: '英语', ja: '日语', zh: '中文', es: '西班牙语', fr: '法语', de: '德语', it: '意大利语', pt: '葡萄牙语', ru: '俄语', hu: '匈牙利语', ar: '阿拉伯语', pl: '波兰语', fa: '波斯语' },
+  pl: { ko: 'Koreański', en: 'Angielski', ja: 'Japoński', zh: 'Chiński', es: 'Hiszpański', fr: 'Francuski', de: 'Niemiecki', it: 'Włoski', pt: 'Portugalski', ru: 'Rosyjski', hu: 'Węgierski', ar: 'Arabski', pl: 'Polski', fa: 'Perski' },
 };
 
 // 장치/번역 메서드 옵션 현지화
@@ -2647,6 +2647,7 @@ function initTranslationSelect() {
   const translationSelect = document.getElementById('translationSelect');
   const targetLanguageGroup = document.getElementById('targetLanguageGroup');
   const translationStatus = document.getElementById('translationStatus');
+  const targetLanguageSelect = document.getElementById('targetLanguageSelect');
   if (!translationSelect || !targetLanguageGroup) return;
   const update = () => {
     const method = translationSelect.value;
@@ -2667,6 +2668,17 @@ function initTranslationSelect() {
           translationStatus.innerHTML = I18N[currentUiLang].translationGeminiHtml;
         } else {
           translationStatus.innerHTML = I18N[currentUiLang].translationEnabledHtml;
+        }
+      }
+    }
+    // DeepL 선택 시 페르시아어(fa) 비활성화 (DeepL은 페르시아어 미지원)
+    if (targetLanguageSelect) {
+      const persianOption = targetLanguageSelect.querySelector('option[value="fa"]');
+      if (persianOption) {
+        persianOption.disabled = (method === 'deepl');
+        // 페르시아어가 선택된 상태에서 DeepL로 변경 시 자동으로 영어로 전환
+        if (method === 'deepl' && targetLanguageSelect.value === 'fa') {
+          targetLanguageSelect.value = 'en';
         }
       }
     }

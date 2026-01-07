@@ -8,12 +8,13 @@ This guide explains how to add a new language to WhisperSubTranslate.
 - English (en)
 - Japanese (ja)
 - Chinese Simplified (zh)
+- Polish (pl)
 
 ## How to Add a New Language
 
 ### Step 1: Find the I18N Object
 
-Open `renderer.js` and search for `const I18N = {` (around line 1337).
+Open `renderer.js` and search for `const I18N = {`.
 
 ```javascript
 const I18N = {
@@ -21,6 +22,7 @@ const I18N = {
   en: { ... },
   ja: { ... },
   zh: { ... },
+  pl: { ... },
 };
 ```
 
@@ -38,6 +40,7 @@ const I18N = {
   en: { ... },
   ja: { ... },
   zh: { ... },
+  pl: { ... },
   // Add your language here
   es: {  // Spanish
     titleText: 'WhisperSubTranslate',
@@ -80,12 +83,12 @@ Make sure to translate **every key**. There are approximately 100+ keys.
 
 ### Step 5: Add Language to Related Objects
 
-Search for these objects and add your language:
+Search for these objects in `renderer.js` and add your language:
 
-1. **MODEL_I18N** (~line 1777) - Model descriptions
-2. **LANG_NAMES_I18N** (~line 1822) - Language names
-3. **DEVICE_OPTIONS_I18N** (~line 1832) - Device options
-4. **TR_METHOD_I18N** (~line 1837) - Translation method names
+1. **MODEL_I18N** - Search for `const MODEL_I18N = {` - Model descriptions
+2. **LANG_NAMES_I18N** - Search for `const LANG_NAMES_I18N = {` - Language names
+3. **DEVICE_OPTIONS_I18N** - Search for `const DEVICE_OPTIONS_I18N` - Device options
+4. **TR_METHOD_I18N** - Search for `const TR_METHOD_I18N` - Translation method names
 
 ### Step 6: Test Your Translation
 
