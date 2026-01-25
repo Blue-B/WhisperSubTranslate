@@ -1,13 +1,15 @@
 {
   "name": "whispersubtranslate",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "main": "main.js",
   "scripts": {
     "start": "electron --expose-gc .",
     "build": "electron-builder --publish never",
     "build-win": "electron-builder --win",
     "postinstall": "node scripts/postinstall.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint *.js locales/*.js --fix",
+    "format": "prettier --write \"*.js\" \"locales/*.js\" \"*.json\" \"*.html\" \"*.css\""
   },
   "keywords": [],
   "author": "GTPS Team",
@@ -23,6 +25,8 @@
       "main.js",
       "preload.js",
       "index.html",
+      "styles.css",
+      "locales/i18n.js",
       "renderer.js",
       "translator-enhanced.js",
       "myMemoryTranslator.js",
@@ -53,7 +57,11 @@
   },
   "devDependencies": {
     "electron": "^30.0.9",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.1.0",
+    "prettier": "^3.8.1"
   },
   "dependencies": {
     "axios": "^1.6.0",

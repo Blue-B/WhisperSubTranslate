@@ -290,7 +290,7 @@ class EnhancedSubtitleTranslator {
       console.log(`[Performance] Detected: ${totalMemGB.toFixed(1)}GB RAM, ${cpuCount} CPU cores → Max concurrent: ${concurrency}`);
       return concurrency;
 
-    } catch (error) {
+    } catch (_error) {
       console.warn('[Performance] Failed to detect system specs, using safe default (3)');
       return 3;
     }
@@ -900,7 +900,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   }
 
   // 배치 번역 (성능 향상) - 동적 배치 크기 조정
-  async translateBatch(texts, method = null, targetLang = null, sourceLang = null, progressCallback = null) {
+  async translateBatch(texts, method = null, targetLang = null, _sourceLang = null, progressCallback = null) {
     const preferredMethod = method || this.apiKeys.preferredService;
     
     if (!this.apiKeys.batchTranslation || texts.length <= 1) {
@@ -1197,7 +1197,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     // GPT-5 모델: Chat Completions API 지원, max_completion_tokens 사용
     if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
       try {
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        await axios.post('https://api.openai.com/v1/chat/completions', {
           model: 'gpt-5-nano',
           messages: [{ role: 'user', content: 'hi' }],
           max_completion_tokens: 5
@@ -1221,7 +1221,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     // Gemini 검사 (Gemini 3 Flash)
     if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
       try {
-        const response = await axios.post(
+        await axios.post(
           `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini.trim()}`,
           {
             contents: [{ parts: [{ text: 'hi' }] }],

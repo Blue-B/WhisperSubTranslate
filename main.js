@@ -22,7 +22,7 @@ try {
     ffmpegStaticPath = ffmpegStaticPath.replace('app.asar', 'app.asar.unpacked');
   }
   console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStaticPath);
-} catch (error) {
+} catch (_error) {
   console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local ffmpeg.exe');
 }
 
@@ -91,8 +91,8 @@ function resolveDevice(requestedDevice) {
   return req;
 }
 
-// Dynamic performance settings based on system specs
-function getOptimalWhisperSettings(device) {
+// Dynamic performance settings based on system specs (reserved for future use)
+function _getOptimalWhisperSettings(device) {
   const totalMemory = os.totalmem() / (1024 * 1024 * 1024); // GB
   const cpuCores = os.cpus().length;
 
@@ -187,7 +187,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                     execSync('taskkill /F /IM whisper-cli.exe /T', { stdio: 'ignore' });
                     execSync('taskkill /F /IM ffmpeg.exe /T', { stdio: 'ignore' });
                     console.log('   - 모든 관련 프로세스 정리 완료');
-                } catch (e) {
+                } catch (_e) {
                     console.log('   - 정리할 프로세스 없음');
                 }
 
@@ -218,7 +218,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                                     }
                                     console.log(`   - GPU 리셋 시도 ${i+1}/5 성공`);
                                     break;
-                                } catch (e) {
+                                } catch (_e) {
                                     if (i === 4) console.log('   - GPU 리셋 실패, 계속 진행');
                                 }
                             }
@@ -236,7 +236,7 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                                 timeout: 5000
                             });
                             console.log('   - 시스템 메모리 정리 완료');
-                        } catch (e) {
+                        } catch (_e) {
                             console.log('   - 시스템 메모리 정리 건너뛰기');
                         }
 
@@ -262,6 +262,54 @@ function forceMemoryCleanup(device, isFileTransition = false) {
             resolve();
         }
     });
+}
+
+// ===== Update Checker (업데이트 알림) =====
+const GITHUB_REPO = 'blue-b/WhisperSubTranslate';
+const CURRENT_VERSION = require('./package.json').version;
+
+async function checkForUpdates() {
+    console.log('[Update Check] Starting... Current version:', CURRENT_VERSION);
+    try {
+        const response = await axios.get(
+            `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+            { timeout: 10000 }
+        );
+
+        const latestVersion = response.data.tag_name.replace(/^v/, '');
+        const releaseUrl = response.data.html_url;
+        const releaseName = response.data.name || `v${latestVersion}`;
+
+        // 버전 비교 (semver 간단 비교)
+        const isNewer = compareVersions(latestVersion, CURRENT_VERSION) > 0;
+
+        console.log(`[Update Check] Latest: ${latestVersion}, Current: ${CURRENT_VERSION}, HasUpdate: ${isNewer}`);
+
+        return {
+            hasUpdate: isNewer,
+            currentVersion: CURRENT_VERSION,
+            latestVersion,
+            releaseUrl,
+            releaseName
+        };
+    } catch (error) {
+        console.log('[Update Check] Failed:', error.message);
+        return { hasUpdate: false, error: error.message };
+    }
+}
+
+// 간단한 semver 비교 (1.3.3 vs 1.3.4)
+function compareVersions(v1, v2) {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 > p2) return 1;
+        if (p1 < p2) return -1;
+    }
+    return 0;
 }
 
 // App Initialization
@@ -290,11 +338,72 @@ function createWindow() {
     });
     mainWindow.loadFile('index.html');
 
+    // DOM이 완전히 로드된 후 업데이트 체크 (main → renderer 직접 실행)
+    mainWindow.webContents.on('did-finish-load', async () => {
+        console.log('[Update] Page loaded, checking for updates...');
+        // renderer.js 초기화 대기
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        try {
+            const result = await checkForUpdates();
+            if (result && result.hasUpdate) {
+                console.log('[Update] New version found:', result.latestVersion);
+                // executeJavaScript로 직접 배너 표시 + 전역 변수에 업데이트 정보 저장
+                mainWindow.webContents.executeJavaScript(`
+                    (function() {
+                        var banner = document.getElementById('updateBanner');
+                        var message = document.getElementById('updateMessage');
+                        var downloadBtn = document.getElementById('updateDownloadBtn');
+                        var laterBtn = document.getElementById('updateLaterBtn');
+                        if (!banner) { console.error('Banner not found'); return; }
+
+                        // 전역 변수에 업데이트 정보 저장 (언어 변경 시 사용)
+                        window.currentUpdateInfo = {
+                            latestVersion: '${result.latestVersion}',
+                            releaseUrl: '${result.releaseUrl}'
+                        };
+
+                        var lang = typeof currentUiLang !== 'undefined' ? currentUiLang : 'ko';
+                        var msgs = {
+                            ko: 'v${result.latestVersion} 업데이트가 있습니다',
+                            en: 'v${result.latestVersion} update available',
+                            ja: 'v${result.latestVersion} アップデートがあります',
+                            zh: 'v${result.latestVersion} 更新可用',
+                            pl: 'Dostępna aktualizacja v${result.latestVersion}'
+                        };
+                        var btns = {
+                            ko: ['다운로드', '나중에'], en: ['Download', 'Later'],
+                            ja: ['ダウンロード', '後で'], zh: ['下载', '稍后'],
+                            pl: ['Pobierz', 'Później']
+                        };
+                        message.textContent = msgs[lang] || msgs.ko;
+                        if (downloadBtn) downloadBtn.textContent = (btns[lang] || btns.ko)[0];
+                        if (laterBtn) laterBtn.textContent = (btns[lang] || btns.ko)[1];
+                        banner.style.display = 'flex';
+                        document.body.classList.add('has-update-banner');
+                        if (downloadBtn) downloadBtn.onclick = function() {
+                            window.electronAPI.openExternal('${result.releaseUrl}');
+                        };
+                        if (laterBtn) laterBtn.onclick = function() {
+                            banner.style.display = 'none';
+                            document.body.classList.remove('has-update-banner');
+                        };
+                        console.log('[Update] Banner displayed, info saved to window.currentUpdateInfo');
+                    })();
+                `);
+            } else {
+                console.log('[Update] No update available');
+            }
+        } catch (error) {
+            console.error('[Update] Auto-check failed:', error.message);
+        }
+    });
+
     // 개발 모드에서 캐시 비활성화 (파일 변경 즉시 반영)
     mainWindow.webContents.session.clearCache();
 
-    // F12 개발자 도구 비활성화 (배포 버전)
-    // 개발 시에는 devTools: true 로 변경하고 아래 주석 해제
+    // F12 개발자 도구 (배포 버전: 비활성화)
+    // 개발 시에만 아래 코드 주석 해제
     // mainWindow.webContents.on('before-input-event', (event, input) => {
     //     if (input.key === 'F12') {
     //         mainWindow.webContents.toggleDevTools();
@@ -579,12 +688,12 @@ function extractSingleFile(filePath, model, language, device) {
         const exePath = path.join(whisperDir, 'whisper-cli.exe');
 
         // WAV 변환 (whisper.cpp는 WAV만 지원)
-        let wavPath, usingSafeTemp = false, originalWavPath;
+        let wavPath, usingSafeTemp = false;
         try {
             const wavResult = await convertToWav(filePath);
             wavPath = wavResult.wavPath;
             usingSafeTemp = wavResult.usingSafeTemp;
-            originalWavPath = wavResult.originalWavPath;
+            // originalWavPath available in wavResult if needed
         } catch (convErr) {
             return reject(convErr);
         }
@@ -725,13 +834,13 @@ function extractSingleFile(filePath, model, language, device) {
             } else {
                 let errorMessage = `Error code: ${code}`;
                 if (code === 3221226505) {
-                    errorMessage = 'GPU 메모리 부족 또는 드라이버 문제';
+                    errorMessage = 'GPU memory shortage or driver issue';
                 } else if (code === null || code === undefined) {
-                    errorMessage = '프로세스가 비정상적으로 종료됨 (메모리 부족 가능성)';
+                    errorMessage = 'Process terminated abnormally (possible memory shortage)';
                 } else if (code === 1) {
-                    errorMessage = '[ERROR] Whisper 처리 실패 (파일 포맷 또는 오디오 문제)';
+                    errorMessage = 'Whisper processing failed (file format or audio issue)';
                 } else if (code === 127) {
-                    errorMessage = '[ERROR] whisper-cli.exe를 찾을 수 없음';
+                    errorMessage = 'whisper-cli.exe not found';
                 }
                 console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
                 reject(new Error(errorMessage));
@@ -803,7 +912,6 @@ ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, 
     let userStopped = false;
     const successDetails = [];
     const failureDetails = [];
-    const totalFiles = filesToProcess.length;
 
     for (let i = 0; i < filesToProcess.length; i++) {
         const currentFile = filesToProcess[i];
@@ -1205,6 +1313,15 @@ ipcMain.handle('get-log-dir', async () => {
     fs.mkdirSync(logsDir, { recursive: true });
   }
   return logsDir;
+});
+
+// 업데이트 체크 IPC 핸들러 (폴백용 - 주로 did-finish-load에서 자동 체크)
+ipcMain.handle('check-for-updates', async () => {
+  return await checkForUpdates();
+});
+
+ipcMain.handle('get-current-version', async () => {
+  return CURRENT_VERSION;
 });
 
 // nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)

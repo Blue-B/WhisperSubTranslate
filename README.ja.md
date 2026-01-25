@@ -31,7 +31,7 @@
 
 ### 一般ユーザー: ポータブル版で実行
 
-- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.3.2-win-x64.zip`
+- Releases から最新のポータブルアーカイブをダウンロード：`WhisperSubTranslate-v1.3.3-win-x64.zip`
 - 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
 すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション（無料MyMemoryがデフォルト、DeepL/OpenAIは自分のAPIキーが必要）。
@@ -74,6 +74,8 @@ npm run build-win
 | DeepL | 月 50万無料 | 必要 | 有料プランあり |
 | GPT-5-nano（OpenAI） | 有料 | 必要 | 入力 $0.05 / 出力 $0.40 per 1M トークン |
 | Gemini 3 Flash | 無料/有料 | 必要 | 無料: 1日250字幕/20-30分、有料: 無制限 ([APIキー取得](https://aistudio.google.com/app/apikey)) |
+
+> **ヒント**: 1時間以上の長い動画では、MyMemoryの日次制限に達することがあります。GeminiかDeepLの利用をおすすめします。
 
 APIキーと設定は、ユーザーPCの `app.getPath('userData')` パスに基本的なエンコーディングを適用して保存されます。ファイルエクスプローラーで誤って開いても平文で表示されないように保護され、Gitや配布ファイルには一切含まれません。
 

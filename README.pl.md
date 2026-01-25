@@ -33,7 +33,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ## Szybki start (Przenośna)
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.2-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v1.3.3-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
@@ -76,6 +76,8 @@ Artefakty są generowane do `dist2/`.
 | DeepL | Darmowe 500K/miesiąc | Tak | Dostępne płatne plany |
 | GPT-5-nano (OpenAI) | Płatny | Tak | $0.05 wejście / $0.40 wyjście za 1M tokenów |
 | Gemini 3 Flash | Darmowy/Płatny | Tak | Darmowy: 250 napisów/dzień (~20-30min), Płatny: bez limitu ([Pobierz klucz](https://aistudio.google.com/app/apikey)) |
+
+> **Wskazówka**: Dla długich filmów (1h+) MyMemory może osiągnąć dzienny limit. Użyj Gemini lub DeepL.
 
 Klucze API i preferencje są zapisywane lokalnie na Twoim PC w `app.getPath('userData')` z podstawowym kodowaniem, aby zapobiec przypadkowemu ujawnieniu. Plik konfiguracyjny nigdy nie jest przesyłany do Git ani dołączany do buildów.
 

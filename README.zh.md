@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.2-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.3.3-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
@@ -74,6 +74,8 @@ npm run build-win
 | DeepL | 每月 50 万免费 | 需要 | 有付费档 |
 | GPT-5-nano（OpenAI） | 付费 | 需要 | 输入 $0.05 / 输出 $0.40 per 1M tokens |
 | Gemini 3 Flash | 免费/付费 | 需要 | 免费: 每日250字幕/20-30分钟，付费: 无限制 ([获取API密钥](https://aistudio.google.com/app/apikey)) |
+
+> **提示**: 1小时以上的长视频可能会触发MyMemory的日限额，建议使用Gemini或DeepL。
 
 API密钥和设置保存在用户PC的 `app.getPath('userData')` 路径下，使用基本编码进行存储。即使在文件管理器中误打开，也不会以明文形式显示，并且绝不会包含在Git或发布文件中。
 

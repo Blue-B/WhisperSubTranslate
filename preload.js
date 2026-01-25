@@ -97,6 +97,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAudioData: (filename) => {
     return ipcRenderer.invoke('get-audio-data', filename);
   },
+
+  // 업데이트 체크
+  checkForUpdates: () => {
+    return ipcRenderer.invoke('check-for-updates');
+  },
+
+  // 현재 버전 가져오기
+  getCurrentVersion: () => {
+    return ipcRenderer.invoke('get-current-version');
+  },
   
   
   // 안전한 파일 경로 추출 (개선된 버전)
@@ -144,11 +154,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTranslationProgress: (callback) => {
     ipcRenderer.on('translation-progress', (event, data) => callback(data));
   },
-  
+
+  // 업데이트 알림 리스너 (main → renderer 푸시)
+  onUpdateAvailable: (callback) => {
+    ipcRenderer.on('update-available', (event, data) => callback(data));
+  },
+
   // 리스너 정리 (메모리 누수 방지)
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners('progress-update');
     ipcRenderer.removeAllListeners('output-update');
     ipcRenderer.removeAllListeners('translation-progress');
+    ipcRenderer.removeAllListeners('update-available');
   }
 });

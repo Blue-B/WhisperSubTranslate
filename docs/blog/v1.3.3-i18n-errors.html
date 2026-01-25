@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="WhisperSubTranslate v1.3.3 Update: Automatic update notifications and full internationalization support for error messages in 5 languages.">
+    <meta name="keywords" content="WhisperSubTranslate, subtitle extraction, i18n, internationalization, multilingual error messages, auto update">
+    <title>v1.3.3: Auto Update & Multilingual Errors - WhisperSubTranslate Blog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1a1;
+            --text-muted: #666666;
+            --accent: #22c55e;
+            --accent-hover: #16a34a;
+            --accent-glow: rgba(34, 197, 94, 0.15);
+            --border: #262626;
+            --border-hover: #404040;
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.8;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .logo svg { width: 24px; height: 24px; flex-shrink: 0; }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: var(--text-primary); }
+
+        /* Custom Language Selector */
+        .lang-selector {
+            position: relative;
+        }
+        .lang-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            color: #ffffff;
+            font-size: 0.875rem;
+            font-family: 'Geist', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        .lang-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+        .lang-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.5rem 0;
+            min-width: 120px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+        .lang-selector:hover .lang-dropdown {
+            display: block;
+        }
+        .lang-dropdown a {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .lang-dropdown a:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        /* Article */
+        article {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 8rem 2rem 4rem;
+        }
+        .article-header {
+            margin-bottom: 3rem;
+        }
+        .article-category {
+            display: inline-block;
+            background: var(--accent-glow);
+            color: var(--accent);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+        .article-header h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        .article-meta svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .article-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 3rem 0 1.5rem;
+            letter-spacing: -0.02em;
+        }
+        .article-content h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+        }
+        .article-content p {
+            margin-bottom: 1.5rem;
+        }
+        .article-content ul, .article-content ol {
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+        .article-content li {
+            margin-bottom: 0.75rem;
+        }
+        .article-content a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .article-content a:hover {
+            text-decoration: underline;
+        }
+        .article-content strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .article-content code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-tertiary);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        /* Highlight Box */
+        .highlight-box {
+            background: var(--accent-glow);
+            border-left: 4px solid var(--accent);
+            padding: 1.5rem;
+            border-radius: 0 8px 8px 0;
+            margin: 2rem 0;
+        }
+        .highlight-box ul {
+            margin-bottom: 0;
+            margin-top: 1rem;
+        }
+
+        /* Feature Cards */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        .feature-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        .feature-card h4 {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            white-space: pre;
+            line-height: 1.6;
+        }
+        .code-block .comment {
+            color: var(--text-muted);
+        }
+        .code-block .path {
+            color: var(--accent);
+        }
+        .code-block .error {
+            color: var(--error);
+        }
+        .code-block .success {
+            color: var(--success);
+        }
+
+        /* Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comparison-table th {
+            color: var(--text-primary);
+            font-weight: 600;
+            background: var(--bg-tertiary);
+        }
+        .comparison-table td {
+            color: var(--text-secondary);
+        }
+        .comparison-table .check {
+            color: var(--success);
+        }
+
+        /* Footer */
+        .article-footer {
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+        .share-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .share-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .share-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+        .share-btn.twitter {
+            background: #1da1f2;
+            color: white;
+        }
+        .share-btn.twitter:hover {
+            background: #0d8ddb;
+        }
+        .share-btn.facebook {
+            background: #4267B2;
+            color: white;
+        }
+        .share-btn.facebook:hover {
+            background: #365899;
+        }
+
+        .related-posts {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .related-posts h3 {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        .related-posts h3 svg {
+            width: 18px;
+            height: 18px;
+        }
+        .related-post-link {
+            display: block;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+            transition: color 0.2s;
+        }
+        .related-post-link:last-child {
+            border-bottom: none;
+        }
+        .related-post-link:hover {
+            color: var(--accent);
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            border-top: 1px solid var(--border);
+        }
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        footer a:hover {
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .article-header h1 {
+                font-size: 1.75rem;
+            }
+            .nav-links {
+                display: none;
+            }
+            article {
+                padding: 6rem 1rem 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-container">
+            <a href="../" class="logo">
+                <svg viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="#111"/>
+                    <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#22c55e"/>
+                </svg>
+                WhisperSubTranslate
+            </a>
+            <div class="nav-links">
+                <a href="../" data-i18n="nav.home">Home</a>
+                <a href="../docs/" data-i18n="nav.docs">Docs</a>
+                <a href="./" data-i18n="nav.blog">Blog</a>
+                <a href="https://github.com/Blue-B/WhisperSubTranslate" target="_blank">GitHub</a>
+                <div class="lang-selector">
+                    <button class="lang-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="2" y1="12" x2="22" y2="12"/>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        <span>EN</span>
+                    </button>
+                    <div class="lang-dropdown">
+                        <a href="#" onclick="translatePage('ko')">한국어</a>
+                        <a href="#" onclick="translatePage('ja')">日本語</a>
+                        <a href="#" onclick="translatePage('zh-CN')">中文</a>
+                        <a href="#" onclick="translatePage('pl')">Polski</a>
+                    </div>
+                </div>
+                <div id="google_translate_element" style="display:none;"></div>
+            </div>
+        </div>
+    </nav>
+
+    <article>
+        <header class="article-header">
+            <span class="article-category" data-i18n="article.category">Update</span>
+            <h1 data-i18n="article.title">v1.3.3: Auto Update Notifications & Multilingual Errors</h1>
+            <p class="article-meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span data-i18n="article.date">January 2025</span>
+                <span>|</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span data-i18n="article.readTime">3 min read</span>
+            </p>
+        </header>
+
+        <div class="article-content">
+            <p data-i18n="article.intro">WhisperSubTranslate v1.3.3 introduces automatic update notifications and brings full internationalization (i18n) support for error messages. All user-facing messages now respect your UI language setting.</p>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.tldr">What's New in v1.3.3:</strong>
+                <ul>
+                    <li data-i18n="article.tldr0"><strong>Automatic Update Notifications</strong> - Get notified when new versions are available</li>
+                    <li data-i18n="article.tldr1"><strong>Localized Error Messages</strong> - GPU errors, processing failures now display in your language</li>
+                    <li data-i18n="article.tldr2"><strong>Translated Processing Output</strong> - File queue, translation progress in 5 languages</li>
+                    <li data-i18n="article.tldr3"><strong>Version Display Fix</strong> - UI now correctly shows v1.3.3</li>
+                </ul>
+            </div>
+
+            <h2 data-i18n="article.section0.title">Automatic Update Notifications</h2>
+
+            <p data-i18n="article.section0.p1">WhisperSubTranslate now automatically checks for updates when you launch the app. When a new version is available, you'll see a notification banner at the top of the window.</p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> New Version Detection</h4>
+                    <p>Automatically checks GitHub Releases on startup to notify you about new versions</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Multilingual Banner</h4>
+                    <p>Update notification banner displays in your selected UI language (5 languages supported)</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Real-time Language Switch</h4>
+                    <p>Banner text updates immediately when you change UI language - no refresh needed</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> One-click Download</h4>
+                    <p>Navigate directly to latest release page from the banner with a single click</p>
+                </div>
+            </div>
+
+            <h2 data-i18n="article.section1.title">Full i18n Error Messages</h2>
+
+            <p data-i18n="article.section1.p1">Previously, some error messages were hardcoded in Korean regardless of your UI language setting. This caused confusion for international users who would see mixed language output.</p>
+
+            <div class="code-block"><span class="comment"># Before v1.3.3 - Mixed language output</span>
+<span class="error">[1/1] 실패:</span> video.mp4 - <span class="error">GPU 메모리 부족 또는 드라이버 문제</span>
+<span class="error">전체 작업 완료!</span> (성공: 0개, 실패: 1개)
+
+<span class="comment"># v1.3.3 - Consistent language output (English UI)</span>
+<span class="success">[1/1] Failed:</span> video.mp4 - <span class="success">GPU memory shortage or driver issue</span>
+<span class="success">All tasks complete!</span> (Success: 0, Failed: 1)</div>
+
+            <h3 data-i18n="article.section1.sub1">Supported Languages</h3>
+
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Language</th>
+                        <th>Error Messages</th>
+                        <th>Processing Output</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>English</td>
+                        <td class="check">Fully Supported</td>
+                        <td class="check">Fully Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Korean (한국어)</td>
+                        <td class="check">Fully Supported</td>
+                        <td class="check">Fully Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Japanese (日本語)</td>
+                        <td class="check">Fully Supported</td>
+                        <td class="check">Fully Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Chinese (中文)</td>
+                        <td class="check">Fully Supported</td>
+                        <td class="check">Fully Supported</td>
+                    </tr>
+                    <tr>
+                        <td>Polish (Polski)</td>
+                        <td class="check">Fully Supported</td>
+                        <td class="check">Fully Supported</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 data-i18n="article.section2.title">Localized Messages</h2>
+
+            <p data-i18n="article.section2.p1">The following message types are now fully localized:</p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Error Messages</h4>
+                    <p>GPU memory issues, driver problems, Whisper failures, file not found errors</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> File Operations</h4>
+                    <p>Files added to queue, already in queue, extraction complete messages</p>
+                </div>
+                <div class="feature-card">
+                    <h4><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> Processing Status</h4>
+                    <p>Processing start, translation progress, completion messages</p>
+                </div>
+            </div>
+
+            <h2 data-i18n="article.section3.title">Version Display Fix</h2>
+
+            <p data-i18n="article.section3.p1">Fixed a bug where the UI version badge showed "v1.3.1" instead of the correct version. The application now displays the correct version number in both the header badge and console logs.</p>
+
+            <h2 data-i18n="article.section4.title">How to Update</h2>
+
+            <ol>
+                <li data-i18n="article.section4.li1"><a href="https://github.com/Blue-B/WhisperSubTranslate/releases/latest">Download</a> v1.3.3 from Releases</li>
+                <li data-i18n="article.section4.li2">Extract and replace your existing installation</li>
+                <li data-i18n="article.section4.li3">Your settings, API keys, and models are preserved</li>
+            </ol>
+
+            <div class="highlight-box">
+                <strong data-i18n="article.note.title">Note:</strong>
+                <span data-i18n="article.note.text"> If you were seeing Korean error messages with English UI, this update fixes that. All messages will now follow your selected UI language.</span>
+            </div>
+
+            <p data-i18n="article.thanks">Thank you for your continued feedback! These improvements help make WhisperSubTranslate more accessible to users worldwide.</p>
+        </div>
+
+        <footer class="article-footer">
+            <div class="share-buttons">
+                <a href="https://twitter.com/intent/tweet?text=WhisperSubTranslate%20v1.3.3%20-%20Multilingual%20error%20messages%20in%205%20languages" class="share-btn twitter" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                    <span data-i18n="share.twitter">Share on X</span>
+                </a>
+                <a href="https://www.facebook.com/sharer/sharer.php?u=https://blue-b.github.io/WhisperSubTranslate/blog/v1.3.3-i18n-errors.html" class="share-btn facebook" target="_blank">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                    </svg>
+                    <span data-i18n="share.facebook">Share on Facebook</span>
+                </a>
+            </div>
+
+            <div class="related-posts">
+                <h3>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    <span data-i18n="related.title">Related Posts</span>
+                </h3>
+                <a href="./v1.3.2-unicode-fix.html" class="related-post-link" data-i18n="related.post1">v1.3.2: Unicode Path Fix & Persian Language</a>
+                <a href="./v1.3.1-ux-improvements.html" class="related-post-link" data-i18n="related.post2">v1.3.1: Resizable Queue Panel & Better Logging</a>
+                <a href="./whisper-cpp-migration.html" class="related-post-link" data-i18n="related.post3">v1.3.0: whisper.cpp Migration Complete</a>
+            </div>
+        </footer>
+    </article>
+
+    <footer>
+        <p>&copy; 2025 WhisperSubTranslate. GPL-3.0 License. |
+            <a href="../privacy.html" data-i18n="footer.privacy">Privacy Policy</a> |
+            <a href="../terms.html" data-i18n="footer.terms">Terms of Service</a>
+        </p>
+    </footer>
+
+    <!-- Google Translate -->
+    <script type="text/javascript">
+        function googleTranslateElementInit() {
+            new google.translate.TranslateElement({
+                pageLanguage: 'en',
+                includedLanguages: 'ko,ja,zh-CN,pl',
+                autoDisplay: false
+            }, 'google_translate_element');
+        }
+
+        function translatePage(lang) {
+            var frame = document.querySelector('.goog-te-menu-frame');
+            if (!frame) {
+                document.cookie = "googtrans=/en/" + lang + "; path=/";
+                document.cookie = "googtrans=/en/" + lang + "; path=/; domain=.github.io";
+                location.reload();
+                return false;
+            }
+            var links = frame.contentDocument.querySelectorAll('.goog-te-menu2-item span.text');
+            for (var i = 0; i < links.length; i++) {
+                if (links[i].getAttribute('data-language') === lang) {
+                    links[i].click();
+                    return false;
+                }
+            }
+            return false;
+        }
+    </script>
+    <script type="text/javascript" src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+</body>
+</html>

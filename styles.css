@@ -1,13 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>WhisperSubTranslate</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    :root {
+/* WhisperSubTranslate Styles */
+:root {
       --bg-primary: #000000;
       --bg-secondary: #0a0a0a;
       --bg-tertiary: #111111;
@@ -285,7 +277,7 @@
     /* Main Layout */
     .main-container {
       display: grid;
-      grid-template-columns: 1fr 340px;
+      grid-template-columns: 1fr auto auto;
       height: calc(100vh - 53px);
       overflow: hidden;
     }
@@ -628,13 +620,47 @@
       background: var(--bg-card);
     }
 
+    /* Resize Handle */
+    .resize-handle {
+      width: 8px;
+      background: var(--border);
+      cursor: col-resize;
+      position: relative;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .resize-handle:hover,
+    .resize-handle.dragging {
+      background: var(--accent);
+    }
+
+    .resize-handle::before {
+      content: '⋮';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--text-muted);
+      font-size: 14px;
+      letter-spacing: -2px;
+    }
+
+    .resize-handle:hover::before,
+    .resize-handle.dragging::before {
+      color: #000;
+    }
+
     /* Right Panel - Queue */
     .right-panel {
       background: var(--bg-secondary);
-      border-left: 1px solid var(--border);
+      border-left: none;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      width: 340px;
+      min-width: 280px;
+      max-width: 70vw;
     }
 
     .panel-header {
@@ -1337,369 +1363,87 @@
       color: var(--error);
       border: 1px solid var(--error);
     }
-  </style>
-</head>
-<body>
-  <!-- 복사 토스트 -->
-  <div id="copyToast" class="copy-toast">복사됨</div>
 
-  <!-- Header -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo">
-        <svg viewBox="0 0 32 32" fill="none">
-          <rect width="32" height="32" rx="8" fill="#0f0f0f"/>
-          <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
-        </svg>
-        <span class="logo-text">WhisperSubTranslate</span>
-      </div>
-      <span class="version-badge">v1.3.0</span>
-    </div>
-    <div class="header-right">
-      <select id="uiLanguageSelect" class="lang-select" title="UI Language">
-        <option value="ko" selected>한국어</option>
-        <option value="en">English</option>
-        <option value="ja">日本語</option>
-        <option value="zh">中文</option>
-        <option value="pl">Polski</option>
-      </select>
-    </div>
-  </header>
+    /* Update Banner */
+    .update-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      background: linear-gradient(135deg, rgba(98, 222, 97, 0.15) 0%, rgba(98, 222, 97, 0.08) 100%);
+      border-bottom: 1px solid var(--accent);
+      z-index: 2000;
+      animation: slideDown 0.3s ease;
+    }
 
-  <!-- Main Content -->
-  <main class="main-container">
-    <!-- Left Panel - Settings -->
-    <section class="left-panel">
-      <!-- Drop Zone -->
-      <div id="dropZone" class="dropzone">
-        <div class="drop-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <h3 id="dropTitle" class="drop-title">파일 드래그 & 드롭</h3>
-        <p id="dropHint1" class="drop-hint">동영상 또는 SRT 파일을 여기에 드래그하세요</p>
-        <p class="drop-formats">MP4, AVI, MKV, MOV, WMV, WEBM, SRT</p>
-        <button id="selectFileBtn" class="btn-select-file">파일 선택</button>
-      </div>
+    @keyframes slideDown {
+      from {
+        transform: translateY(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
 
-      <!-- Settings -->
-      <div class="settings-grid">
-        <!-- Model Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-            </svg>
-            <span id="labelModel">모델</span>
-          </label>
-          <select id="modelSelect" class="setting-select"></select>
-          <div id="modelStatus" class="setting-hint">모델 상태 확인 중...</div>
-          <div id="modelRequirements" class="setting-hint" style="margin-top: 4px; color: var(--text-muted);"></div>
-        </div>
+    .update-banner-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
 
-        <!-- Language Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <span id="labelLanguage">언어</span>
-          </label>
-          <select id="languageSelect" class="setting-select">
-            <option value="auto" selected>자동 감지</option>
-            <option value="ko">한국어</option>
-            <option value="en">영어</option>
-            <option value="ja">일본어</option>
-            <option value="zh">중국어</option>
-            <option value="es">스페인어</option>
-            <option value="fr">프랑스어</option>
-            <option value="de">독일어</option>
-            <option value="it">이탈리아어</option>
-            <option value="pt">포르투갈어</option>
-            <option value="ru">러시아어</option>
-            <option value="hu">헝가리어</option>
-            <option value="ar">아랍어</option>
-            <option value="pl">폴란드어</option>
-          </select>
-          <div id="langStatusInfo" class="setting-hint"></div>
-        </div>
+    .update-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--accent);
+    }
 
-        <!-- Device Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
-              <rect x="9" y="9" width="6" height="6"/>
-              <line x1="9" y1="1" x2="9" y2="4"/>
-              <line x1="15" y1="1" x2="15" y2="4"/>
-              <line x1="9" y1="20" x2="9" y2="23"/>
-              <line x1="15" y1="20" x2="15" y2="23"/>
-              <line x1="20" y1="9" x2="23" y2="9"/>
-              <line x1="20" y1="14" x2="23" y2="14"/>
-              <line x1="1" y1="9" x2="4" y2="9"/>
-              <line x1="1" y1="14" x2="4" y2="14"/>
-            </svg>
-            <span id="labelDevice">처리 장치</span>
-          </label>
-          <select id="deviceSelect" class="setting-select">
-            <option value="auto" selected>자동 (GPU/CPU)</option>
-            <option value="cuda">GPU (CUDA)</option>
-            <option value="cpu">CPU</option>
-          </select>
-          <div id="deviceStatus" class="setting-hint"></div>
-        </div>
+    .update-message {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
 
-        <!-- Translation -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 8l6 6"/>
-              <path d="M4 14l6-6 2-3"/>
-              <path d="M2 5h12"/>
-              <path d="M7 2v3"/>
-              <path d="M22 22l-5-10-5 10"/>
-              <path d="M14 18h6"/>
-            </svg>
-            <span id="labelTranslation">번역</span>
-          </label>
-          <select id="translationSelect" class="setting-select">
-            <option value="none" selected>번역 안함</option>
-            <option value="mymemory">MyMemory (무료)</option>
-            <option value="deepl">DeepL (API 키 필요)</option>
-            <option value="chatgpt">GPT-5-nano (API 키 필요)</option>
-            <option value="gemini">Gemini (무료 API 키)</option>
-          </select>
-          <div id="translationStatus" class="setting-hint"></div>
-        </div>
+    .update-banner-actions {
+      display: flex;
+      gap: 8px;
+    }
 
-        <!-- Target Language (shown when translation selected) -->
-        <div class="setting-card" id="targetLanguageGroup" style="display: none;">
-        <label class="setting-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span id="labelTargetLanguage">번역 대상 언어</span>
-        </label>
-        <select id="targetLanguageSelect" class="setting-select">
-          <option value="ko" selected>한국어</option>
-          <option value="en">영어</option>
-          <option value="ja">일본어</option>
-          <option value="zh">중국어</option>
-          <option value="es">스페인어</option>
-          <option value="fr">프랑스어</option>
-          <option value="de">독일어</option>
-          <option value="it">이탈리아어</option>
-          <option value="pt">포르투갈어</option>
-          <option value="ru">러시아어</option>
-          <option value="hu">헝가리어</option>
-          <option value="ar">아랍어</option>
-          <option value="pl">폴란드어</option>
-        </select>
-        <div id="targetLangNote" class="setting-hint"></div>
-        </div>
-      </div>
+    .update-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
 
-      <!-- Action Buttons -->
-      <div class="action-bar">
-        <button id="runBtn" class="btn-primary">자막 추출 시작</button>
-        <button id="pauseBtn" class="btn-control" style="display: none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="4" width="4" height="16"/>
-            <rect x="14" y="4" width="4" height="16"/>
-          </svg>
-        </button>
-        <button id="stopBtn" class="btn-control" style="display: none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="6" width="12" height="12"/>
-          </svg>
-        </button>
-        <button id="settingsBtn" class="btn-secondary" style="flex: 0 0 auto;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-          <span id="settingsBtnText">설정</span>
-        </button>
-      </div>
-    </section>
+    .update-btn-primary {
+      background: var(--accent);
+      color: #000;
+      border: none;
+    }
 
-    <!-- Right Panel - Queue & Log -->
-    <aside id="queueContainer" class="right-panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/>
-            <line x1="8" y1="12" x2="21" y2="12"/>
-            <line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/>
-            <line x1="3" y1="12" x2="3.01" y2="12"/>
-            <line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-          <span id="queueTitle">처리 대기열</span>
-          <span id="queueCount" class="queue-count">0</span>
-        </div>
-        <div class="queue-actions">
-          <button id="openFolderBtn" class="btn-sm" title="출력 폴더 열기">출력 폴더</button>
-          <button id="clearQueueBtn" class="btn-sm" title="대기열 삭제">대기열 삭제</button>
-        </div>
-      </div>
+    .update-btn-primary:hover {
+      background: var(--accent-hover);
+    }
 
-      <!-- Queue List -->
-      <div id="queueList" class="queue-list">
-        <div class="queue-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span>파일을 드래그하여 추가하세요</span>
-        </div>
-      </div>
+    .update-btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
 
-      <!-- Progress -->
-      <div id="progressContainer" class="progress-section" style="display: none;">
-        <div class="progress-header">
-          <span id="progressTitle" class="progress-title">처리 중...</span>
-          <span id="progressPercent" class="progress-percent">0%</span>
-        </div>
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
-        <div id="progressText" class="progress-status">준비 중...</div>
-      </div>
+    .update-btn-secondary:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
 
-      <!-- Log Panel -->
-      <div class="log-panel">
-        <div class="log-header">
-          <div class="log-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-              <polyline points="13 2 13 9 20 9"/>
-            </svg>
-            <span id="logTitle">처리 로그</span>
-          </div>
-        </div>
-        <div id="output" class="log-content"></div>
-      </div>
-    </aside>
-  </main>
-
-  <!-- Unified Settings Modal -->
-  <div id="settingsModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="settingsModalTitle" class="modal-title">설정</h3>
-        <button id="closeSettingsBtn" class="modal-close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <!-- Sound Settings Section -->
-        <div class="settings-section">
-          <h4 id="soundSectionTitle" class="settings-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
-            알림음
-          </h4>
-          <div class="sound-settings-row">
-            <label class="toggle-label">
-              <input type="checkbox" id="soundEnabledCheckbox" checked>
-              <span class="toggle-slider"></span>
-              <span id="soundEnabledLabel" class="toggle-text">알림음 사용</span>
-            </label>
-          </div>
-          <div class="sound-volume-row" id="soundVolumeRow">
-            <span id="soundVolumeLabelModal" class="volume-label">볼륨</span>
-            <input type="range" id="soundVolumeSliderModal" min="0" max="100" value="60" class="volume-slider-modal">
-            <span id="soundVolumeValueModal" class="volume-value-modal">60%</span>
-            <button id="soundTestBtnModal" class="btn-test-sound">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
-              <span id="soundTestLabelModal">테스트</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- API Keys Section -->
-        <div class="settings-section">
-          <h4 id="apiSectionTitle" class="settings-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-            </svg>
-            번역 API 키
-          </h4>
-          <div class="form-group">
-            <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="deeplApiKey" class="form-input" placeholder="DeepL API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="deeplApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
-            </div>
-            <p id="deeplHelp" class="form-hint"></p>
-          </div>
-          <div class="form-group">
-            <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="openaiApiKey" class="form-input" placeholder="OpenAI API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="openaiApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
-            </div>
-            <p id="openaiHelp" class="form-hint"></p>
-          </div>
-          <div class="form-group">
-            <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="geminiApiKey" class="form-input" placeholder="Gemini API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="geminiApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
-            </div>
-            <p id="geminiHelp" class="form-hint"></p>
-          </div>
-          <div id="apiKeyStatus" class="api-status"></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="testApiKeysBtn" class="btn-modal btn-modal-secondary">연결 테스트</button>
-        <button id="saveSettingsBtn" class="btn-modal btn-modal-primary">저장</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="renderer.js"></script>
-</body>
-</html>
+    /* Header offset when update banner is shown */
+    body.has-update-banner {
+      padding-top: 44px;
+    }

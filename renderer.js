@@ -1,5 +1,6 @@
 // Queue-based renderer for multi-file processing (memory-leak safe) (대기열 기반 렌더러 - 다중 파일 처리)
-console.log('[Renderer] renderer.js v1.3.1 로드됨 - 드래그 핸들 지원');
+console.log('[Renderer] renderer.js v1.3.3 loaded');
+
 let fileQueue = []; // processing queue (처리 대기열)
 let isProcessing = false;
 let currentProcessingIndex = -1;
@@ -10,7 +11,7 @@ let targetProgress = 0; // target progress (목표 진행률)
 let targetText = '';
 let progressTimer = null;
 let indeterminateTimer = null; // pseudo progress timer (의사 진행률 타이머)
-let currentPhase = null; // 'extract' | 'translate' | null
+let _currentPhase = null; // 'extract' | 'translate' | null (reserved)
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 
 // UI 업데이트 디바운스 (UI freeze 방지)
@@ -83,10 +84,10 @@ function sleep(ms) {
 
 // ETA state (ETA 계산 상태)
 let etaStartTime = null;
-let etaLastUpdate = null;
-let etaTotalWork = 100; // 0~100 스케일
+let _etaLastUpdate = null; // reserved for future ETA improvements
+let _etaTotalWork = 100; // 0~100 스케일 (reserved)
 
-function formatETA(ms) {
+function _formatETA(ms) {
   if (!ms || ms < 0) return '';
   const sec = Math.ceil(ms / 1000);
   const lang = currentUiLang || 'ko';
@@ -210,7 +211,6 @@ async function checkModelStatus() {
 // Update queue UI (대기열 UI 업데이트)
 // Note: updateModelSelect is defined in the i18n section below (line ~1543)
 function updateQueueDisplay() {
-  const queueContainer = document.getElementById('queueContainer');
   const queueList = document.getElementById('queueList');
   const runBtn = document.getElementById('runBtn');
   const pauseBtn = document.getElementById('pauseBtn');
@@ -391,7 +391,7 @@ function handleDragStart(e) {
   e.dataTransfer.setData('text/plain', draggedIndex);
 }
 
-function handleDragEnd(e) {
+function handleDragEnd(_e) {
   this.classList.remove('dragging');
   document.querySelectorAll('.queue-item').forEach(item => {
     item.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
@@ -426,7 +426,7 @@ function handleDragEnter(e) {
   }
 }
 
-function handleDragLeave(e) {
+function handleDragLeave(_e) {
   this.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom');
 }
 
@@ -578,11 +578,11 @@ async function selectFile() {
         addToQueue(filePath);
       });
 
-      addOutput(`${result.filePaths.length}개 파일이 대기열에 추가되었습니다.\n`);
+      addOutput(`${I18N[currentUiLang].filesAddedToQueue(result.filePaths.length)}\n`);
     }
   } catch (error) {
-    console.error('파일 선택 오류:', error);
-    addOutput(`파일 선택 중 오류 발생: ${error.message}\n`);
+    console.error('File select error:', error);
+    addOutput(`${I18N[currentUiLang].fileSelectError(error.message)}\n`);
   }
 }
 
@@ -590,7 +590,7 @@ async function selectFile() {
 function addToQueue(filePath) {
   // deduplicate files (중복 파일 체크)
   if (fileQueue.some(file => file.path === filePath)) {
-    addOutput(`이미 대기열에 있는 파일입니다: ${filePath.split('\\').pop()}\n`);
+    addOutput(`${I18N[currentUiLang].alreadyInQueue(filePath.split('\\').pop())}\n`);
     return;
   }
   
@@ -605,6 +605,8 @@ function addToQueue(filePath) {
   updateUIMode(); // SRT/동영상 모드 전환
 }
 
+// Used in HTML onclick handlers
+// eslint-disable-next-line no-unused-vars
 function removeFromQueue(index) {
   if (index >= 0 && index < fileQueue.length) {
     const file = fileQueue[index];
@@ -669,11 +671,13 @@ function stopProcessing() {
   }
 }
 
+// eslint-disable-next-line no-unused-vars
 function openFileLocation(filePath) {
   window.electronAPI.openFileLocation(filePath);
 }
 
 // 클립보드 복사 함수
+// eslint-disable-next-line no-unused-vars
 function copyToClipboard(text, type) {
   const d = I18N[currentUiLang] || I18N.ko;
   navigator.clipboard.writeText(text).then(() => {
@@ -752,7 +756,7 @@ async function continueProcessing() {
       console.log('[Audio] Failed to play completion sound:', error.message);
     }
 
-    addOutput(`\n전체 작업 완료! (성공: ${completedCount}개, 실패: ${errorCount}개, 중지: ${stoppedCount}개)\n`);
+    addOutput(`\n${I18N[currentUiLang].allTasksComplete(completedCount, errorCount, stoppedCount)}\n`);
     return;
   }
 
@@ -828,7 +832,7 @@ async function continueProcessing() {
             translationInfo = methodAtStart;
         }
 
-        addOutput(`번역 시작 (${translationInfo})...\n`);
+        addOutput(`${I18N[currentUiLang].translationStarting2(translationInfo)}\n`);
 
         const targetLang = (document.getElementById('targetLanguageSelect')?.value || 'ko');
 
@@ -842,8 +846,8 @@ async function continueProcessing() {
           file.status = 'completed';
           file.progress = 100;
           translationSessionActive = false;
-          setProgressTarget(100, I18N[currentUiLang].translationCompleted || '번역 완료!');
-          addOutput(`번역 완료: ${fileName.replace('.srt', '')}_${targetLang}.srt\n`);
+          setProgressTarget(100, I18N[currentUiLang].translationCompleted);
+          addOutput(`${I18N[currentUiLang].translationDone(fileName.replace('.srt', ''), targetLang)}\n`);
         } else {
           file.status = 'error';
           file.progress = 0;
@@ -947,10 +951,10 @@ async function continueProcessing() {
 
       if (result.userStopped) {
         file.status = 'stopped';
-        addOutput(`[${i + 1}/${fileQueue.length}] 중지됨: ${fileName}\n`);
+        addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorStopped}: ${fileName}\n`);
       } else if (!result.success) {
         file.status = 'error';
-        addOutput(`[${i + 1}/${fileQueue.length}] 실패: ${fileName} - ${result.error || '알 수 없는 오류'}\n`);
+        addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorFailed}: ${fileName} - ${getLocalizedError(result.error)}\n`);
       } else {
         addOutput(`${I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName)}\n`);
 
@@ -988,7 +992,7 @@ async function continueProcessing() {
                 translationInfo = translationMethod;
             }
 
-            addOutput(`번역 시작 (${translationInfo})...\n`);
+            addOutput(`${I18N[currentUiLang].translationStarting2(translationInfo)}\n`);
 
             const targetLang = (document.getElementById('targetLanguageSelect')?.value || 'ko');
             const srtPathFromResult =
@@ -1008,7 +1012,7 @@ async function continueProcessing() {
             // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
 
             if (translationResult.success) {
-              addOutput(`번역 완료: ${fileName}_${targetLang}.srt\n`);
+              addOutput(`${I18N[currentUiLang].translationDone(fileName, targetLang)}\n`);
             } else {
               addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(translationResult.error)}\n`);
             }
@@ -1133,7 +1137,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const dropZone = document.getElementById('dropZone');
   const runBtn = document.getElementById('runBtn');
-  const clearBtn = document.getElementById('clearBtn');
   const selectFileBtn = document.getElementById('selectFileBtn');
   
   // drag & drop events (드래그앤드롭 이벤트)
@@ -1199,16 +1202,16 @@ document.addEventListener('DOMContentLoaded', () => {
           addToQueue(extractedPath);
           addedCount++;
         } else {
-          addOutput(`파일 경로를 추출할 수 없습니다: ${file.name}\n`);
+          addOutput(`${I18N[currentUiLang].cannotExtractPath(file.name)}\n`);
         }
       });
-      
+
       if (addedCount > 0) {
-        addOutput(`${addedCount}개 파일이 대기열에 추가되었습니다.\n`);
+        addOutput(`${I18N[currentUiLang].filesAddedToQueue(addedCount)}\n`);
       }
     } else {
       console.log('No files dropped');
-      addOutput('파일이 선택되지 않았습니다.\n');
+      addOutput(`${I18N[currentUiLang].dropHint1}\n`);
     }
   };
   
@@ -1223,22 +1226,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const device = document.getElementById('deviceSelect').value;
     const translationMethod = document.getElementById('translationSelect').value;
     
-    addOutput(`\n${fileQueue.length}개 파일 순차 처리 시작\n`);
-    addOutput(`모델: ${model} | 언어: ${language === 'auto' ? '자동감지' : language} | 장치: ${device === 'auto' ? '자동' : device === 'cuda' ? 'GPU' : 'CPU'}\n\n`);
-    
+    const lang = I18N[currentUiLang];
+    const langDisplay = language === 'auto' ? lang.langAuto : language;
+    const deviceDisplay = device === 'auto' ? lang.deviceAutoLabel : device === 'cuda' ? 'GPU' : 'CPU';
+
+    addOutput(`\n${lang.processingStart(fileQueue.length)}\n`);
+    addOutput(`${lang.processingInfo(model, langDisplay, deviceDisplay)}\n\n`);
+
     // 오프라인 번역 사전 준비
     if (translationMethod === 'offline') {
-      addOutput(`오프라인 번역을 위한 모델 상태 확인/준비 중...\n`);
-      setProgressTarget(Math.max(lastProgress, 1), '오프라인 모델 준비 중...');
+      addOutput(`${lang.offlineModelChecking}\n`);
+      setProgressTarget(Math.max(lastProgress, 1), lang.offlineModelChecking);
       try {
         const warm = await window.electronAPI.warmupOfflineModel();
         if (warm?.success) {
-          addOutput(`오프라인 모델 준비 완료\n`);
+          addOutput(`${lang.offlineModelReady}\n`);
         } else {
-          addOutput(`오프라인 모델 준비 실패: ${warm?.error || '알 수 없는 오류'}\n`);
+          addOutput(`${lang.offlineModelFailed(warm?.error || lang.errorUnknown)}\n`);
         }
       } catch (e) {
-        addOutput(`오프라인 모델 준비 오류: ${e.message}\n`);
+        addOutput(`${lang.offlineModelError(e.message)}\n`);
       }
     }
 
@@ -1414,577 +1421,38 @@ const LOG_I18N = {
 };
 
 // === UI 텍스트 I18N ===
-const I18N = {
-  ko: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: '파일 드래그 & 드롭',
-    dropHint1: '동영상 또는 SRT 파일을 여기에 드래그하세요',
-    dropHint2: '지원 형식: MP4, AVI, MKV, MOV, WMV, SRT',
-    queueTitle: '처리 대기열',
-    clearQueueBtn: '대기열 삭제',
-    openFolderBtn: '출력 폴더',
-    labelModel: '모델 선택',
-    labelLanguage: '언어 선택',
-    langStatusInfo: '자동 감지 권장: 각 동영상의 언어를 자동으로 판별합니다\n고정 언어: 모든 파일을 동일한 언어로 처리합니다',
-    labelDevice: '처리 장치 선택',
-    labelTranslation: '번역 설정',
-    runBtn: '자막 추출 시작',
-    runBtnProcessing: '처리 중...',
-    clearQueueWaiting: '대기 파일 삭제',
-    clearQueueAll: '대기열 전체 삭제',
-    apiBtn: 'API 키 설정',
-    selectFileBtn: '파일 선택',
-    stopBtn: '중지',
-    logTitle: '처리 로그',
-    cannotRemoveProcessing: '현재 처리 중인 파일은 삭제할 수 없습니다.',
-    removedFromQueue: (name) => `대기열에서 제거됨: ${name}`,
-    queueCleared: '대기열이 모두 삭제되었습니다.',
-    pendingFilesRemoved: (n) => `대기 중인 ${n}개 파일이 삭제되었습니다.`,
-    stopRequested: '처리 중지 요청됨. 현재 파일 완료 후 중지됩니다.',
-    userStopped: '사용자가 처리를 중지했습니다.',
-    unsupportedFormat: (name) => `지원되지 않는 파일 형식: ${name}`,
-    processingFile: (idx, total, name) => `[${idx}/${total}] 처리 중: ${name}`,
-    extractionComplete: (idx, total, name) => `[${idx}/${total}] 자막 추출 완료: ${name}`,
-    cleaningMemory: '메모리 정리 중...',
-    fileProcessed: (name) => `파일 처리 완료: ${name}`,
-    allTasksComplete: (success, error, stopped) => `전체 작업 완료! (성공: ${success}개, 실패: ${error}개, 중지: ${stopped}개)`,
-    translationProgress: '번역 진행: ',
-    translationStarting: '번역 시작 중...',
-    translationTranslatingProgress: (current, total) => `번역 중... ${current}/${total}`,
-    translationTranslating: '번역 중...',
-    translationCompleted: '번역 완료!',
-    translationFailed: '번역 실패: ',
-    myMemoryQuotaExceeded: 'MyMemory 일일 한도 초과. 내일 다시 시도하거나 DeepL/OpenAI를 사용하세요.',
-    // 동적 텍스트
-    modelAvailableGroup: '사용 가능한 모델',
-    modelNeedDownloadGroup: '다운로드 필요 (자동 다운로드됨)',
-    modelStatusText: (count) => `${count}개 모델 사용 가능 | 부족한 모델은 자동 다운로드됩니다`,
-    deviceStatusHtml: '<strong>GPU 권장:</strong> NVIDIA GPU가 있으면 훨씬 빠른 처리 가능<br><strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적',
-    translationEnabledHtml: '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
-    translationDisabledHtml: '번역을 사용하지 않습니다.',
-    translationDeeplHtml: '<strong>DeepL:</strong> 월 50만글자 무료, API키 필요<br><strong>고품질</strong> 번역 서비스',
-    translationChatgptHtml: '<strong>GPT-5-nano:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
-    // 셀렉트 옵션
-    langAutoOption: '자동 감지 (각 파일별로 자동 판별)',
-    deviceAuto: '자동 (GPU 있으면 GPU, 없으면 CPU)',
-    deviceCuda: 'GPU (CUDA) - 빠른 처리',
-    deviceCpu: 'CPU - 안정적 처리',
-    trNone: '번역 안함',
-    trMyMemory: 'MyMemory (일 5만글자 무료, 추천)',
-    trDeepL: 'DeepL (월 50만글자, API키 필요)',
-    trChatGPT: 'GPT-5-nano (사용자 API 키 필요)',
-    trGemini: 'Gemini (무료 API 키)',
-    // SRT 모드 관련
-    srtModeHint: '📄 SRT 번역 모드 - 번역 방법을 선택하세요',
-    srtBadge: 'SRT 번역',
-    mixedFileWarning: '동영상과 SRT 파일이 섞여 있습니다. 각 파일 유형에 맞게 처리됩니다.',
-    // 큐/버튼/상태
-    qWaiting: '대기 중', qProcessing: '처리 중', qTranslating: '번역 중', qCompleted: '완료', qError: '오류', qStopped: '중지됨', qSkipped: '스킵됨', qUnsupported: '지원되지 않는 형식',
-    srtSkippedNoTranslation: 'SRT 파일 스킵 (번역 설정 없음)',
-    srtWillBeSkipped: 'SRT 파일은 번역 설정이 없어 스킵됩니다. 번역 방법을 선택하세요.',
-    btnOpen: '열기', btnRemove: '제거',
-    // 진행 텍스트
-    progressReady: '준비 중...', progressExtracting: '자막 추출 중...', progressTranslating: '번역 중...', progressPreparing: '자막 추출 준비 중...', progressCleaning: '메모리 정리 중...', progressProcessing: '처리 중...', progressComplete: '완료!',
-    // 완료 텍스트
-    allDoneNoTr: '모든 파일 처리 완료!', allDoneWithTr: '모든 파일(추출+번역) 처리 완료! 창을 닫아도 됩니다.',
-    fileCompleteRemaining: (n) => `파일 완료! 대기 중인 파일 ${n}개가 있습니다. 처리 시작 버튼을 눌러주세요.`,
-    processingNext: (n) => `다음 파일 처리 중... (남은 파일: ${n}개)`,
-    statusLabel: '상태',
-    runBtnCount: (n) => `${n}개 파일 처리 시작`,
-    toastOpenFolder: '폴더 열기',
-    downloadingModel: '모델 다운로드 중',
-    labelTargetLanguage: '번역 대상 언어',
-    targetLangNote: '번역을 사용할 때만 적용됩니다.',
-    apiModalTitle: '번역 API 키 설정',
-    labelDeeplKey: 'DeepL API 키 (선택사항)',
-    labelOpenaiKey: 'OpenAI API 키 (선택사항)',
-    testConnBtn: '연결 테스트',
-    saveBtn: '저장',
-    cancelBtn: '취소',
-    mymemoryInfoHtml: 'MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
-    openaiLinkText: 'OpenAI API 키 발급 받기',
-    openaiHelpSuffix: ' (유료)',
-    deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
-    deeplHelpHtml: '<a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 무료로 발급받을 수 있습니다. (월 50만글자 무료)',
-    openaiPlaceholder: 'OpenAI API 키를 입력하세요 (GPT-5-nano)',
-    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급받기</a><br>(GPT-5-nano, 유료 - 입력 $0.05 / 출력 $0.40 per 1M 토큰)',
-    labelGeminiKey: 'Gemini API 키 (선택사항)',
-    geminiPlaceholder: 'Gemini API 키를 입력하세요 (Gemini 3 Flash)',
-    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>에서 발급<br>(무료: 하루 250자막/20~30분, 유료: 무제한)',
-    togglePasswordShow: '비밀번호 표시',
-    togglePasswordHide: '비밀번호 숨기기',
-    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 번역, 무료 API 키<br><strong>빠른</strong> 번역 속도',
-    queueEmpty: '파일을 드래그하여 추가하세요',
-    soundLabel: '알림음',
-    soundTest: '테스트',
-    settingsBtn: '설정',
-    settingsModalTitle: '설정',
-    soundSectionTitle: '알림음',
-    soundEnabled: '알림음 사용',
-    soundVolume: '볼륨',
-    apiSectionTitle: '번역 API 키',
-    // 대기열 관련
-    dragHandleTooltip: '드래그하여 순서 변경',
-    clickToCopy: '클릭하여 복사',
-    fileNameCopied: '파일명 복사됨',
-    pathCopied: '경로 복사됨',
-    statusLabel: '상태',
-    copyFileName: '파일명',
-    copyPath: '경로',
-  },
-  en: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: 'Drag & Drop Files',
-    dropHint1: 'Drag video or SRT files here',
-    dropHint2: 'Supported: MP4, AVI, MKV, MOV, WMV, SRT',
-    queueTitle: 'Processing Queue',
-    clearQueueBtn: 'Clear Queue',
-    openFolderBtn: 'Open Output Folder',
-    labelModel: 'Model',
-    labelLanguage: 'Language',
-    langStatusInfo: 'Recommended: Auto-detect language per file\nFixed: Use the same language for all files',
-    labelDevice: 'Processing Device',
-    labelTranslation: 'Translation',
-    runBtn: 'Start Extraction',
-    runBtnProcessing: 'Processing...',
-    clearQueueWaiting: 'Remove waiting files',
-    clearQueueAll: 'Clear all queue',
-    apiBtn: 'API Keys',
-    selectFileBtn: 'Select Files',
-    stopBtn: 'Stop',
-    logTitle: 'Logs',
-    cannotRemoveProcessing: 'Cannot remove file currently being processed.',
-    removedFromQueue: (name) => `Removed from queue: ${name}`,
-    queueCleared: 'Queue cleared.',
-    pendingFilesRemoved: (n) => `${n} pending file(s) removed.`,
-    stopRequested: 'Stop requested. Will stop after current file completes.',
-    userStopped: 'User stopped processing.',
-    unsupportedFormat: (name) => `Unsupported file format: ${name}`,
-    processingFile: (idx, total, name) => `[${idx}/${total}] Processing: ${name}`,
-    extractionComplete: (idx, total, name) => `[${idx}/${total}] Extraction complete: ${name}`,
-    cleaningMemory: 'Cleaning memory...',
-    fileProcessed: (name) => `File processed: ${name}`,
-    allTasksComplete: (success, error, stopped) => `All tasks complete! (Success: ${success}, Failed: ${error}, Stopped: ${stopped})`,
-    translationProgress: 'Translation progress: ',
-    translationStarting: 'Starting translation...',
-    translationTranslatingProgress: (current, total) => `Translating... ${current}/${total}`,
-    translationTranslating: 'Translating...',
-    translationCompleted: 'Translation completed!',
-    translationFailed: 'Translation failed: ',
-    myMemoryQuotaExceeded: 'MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.',
-    modelAvailableGroup: 'Available Models',
-    modelNeedDownloadGroup: 'Download Required (auto-download)',
-    modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
-    deviceStatusHtml: '<strong>GPU recommended:</strong> Much faster if NVIDIA GPU is available<br><strong>CPU:</strong> Use when no GPU or memory is limited',
-    translationEnabledHtml: '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
-    translationDisabledHtml: 'Translation is disabled.',
-    translationDeeplHtml: '<strong>DeepL:</strong> 500K chars/month free, API key required<br><strong>High quality</strong> translation service',
-    translationChatgptHtml: '<strong>GPT-5-nano:</strong> User API key required<br><strong>Natural</strong> translation possible',
-    langAutoOption: 'Auto-detect (per file)',
-    deviceAuto: 'Auto (Use GPU if available, otherwise CPU)',
-    deviceCuda: 'GPU (CUDA) - Fast',
-    deviceCpu: 'CPU - Stable',
-    trNone: 'No translation',
-    trMyMemory: 'MyMemory (Free ~50K/day)',
-    trDeepL: 'DeepL (Free 500K/month with API key)',
-    trChatGPT: 'GPT-5-nano (Requires API key)',
-    trGemini: 'Gemini (Free API key)',
-    // SRT mode
-    srtModeHint: '📄 SRT Translation Mode - Select translation method',
-    srtBadge: 'SRT Translate',
-    mixedFileWarning: 'Video and SRT files are mixed. Each will be processed accordingly.',
-    qWaiting: 'Waiting', qProcessing: 'Processing', qTranslating: 'Translating', qCompleted: 'Completed', qError: 'Error', qStopped: 'Stopped', qSkipped: 'Skipped', qUnsupported: 'Unsupported format',
-    srtSkippedNoTranslation: 'SRT file skipped (no translation configured)',
-    srtWillBeSkipped: 'SRT files will be skipped without translation. Please select a translation method.',
-    btnOpen: 'Open', btnRemove: 'Remove',
-    progressReady: 'Ready...', progressExtracting: 'Extracting...', progressTranslating: 'Translating...', progressPreparing: 'Preparing extraction...', progressCleaning: 'Cleaning up memory...', progressProcessing: 'Processing...', progressComplete: 'Complete!',
-    allDoneNoTr: 'All files completed!', allDoneWithTr: 'All files (extract+translate) completed! You may close the window.',
-    fileCompleteRemaining: (n) => `File completed! ${n} file(s) remaining in queue. Please click Start button.`,
-    processingNext: (n) => `Processing next file... (${n} remaining)`,
-    statusLabel: 'Status',
-    runBtnCount: (n) => `Start processing ${n} files`,
-    toastOpenFolder: 'Open folder',
-    downloadingModel: 'Downloading model',
-    labelTargetLanguage: 'Target language',
-    targetLangNote: 'Applied only when translation is enabled.',
-    apiModalTitle: 'Translation API Keys',
-    labelDeeplKey: 'DeepL API Key (optional)',
-    labelOpenaiKey: 'OpenAI API Key (optional)',
-    testConnBtn: 'Test Connection',
-    saveBtn: 'Save',
-    cancelBtn: 'Cancel',
-    mymemoryInfoHtml: 'MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).<br><br><strong>Usage Guide:</strong><br>• Enter API keys and test immediately with "Test Connection"<br>• Or save keys first, then test saved keys<br>• Real-time testing supported without saving',
-    openaiLinkText: 'Get OpenAI API Key',
-    openaiHelpSuffix: ' (paid, low cost)',
-    deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
-    deeplHelpHtml: 'Get a free key from <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a>. (500K chars/month free)',
-    openaiPlaceholder: 'Enter OpenAI API key (GPT-5-nano)',
-    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">Get OpenAI API Key</a><br>(GPT-5-nano, paid - $0.05 input / $0.40 output per 1M tokens)',
-    labelGeminiKey: 'Gemini API Key (optional)',
-    geminiPlaceholder: 'Enter Gemini API key (Gemini 3 Flash)',
-    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>(Free: 250 subs/day ~20-30min, Paid: unlimited)',
-    togglePasswordShow: 'Show password',
-    togglePasswordHide: 'Hide password',
-    translationGeminiHtml: '<strong>Gemini:</strong> Google AI translation, free API key<br><strong>Fast</strong> translation speed',
-    queueEmpty: 'Drag files here to add',
-    soundLabel: 'Sound',
-    soundTest: 'Test',
-    settingsBtn: 'Settings',
-    settingsModalTitle: 'Settings',
-    soundSectionTitle: 'Notification Sound',
-    soundEnabled: 'Enable sound',
-    soundVolume: 'Volume',
-    apiSectionTitle: 'Translation API Keys',
-    // Queue related
-    dragHandleTooltip: 'Drag to reorder',
-    clickToCopy: 'Click to copy',
-    fileNameCopied: 'Filename copied',
-    pathCopied: 'Path copied',
-    statusLabel: 'Status',
-    copyFileName: 'Filename',
-    copyPath: 'Path',
-  },
-  ja: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: 'ファイルをドラッグ＆ドロップ',
-    dropHint1: 'ここに動画またはSRTファイルをドラッグしてください',
-    dropHint2: '対応形式: MP4, AVI, MKV, MOV, WMV, SRT',
-    queueTitle: '処理キュー',
-    clearQueueBtn: 'キューを削除',
-    openFolderBtn: '出力フォルダ',
-    labelModel: 'モデル選択',
-    labelLanguage: '言語選択',
-    langStatusInfo: '推奨: ファイルごとに自動検出\n固定: すべてのファイルで同じ言語を使用',
-    labelDevice: '処理デバイス',
-    labelTranslation: '翻訳設定',
-    runBtn: '抽出開始',
-    runBtnProcessing: '処理中...',
-    clearQueueWaiting: '待機ファイルを削除',
-    clearQueueAll: 'キュー全体を削除',
-    apiBtn: 'APIキー設定',
-    selectFileBtn: 'ファイルを選択',
-    stopBtn: '停止',
-    logTitle: '処理ログ',
-    cannotRemoveProcessing: '処理中のファイルは削除できません。',
-    removedFromQueue: (name) => `キューから削除: ${name}`,
-    queueCleared: 'キューをクリアしました。',
-    pendingFilesRemoved: (n) => `待機中の${n}件のファイルを削除しました。`,
-    stopRequested: '停止要求を受けました。現在のファイル終了後に停止します。',
-    userStopped: 'ユーザーが処理を停止しました。',
-    unsupportedFormat: (name) => `未対応のファイル形式: ${name}`,
-    processingFile: (idx, total, name) => `[${idx}/${total}] 処理中: ${name}`,
-    extractionComplete: (idx, total, name) => `[${idx}/${total}] 抽出完了: ${name}`,
-    cleaningMemory: 'メモリを整理中...',
-    fileProcessed: (name) => `ファイル処理完了: ${name}`,
-    allTasksComplete: (success, error, stopped) => `全作業完了！ (成功: ${success}件, 失敗: ${error}件, 停止: ${stopped}件)`,
-    translationProgress: '翻訳進行: ',
-    translationStarting: '翻訳を開始中...',
-    translationTranslatingProgress: (current, total) => `翻訳中... ${current}/${total}`,
-    translationTranslating: '翻訳中...',
-    translationCompleted: '翻訳完了！',
-    translationFailed: '翻訳失敗: ',
-    myMemoryQuotaExceeded: 'MyMemory の1日の上限を超えました。明日再試行するか、DeepL/OpenAI をご利用ください。',
-    modelAvailableGroup: '利用可能なモデル',
-    modelNeedDownloadGroup: 'ダウンロードが必要（自動ダウンロード）',
-    modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます` ,
-    deviceStatusHtml: '<strong>GPU 推奨:</strong> NVIDIA GPU があれば高速処理<br><strong>CPU:</strong> GPU がない場合やメモリ不足時に安定',
-    translationEnabledHtml: '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳\n<strong>1日約5万文字</strong>（目安）',
-    translationDisabledHtml: '翻訳は使用しません。',
-    translationDeeplHtml: '<strong>DeepL:</strong> 月50万文字無料、APIキー必要<br><strong>高品質</strong>翻訳サービス',
-    translationChatgptHtml: '<strong>GPT-5-nano:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
-    langAutoOption: '自動検出（ファイルごと）',
-    deviceAuto: '自動（GPUがあればGPU、なければCPU）',
-    deviceCuda: 'GPU (CUDA) - 高速',
-    deviceCpu: 'CPU - 安定',
-    trNone: '翻訳しない',
-    trMyMemory: 'MyMemory（無料 約5万/日）',
-    trDeepL: 'DeepL（月50万/無料APIキー）',
-    trChatGPT: 'GPT-5-nano（APIキー必要）',
-    trGemini: 'Gemini（無料APIキー）',
-    // SRTモード
-    srtModeHint: '📄 SRT翻訳モード - 翻訳方法を選択してください',
-    srtBadge: 'SRT翻訳',
-    mixedFileWarning: '動画とSRTファイルが混在しています。各ファイルタイプに応じて処理されます。',
-    qWaiting: '待機中', qProcessing: '処理中', qTranslating: '翻訳中', qCompleted: '完了', qError: 'エラー', qStopped: '停止', qSkipped: 'スキップ', qUnsupported: '未対応の形式',
-    srtSkippedNoTranslation: 'SRTファイルをスキップしました（翻訳設定なし）',
-    srtWillBeSkipped: 'SRTファイルは翻訳設定がないためスキップされます。翻訳方法を選択してください。',
-    btnOpen: '開く', btnRemove: '削除',
-    progressReady: '準備中...', progressExtracting: '抽出中...', progressTranslating: '翻訳中...', progressPreparing: '抽出の準備中...', progressCleaning: 'メモリを整理中...', progressProcessing: '処理中...', progressComplete: '完了！',
-    allDoneNoTr: 'すべて完了！', allDoneWithTr: 'すべて完了（抽出＋翻訳）！ウィンドウを閉じても大丈夫です。',
-    fileCompleteRemaining: (n) => `ファイル完了！待機中のファイル${n}件があります。処理開始ボタンを押してください。`,
-    processingNext: (n) => `次のファイルを処理中... (残り${n}件)`,
-    statusLabel: '状態',
-    runBtnCount: (n) => `${n}件のファイルを処理開始`,
-    toastOpenFolder: 'フォルダを開く',
-    downloadingModel: 'モデルをダウンロード中',
-    labelTargetLanguage: '翻訳対象言語',
-    targetLangNote: '翻訳を使用する場合のみ適用されます。',
-    apiModalTitle: '翻訳 API キー設定',
-    labelDeeplKey: 'DeepL API キー（任意）',
-    labelOpenaiKey: 'OpenAI API キー（任意）',
-    testConnBtn: '接続テスト',
-    saveBtn: '保存',
-    cancelBtn: 'キャンセル',
-    mymemoryInfoHtml: 'MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。<br><br><strong>使用方法：</strong><br>• API キーを入力後「接続テスト」で即座に確認可能<br>• または先にキーを保存してからテストすることも可能<br>• 保存せずに入力したキーでリアルタイムテスト対応',
-    openaiLinkText: 'OpenAI API キーを取得',
-    openaiHelpSuffix: '（有料・低コスト）',
-    deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
-    deeplHelpHtml: '<a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>から無料で取得できます。（月50万文字無料）',
-    openaiPlaceholder: 'OpenAI API キーを入力 (GPT-5-nano)',
-    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API キーを取得</a><br>（GPT-5-nano、有料 - 入力 $0.05 / 出力 $0.40 per 1Mトークン）',
-    queueEmpty: 'ファイルをドラッグして追加',
-    soundLabel: '通知音',
-    soundTest: 'テスト',
-    settingsBtn: '設定',
-    settingsModalTitle: '設定',
-    soundSectionTitle: '通知音',
-    soundEnabled: '通知音を使用',
-    soundVolume: '音量',
-    apiSectionTitle: '翻訳 API キー',
-    labelGeminiKey: 'Gemini API キー（任意）',
-    geminiPlaceholder: 'Gemini API キーを入力（Gemini 3 Flash）',
-    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>で取得<br>（無料: 1日250字幕/20〜30分、有料: 無制限）',
-    togglePasswordShow: 'パスワードを表示',
-    togglePasswordHide: 'パスワードを隠す',
-    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 翻訳、無料 API キー<br><strong>高速</strong>翻訳',
-    // キュー関連
-    dragHandleTooltip: 'ドラッグして順序変更',
-    clickToCopy: 'クリックしてコピー',
-    fileNameCopied: 'ファイル名をコピーしました',
-    pathCopied: 'パスをコピーしました',
-    statusLabel: '状態',
-    copyFileName: 'ファイル名',
-    copyPath: 'パス',
-  },
-  zh: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: '拖拽文件到此',
-    dropHint1: '将视频或SRT文件拖到这里',
-    dropHint2: '支持: MP4, AVI, MKV, MOV, WMV, SRT',
-    queueTitle: '处理队列',
-    clearQueueBtn: '清空队列',
-    openFolderBtn: '打开输出文件夹',
-    labelModel: '模型选择',
-    labelLanguage: '语言选择',
-    langStatusInfo: '推荐: 每个文件自动检测\n固定: 所有文件使用同一种语言',
-    labelDevice: '处理设备',
-    labelTranslation: '翻译设置',
-    runBtn: '开始提取',
-    runBtnProcessing: '处理中...',
-    clearQueueWaiting: '删除等待文件',
-    clearQueueAll: '清空全部队列',
-    apiBtn: 'API 密钥设置',
-    selectFileBtn: '选择文件',
-    stopBtn: '停止',
-    logTitle: '处理日志',
-    cannotRemoveProcessing: '无法删除正在处理的文件。',
-    removedFromQueue: (name) => `已从队列中删除: ${name}`,
-    queueCleared: '队列已清空。',
-    pendingFilesRemoved: (n) => `已删除${n}个等待中的文件。`,
-    stopRequested: '已请求停止。当前文件完成后停止。',
-    userStopped: '用户停止了处理。',
-    unsupportedFormat: (name) => `不支持的文件格式: ${name}`,
-    processingFile: (idx, total, name) => `[${idx}/${total}] 处理中: ${name}`,
-    extractionComplete: (idx, total, name) => `[${idx}/${total}] 提取完成: ${name}`,
-    cleaningMemory: '清理内存中...',
-    fileProcessed: (name) => `文件处理完成: ${name}`,
-    allTasksComplete: (success, error, stopped) => `全部任务完成！ (成功: ${success}个, 失败: ${error}个, 停止: ${stopped}个)`,
-    translationProgress: '翻译进行: ',
-    translationStarting: '开始翻译中...',
-    translationTranslatingProgress: (current, total) => `翻译中... ${current}/${total}`,
-    translationTranslating: '翻译中...',
-    translationCompleted: '翻译完成！',
-    translationFailed: '翻译失败: ',
-    myMemoryQuotaExceeded: 'MyMemory 每日配额已用完。请明天重试或使用 DeepL/OpenAI。',
-    modelAvailableGroup: '可用模型',
-    modelNeedDownloadGroup: '需要下载（自动）',
-    modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载` ,
-    deviceStatusHtml: '<strong>推荐 GPU:</strong> 若有 NVIDIA GPU 速度更快<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
-    translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定\n<strong>约5万字/天</strong>（参考）',
-    translationDisabledHtml: '不使用翻译。',
-    translationDeeplHtml: '<strong>DeepL:</strong> 每月50万字免费，需API密钥<br><strong>高质量</strong>翻译服务',
-    translationChatgptHtml: '<strong>GPT-5-nano:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
-    langAutoOption: '自动检测（每个文件）',
-    deviceAuto: '自动（有 GPU 用 GPU，否则 CPU）',
-    deviceCuda: 'GPU (CUDA) - 快速',
-    deviceCpu: 'CPU - 稳定',
-    trNone: '不翻译',
-    trMyMemory: 'MyMemory（免费 约5万/天）',
-    trDeepL: 'DeepL（每月50万/需API密钥）',
-    trChatGPT: 'GPT-5-nano（需API密钥）',
-    trGemini: 'Gemini（免费API密钥）',
-    // SRT模式
-    srtModeHint: '📄 SRT翻译模式 - 请选择翻译方法',
-    srtBadge: 'SRT翻译',
-    mixedFileWarning: '视频和SRT文件混合。将根据文件类型分别处理。',
-    qWaiting: '等待中', qProcessing: '处理中', qTranslating: '翻译中', qCompleted: '完成', qError: '错误', qStopped: '已停止', qSkipped: '已跳过', qUnsupported: '不支持的格式',
-    srtSkippedNoTranslation: 'SRT文件已跳过（未配置翻译）',
-    srtWillBeSkipped: 'SRT文件因无翻译设置将被跳过。请选择翻译方法。',
-    btnOpen: '打开', btnRemove: '移除',
-    progressReady: '准备中...', progressExtracting: '提取中...', progressTranslating: '翻译中...', progressPreparing: '准备提取...', progressCleaning: '清理内存中...', progressProcessing: '处理中...', progressComplete: '完成！',
-    allDoneNoTr: '全部完成！', allDoneWithTr: '全部完成（提取+翻译）！可以关闭窗口。',
-    fileCompleteRemaining: (n) => `文件完成！队列中还有 ${n} 个文件。请点击开始按钮。`,
-    processingNext: (n) => `正在处理下一个文件... (剩余${n}个)`,
-    statusLabel: '状态',
-    runBtnCount: (n) => `开始处理 ${n} 个文件`,
-    toastOpenFolder: '打开文件夹',
-    downloadingModel: '正在下载模型',
-    labelTargetLanguage: '目标语言',
-    targetLangNote: '仅在启用翻译时生效。',
-    apiModalTitle: '翻译 API 密钥设置',
-    labelDeeplKey: 'DeepL API 密钥（可选）',
-    labelOpenaiKey: 'OpenAI API 密钥（可选）',
-    testConnBtn: '测试连接',
-    saveBtn: '保存',
-    cancelBtn: '取消',
-    mymemoryInfoHtml: 'MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。<br><br><strong>使用说明：</strong><br>• 输入 API 密钥后可通过"测试连接"立即验证<br>• 或者先保存密钥再进行测试<br>• 支持不保存直接用输入的密钥实时测试',
-    openaiLinkText: '获取 OpenAI API 密钥',
-    openaiHelpSuffix: '（付费，成本低）',
-    deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
-    deeplHelpHtml: '可从 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a>免费获取。（每月50万字符免费）',
-    openaiPlaceholder: '输入 OpenAI API 密钥 (GPT-5-nano)',
-    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">获取 OpenAI API 密钥</a><br>（GPT-5-nano，付费 - 输入 $0.05 / 输出 $0.40 每1M令牌）',
-    queueEmpty: '拖拽文件添加',
-    soundLabel: '提示音',
-    soundTest: '测试',
-    settingsBtn: '设置',
-    settingsModalTitle: '设置',
-    soundSectionTitle: '提示音',
-    soundEnabled: '启用提示音',
-    soundVolume: '音量',
-    apiSectionTitle: '翻译 API 密钥',
-    labelGeminiKey: 'Gemini API 密钥（可选）',
-    geminiPlaceholder: '输入 Gemini API 密钥（Gemini 3 Flash）',
-    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 获取<br>（免费: 每日250字幕/20-30分钟，付费: 无限制）',
-    togglePasswordShow: '显示密码',
-    togglePasswordHide: '隐藏密码',
-    translationGeminiHtml: '<strong>Gemini:</strong> Google AI 翻译，免费 API 密钥<br><strong>快速</strong>翻译',
-    // 队列相关
-    dragHandleTooltip: '拖动以重新排序',
-    clickToCopy: '点击复制',
-    fileNameCopied: '已复制文件名',
-    pathCopied: '已复制路径',
-    statusLabel: '状态',
-    copyFileName: '文件名',
-    copyPath: '路径',
-  },
-  pl: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: 'Przeciągnij i upuść pliki',
-    dropHint1: 'Przeciągnij tutaj plik wideo lub SRT',
-    dropHint2: 'Obsługiwane: MP4, AVI, MKV, MOV, WMV, SRT',
-    queueTitle: 'Kolejka przetwarzania',
-    clearQueueBtn: 'Wyczyść kolejkę',
-    openFolderBtn: 'Otwórz folder wyjściowy',
-    labelModel: 'Model',
-    labelLanguage: 'Język',
-    langStatusInfo: 'Zalecane: Automatyczne wykrywanie języka dla każdego pliku\nStały: Użyj tego samego języka dla wszystkich plików',
-    labelDevice: 'Urządzenie',
-    labelTranslation: 'Tłumaczenie',
-    runBtn: 'Rozpocznij ekstrakcję',
-    runBtnProcessing: 'Przetwarzanie...',
-    clearQueueWaiting: 'Usuń oczekujące pliki',
-    clearQueueAll: 'Wyczyść całą kolejkę',
-    apiBtn: 'Klucze API',
-    selectFileBtn: 'Wybierz pliki',
-    stopBtn: 'Zatrzymaj',
-    logTitle: 'Logi',
-    cannotRemoveProcessing: 'Nie można usunąć pliku podczas przetwarzania.',
-    removedFromQueue: (name) => `Usunięto z kolejki: ${name}`,
-    queueCleared: 'Kolejka wyczyszczona.',
-    pendingFilesRemoved: (n) => `Usunięto ${n} oczekujących plików.`,
-    stopRequested: 'Żądanie zatrzymania. Zatrzyma się po zakończeniu bieżącego pliku.',
-    userStopped: 'Użytkownik zatrzymał przetwarzanie.',
-    unsupportedFormat: (name) => `Nieobsługiwany format pliku: ${name}`,
-    processingFile: (idx, total, name) => `[${idx}/${total}] Przetwarzanie: ${name}`,
-    extractionComplete: (idx, total, name) => `[${idx}/${total}] Ekstrakcja zakończona: ${name}`,
-    cleaningMemory: 'Czyszczenie pamięci...',
-    fileProcessed: (name) => `Plik przetworzony: ${name}`,
-    allTasksComplete: (success, error, stopped) => `Wszystkie zadania zakończone! (Sukces: ${success}, Błędy: ${error}, Zatrzymane: ${stopped})`,
-    translationProgress: 'Postęp tłumaczenia: ',
-    translationStarting: 'Rozpoczynanie tłumaczenia...',
-    translationTranslatingProgress: (current, total) => `Tłumaczenie... ${current}/${total}`,
-    translationTranslating: 'Tłumaczenie...',
-    translationCompleted: 'Tłumaczenie zakończone!',
-    translationFailed: 'Tłumaczenie nieudane: ',
-    myMemoryQuotaExceeded: 'Dzienny limit MyMemory został przekroczony. Spróbuj jutro lub użyj DeepL/OpenAI.',
-    modelAvailableGroup: 'Dostępne modele',
-    modelNeedDownloadGroup: 'Wymagane pobranie (automatyczne)',
-    modelStatusText: (count) => `${count} modeli dostępnych | Brakujące modele zostaną pobrane automatycznie`,
-    deviceStatusHtml: '<strong>Zalecany GPU:</strong> Znacznie szybsze przetwarzanie z GPU NVIDIA<br><strong>CPU:</strong> Użyj gdy brak GPU lub ograniczona pamięć',
-    translationEnabledHtml: '<strong>Zalecane:</strong> MyMemory jest darmowy i stabilny<br><strong>~50K znaków/dzień</strong> za darmo (w przybliżeniu)',
-    translationDisabledHtml: 'Tłumaczenie wyłączone.',
-    translationDeeplHtml: '<strong>DeepL:</strong> 500K znaków/miesiąc za darmo, wymagany klucz API<br><strong>Wysoka jakość</strong> tłumaczenia',
-    translationChatgptHtml: '<strong>GPT-5-nano:</strong> Wymagany klucz API użytkownika<br><strong>Naturalne</strong> tłumaczenie',
-    langAutoOption: 'Automatyczne wykrywanie (dla każdego pliku)',
-    deviceAuto: 'Auto (GPU jeśli dostępny, w przeciwnym razie CPU)',
-    deviceCuda: 'GPU (CUDA) - Szybki',
-    deviceCpu: 'CPU - Stabilny',
-    trNone: 'Bez tłumaczenia',
-    trMyMemory: 'MyMemory (Darmowy ~50K/dzień)',
-    trDeepL: 'DeepL (Darmowy 500K/miesiąc z kluczem API)',
-    trChatGPT: 'GPT-5-nano (Wymagany klucz API)',
-    trGemini: 'Gemini (Darmowy klucz API)',
-    srtModeHint: '📄 Tryb tłumaczenia SRT - Wybierz metodę tłumaczenia',
-    srtBadge: 'Tłumaczenie SRT',
-    mixedFileWarning: 'Pliki wideo i SRT są pomieszane. Każdy zostanie przetworzony odpowiednio.',
-    qWaiting: 'Oczekuje', qProcessing: 'Przetwarzanie', qTranslating: 'Tłumaczenie', qCompleted: 'Zakończone', qError: 'Błąd', qStopped: 'Zatrzymane', qSkipped: 'Pominięte', qUnsupported: 'Nieobsługiwany format',
-    srtSkippedNoTranslation: 'Plik SRT pominięty (brak konfiguracji tłumaczenia)',
-    srtWillBeSkipped: 'Pliki SRT zostaną pominięte bez tłumaczenia. Wybierz metodę tłumaczenia.',
-    btnOpen: 'Otwórz', btnRemove: 'Usuń',
-    progressReady: 'Gotowy...', progressExtracting: 'Ekstrakcja...', progressTranslating: 'Tłumaczenie...', progressPreparing: 'Przygotowanie ekstrakcji...', progressCleaning: 'Czyszczenie pamięci...', progressProcessing: 'Przetwarzanie...', progressComplete: 'Zakończone!',
-    allDoneNoTr: 'Wszystkie pliki zakończone!', allDoneWithTr: 'Wszystkie pliki (ekstrakcja+tłumaczenie) zakończone! Możesz zamknąć okno.',
-    fileCompleteRemaining: (n) => `Plik zakończony! ${n} plików pozostało w kolejce. Kliknij przycisk Start.`,
-    processingNext: (n) => `Przetwarzanie następnego pliku... (pozostało ${n})`,
-    statusLabel: 'Status',
-    runBtnCount: (n) => `Rozpocznij przetwarzanie ${n} plików`,
-    toastOpenFolder: 'Otwórz folder',
-    downloadingModel: 'Pobieranie modelu',
-    labelTargetLanguage: 'Język docelowy',
-    targetLangNote: 'Stosowane tylko gdy tłumaczenie jest włączone.',
-    apiModalTitle: 'Klucze API tłumaczenia',
-    labelDeeplKey: 'Klucz API DeepL (opcjonalny)',
-    labelOpenaiKey: 'Klucz API OpenAI (opcjonalny)',
-    testConnBtn: 'Test połączenia',
-    saveBtn: 'Zapisz',
-    cancelBtn: 'Anuluj',
-    mymemoryInfoHtml: 'MyMemory można używać za darmo bez klucza API.<br>Dzienny limit to około ~50K znaków na IP (może się zmieniać).<br><br><strong>Instrukcja:</strong><br>• Wprowadź klucze API i przetestuj natychmiast przez "Test połączenia"<br>• Lub najpierw zapisz klucze, potem przetestuj<br>• Obsługiwane testowanie w czasie rzeczywistym bez zapisywania',
-    openaiLinkText: 'Uzyskaj klucz API OpenAI',
-    openaiHelpSuffix: ' (płatny, niski koszt)',
-    deeplPlaceholder: 'Wprowadź klucz API DeepL (Darmowy 500K znaków/miesiąc)',
-    deeplHelpHtml: 'Uzyskaj darmowy klucz z <a href="https://www.deepl.com/pro-api" target="_blank">strony API DeepL</a>. (500K znaków/miesiąc za darmo)',
-    openaiPlaceholder: 'Wprowadź klucz API OpenAI (GPT-5-nano)',
-    openaiHelpHtml: '<a href="https://platform.openai.com/api-keys" target="_blank">Uzyskaj klucz API OpenAI</a><br>(GPT-5-nano, płatny - $0.05 wejście / $0.40 wyjście na 1M tokenów)',
-    labelGeminiKey: 'Klucz API Gemini (opcjonalny)',
-    geminiPlaceholder: 'Wprowadź klucz API Gemini (Gemini 3 Flash)',
-    geminiHelpHtml: '<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>(Darmowy: 250 napisów/dzień ~20-30min, Płatny: bez limitu)',
-    togglePasswordShow: 'Pokaż hasło',
-    togglePasswordHide: 'Ukryj hasło',
-    translationGeminiHtml: '<strong>Gemini:</strong> Tłumaczenie Google AI, darmowy klucz API<br><strong>Szybkie</strong> tłumaczenie',
-    queueEmpty: 'Przeciągnij pliki tutaj aby dodać',
-    soundLabel: 'Dźwięk',
-    soundTest: 'Test',
-    settingsBtn: 'Ustawienia',
-    settingsModalTitle: 'Ustawienia',
-    soundSectionTitle: 'Dźwięk powiadomienia',
-    soundEnabled: 'Włącz dźwięk',
-    soundVolume: 'Głośność',
-    apiSectionTitle: 'Klucze API tłumaczenia',
-    dragHandleTooltip: 'Przeciągnij aby zmienić kolejność',
-    clickToCopy: 'Kliknij aby skopiować',
-    fileNameCopied: 'Nazwa pliku skopiowana',
-    pathCopied: 'Ścieżka skopiowana',
-    copyFileName: 'Nazwa pliku',
-    copyPath: 'Ścieżka',
-  },
-};
+// I18N object moved to locales/i18n.js
+
 
 // 에러 메시지 다국어 변환 헬퍼
 function getLocalizedError(errorMessage) {
-  // MyMemory quota exceeded 에러 감지
-  if (errorMessage && errorMessage.includes('MyMemory daily quota exceeded')) {
-    return I18N[currentUiLang].myMemoryQuotaExceeded || errorMessage;
+  if (!errorMessage) return I18N[currentUiLang].errorUnknown;
+
+  const lang = I18N[currentUiLang];
+
+  // main.js에서 오는 영어 에러 메시지 → 현지화
+  if (errorMessage.includes('GPU memory shortage') || errorMessage.includes('GPU 메모리 부족')) {
+    return lang.errorGpuMemory;
   }
+  if (errorMessage.includes('Process terminated abnormally') || errorMessage.includes('프로세스가 비정상적으로')) {
+    return lang.errorProcessCrash;
+  }
+  if (errorMessage.includes('Whisper processing failed') || errorMessage.includes('Whisper 처리 실패')) {
+    return lang.errorWhisperFailed;
+  }
+  if (errorMessage.includes('whisper-cli.exe not found') || errorMessage.includes('whisper-cli.exe를 찾을 수 없음')) {
+    return lang.errorWhisperNotFound;
+  }
+  if (errorMessage.includes('MyMemory daily quota exceeded')) {
+    return lang.myMemoryQuotaExceeded;
+  }
+  if (errorMessage.includes('SRT file path missing') || errorMessage.includes('SRT 파일 경로')) {
+    return lang.errorSrtPathMissing;
+  }
+  if (errorMessage.includes('empty translation') || errorMessage.includes('번역 결과가 비어')) {
+    return lang.errorEmptyTranslation;
+  }
+
   return errorMessage;
 }
 
@@ -2198,6 +1666,11 @@ function applyI18n(lang) {
   updateModelSelect();
   updateQueueDisplay(); // 언어 변경 시 큐 표시도 즉시 업데이트
   updateUIMode(); // 언어 변경 시 혼합 파일 경고도 즉시 업데이트
+
+  // 업데이트 배너 언어도 업데이트 (배너가 표시 중일 때)
+  if (typeof updateBannerLanguage === 'function') {
+    updateBannerLanguage();
+  }
 }
 
 // updateModelSelect를 현지화 지원하도록 보강
@@ -2309,7 +1782,6 @@ function updateQueueDisplay() {
 
 function updateQueueDisplayImmediate() {
   lastQueueUpdateTime = Date.now();
-  const queueContainer = document.getElementById('queueContainer');
   const queueList = document.getElementById('queueList');
   const runBtn = document.getElementById('runBtn');
   const pauseBtn = document.getElementById('pauseBtn');
@@ -2590,8 +2062,8 @@ if (window?.electronAPI) {
               }, 400);
             }
           } catch (error) {
-            console.error('[onTranslationProgress] autoProcessNext 에러:', error);
-            addOutput(`자동 처리 중 오류: ${error.message}\n`);
+            console.error('[onTranslationProgress] autoProcessNext error:', error);
+            addOutput(`${I18N[currentUiLang].autoProcessError(error.message)}\n`);
           }
         }, 2000);
       }
@@ -2601,7 +2073,7 @@ if (window?.electronAPI) {
   // 호환성을 위해 핸들러는 유지하되, 실제로 호출되지 않음
   const origOnProgress = window.electronAPI.onProgressUpdate;
   if (typeof origOnProgress === 'function') {
-    window.electronAPI.onProgressUpdate((data) => {
+    window.electronAPI.onProgressUpdate((_data) => {
       // 사용하지 않음 - 의사 진행률(startIndeterminate)만 사용
     });
   }
@@ -2867,6 +2339,18 @@ async function initApp() {
     initDragHighlight();
   } catch (error) {
     console.error('[Init] Failed to initialize drag highlight:', error.message);
+  }
+  // 업데이트 리스너 초기화 (main.js에서 푸시 방식)
+  try {
+    initUpdateListener();
+  } catch (error) {
+    console.error('[Init] Failed to initialize update listener:', error.message);
+  }
+  // 버전 배지 자동 업데이트 (package.json에서 버전 가져오기)
+  try {
+    initVersionBadge();
+  } catch (error) {
+    console.error('[Init] Failed to initialize version badge:', error.message);
   }
 }
 
@@ -3442,3 +2926,104 @@ async function testApiKeys() {
 
   console.log('[Renderer] Panel resize initialized');
 })();
+
+// =============================================
+// Update Check (업데이트 체크) - main.js에서 푸시 방식
+// =============================================
+
+// 현재 표시 중인 업데이트 정보 저장 (언어 변경 시 배너 텍스트 업데이트용)
+let currentUpdateInfo = null;
+
+function initUpdateListener() {
+  // main.js에서 'update-available' 이벤트를 받아 배너 표시
+  window.electronAPI.onUpdateAvailable((updateInfo) => {
+    console.log('[Update] Received update-available from main:', updateInfo);
+    if (updateInfo && updateInfo.hasUpdate) {
+      showUpdateBanner(updateInfo);
+    }
+  });
+  console.log('[Update] Update listener initialized');
+}
+
+function showUpdateBanner(updateInfo) {
+  const banner = document.getElementById('updateBanner');
+  const message = document.getElementById('updateMessage');
+  const downloadBtn = document.getElementById('updateDownloadBtn');
+  const laterBtn = document.getElementById('updateLaterBtn');
+
+  if (!banner || !message) return;
+
+  // 업데이트 정보 저장 (언어 변경 시 사용)
+  currentUpdateInfo = updateInfo;
+
+  // I18N 텍스트 설정
+  const t = I18N[currentUiLang] || I18N.ko;
+  message.textContent = t.updateMessage(updateInfo.latestVersion);
+  if (downloadBtn) downloadBtn.textContent = t.updateDownload;
+  if (laterBtn) laterBtn.textContent = t.updateLater;
+
+  // 배너 표시
+  banner.style.display = 'flex';
+  document.body.classList.add('has-update-banner');
+
+  // 다운로드 버튼 클릭
+  if (downloadBtn) {
+    downloadBtn.onclick = () => {
+      window.electronAPI.openExternal(updateInfo.releaseUrl);
+    };
+  }
+
+  // 나중에 버튼 클릭
+  if (laterBtn) {
+    laterBtn.onclick = () => {
+      hideUpdateBanner();
+      // 세션 동안 다시 표시하지 않음 (localStorage 사용하지 않음 - 매번 알림)
+    };
+  }
+}
+
+// 언어 변경 시 배너 텍스트 업데이트 (배너가 표시 중일 때만)
+function updateBannerLanguage() {
+  const banner = document.getElementById('updateBanner');
+  if (!banner || banner.style.display === 'none') return;
+
+  // main.js의 executeJavaScript에서 설정한 window.currentUpdateInfo 또는 renderer의 currentUpdateInfo 사용
+  const updateInfo = window.currentUpdateInfo || currentUpdateInfo;
+  if (!updateInfo) {
+    console.log('[Update] No update info available for language change');
+    return;
+  }
+
+  const message = document.getElementById('updateMessage');
+  const downloadBtn = document.getElementById('updateDownloadBtn');
+  const laterBtn = document.getElementById('updateLaterBtn');
+
+  const t = I18N[currentUiLang] || I18N.ko;
+  if (message) message.textContent = t.updateMessage(updateInfo.latestVersion);
+  if (downloadBtn) downloadBtn.textContent = t.updateDownload;
+  if (laterBtn) laterBtn.textContent = t.updateLater;
+
+  console.log('[Update] Banner language updated to:', currentUiLang);
+}
+
+function hideUpdateBanner() {
+  const banner = document.getElementById('updateBanner');
+  if (banner) {
+    banner.style.display = 'none';
+    document.body.classList.remove('has-update-banner');
+  }
+}
+
+// 버전 배지 자동 업데이트 (package.json에서 버전 가져오기)
+async function initVersionBadge() {
+  try {
+    const version = await window.electronAPI.getCurrentVersion();
+    const badge = document.getElementById('versionBadge');
+    if (badge && version) {
+      badge.textContent = `v${version}`;
+      console.log('[Version] Badge updated to:', version);
+    }
+  } catch (error) {
+    console.error('[Version] Failed to get current version:', error.message);
+  }
+}
