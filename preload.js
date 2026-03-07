@@ -64,15 +64,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('translate-subtitle', data);
   },
 
-  // 오프라인 모델 준비
-  warmupOfflineModel: () => {
-    return ipcRenderer.invoke('warmup-offline-model');
-  },
-  // 오프라인 모델 디렉터리 경로 조회
-  getOfflineModelDir: () => {
-    return ipcRenderer.invoke('get-offline-model-dir');
-  },
-
   // 로그 디렉터리 경로 조회 (%APPDATA%\whispersubtranslate\logs)
   getLogDir: () => {
     return ipcRenderer.invoke('get-log-dir');
@@ -107,8 +98,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCurrentVersion: () => {
     return ipcRenderer.invoke('get-current-version');
   },
-  
-  
+
+  // GPU 정보 가져오기
+  getGpuInfo: () => {
+    return ipcRenderer.invoke('get-gpu-info');
+  },
+
   // 안전한 파일 경로 추출 (개선된 버전)
   getFilePathFromFile: (file) => {
     console.log('getFilePathFromFile called with:', {

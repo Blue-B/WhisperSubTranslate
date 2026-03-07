@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "main": "main.js",
   "scripts": {
     "start": "electron --expose-gc .",
@@ -29,8 +29,7 @@
       "locales/i18n.js",
       "renderer.js",
       "translator-enhanced.js",
-      "myMemoryTranslator.js",
-      "nya.wav"
+      "myMemoryTranslator.js"
     ],
     "extraResources": [
       {
@@ -40,12 +39,21 @@
       {
         "from": "nya.wav",
         "to": "nya.wav"
+      },
+      {
+        "from": "ffprobe.exe",
+        "to": "ffprobe.exe"
       }
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
     ],
     "win": {
       "target": [
         "dir"
-      ]
+      ],
+      "icon": "icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -66,6 +74,7 @@
   "dependencies": {
     "axios": "^1.6.0",
     "deepl-node": "^1.13.0",
-    "ffmpeg-static": "^5.3.0"
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
   }
 }

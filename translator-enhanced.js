@@ -167,6 +167,18 @@ class EnhancedSubtitleTranslator {
     this.batchSize = 5;              // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null;          // mainWindow 참조 저장
     this.geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+    this._aborted = false;           // 사용자 중지 플래그
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+  }
+
+  abort() {
+    this._aborted = true;
+    console.log('[Translator] Abort requested');
+  }
+
+  resetAbort() {
+    this._aborted = false;
   }
 
   // MainWindow에 메시지 전송 헬퍼
@@ -454,7 +466,10 @@ class EnhancedSubtitleTranslator {
         this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed (번역 시도 실패)`, error);
         
         // Do not retry on permanent errors (영구적 오류는 재시도 안함)
-        if (error.message.includes('401') || error.message.includes('403')) {
+        if (error.message.includes('401') || error.message.includes('403') ||
+            error.message.includes('429') || error.message.includes('quota') ||
+            error.message.includes('Too Many Requests') || error.message.includes('RESOURCE_EXHAUSTED')) {
+          // 429 에러는 API 할당량 초과이므로 재시도 무의미
           break;
         }
       }
@@ -825,7 +840,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     const methods = [
       { name: preferredMethod, lang: targetLanguage },
       { name: 'mymemory', lang: targetLanguage === 'KO' ? 'ko' : targetLanguage },
-      { name: 'deepl', lang: targetLanguage === 'ko' ? 'KO' : targetLanguage },
+      { name: 'deepl', lang: this.mapToDeepLLang(targetLanguage) },
       { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' },
       { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
     ];
@@ -855,6 +870,18 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         }
       } catch (err) {
         console.error(`[${m.name} Translation Failed] "${text.substring(0, 40)}..." - ${err.message}`);
+        
+        // 429 에러 (할당량 초과)면 폴백하지 않고 즉시 throw
+        const is429Error = err.message.includes('429') || 
+                           err.message.includes('quota') || 
+                           err.message.includes('Too Many Requests') ||
+                           err.message.includes('RESOURCE_EXHAUSTED') ||
+                           err.message.includes('API_QUOTA_EXCEEDED');
+        if (is429Error) {
+          console.error(`[Rate Limit] API quota exceeded in translateAuto - stopping`);
+          throw new Error('API_QUOTA_EXCEEDED: ' + err.message);
+        }
+        
         continue;
       }
     }
@@ -868,6 +895,15 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       // 정말 모든 방법이 실패한 경우에만 원문 반환
       return text;
     }
+  }
+
+  mapToDeepLLang(targetLang) {
+    const map = {
+      ko: 'KO', en: 'EN', ja: 'JA', zh: 'ZH', es: 'ES', fr: 'FR',
+      de: 'DE', it: 'IT', pt: 'PT-BR', ru: 'RU', hu: 'HU', ar: 'AR',
+      pl: 'PL', KO: 'KO',
+    };
+    return map[targetLang] || targetLang.toUpperCase();
   }
 
   mapToHumanLang(targetLang) {
@@ -965,14 +1001,28 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
     const results = [];
     const maxConcurrent = this.apiKeys.maxConcurrent;
+    let shouldStop = false; // 429 에러 시 중지 플래그
 
     // 동시 처리 제한
     for (let i = 0; i < batches.length; i += maxConcurrent) {
+      // 중지 플래그 체크 (API 할당량 초과 또는 사용자 중지)
+      if (shouldStop || this._aborted) {
+        const reason = this._aborted ? 'User aborted' : 'API quota exceeded';
+        console.log(`[Translation] Stopping: ${reason}`);
+        throw new Error(this._aborted ? 'ABORTED: Translation stopped by user' : 'API_QUOTA_EXCEEDED: Translation stopped due to rate limit');
+      }
+      
       const concurrentBatches = batches.slice(i, i + maxConcurrent);
       
       const batchPromises = concurrentBatches.map(async (batch, batchIndex) => {
         const batchResults = [];
         for (let j = 0; j < batch.length; j++) {
+          // 중지 플래그 체크 (할당량 초과 또는 사용자 중지)
+          if (shouldStop || this._aborted) {
+            batchResults.push(batch[j]); // 원문 유지
+            continue;
+          }
+          
           const text = batch[j];
           const currentIndex = results.length + batchIndex * optimalBatchSize + j + 1;
           
@@ -996,7 +1046,20 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           } catch (error) {
             console.error(`[Parallel Failed] ${currentIndex}/${texts.length}: "${text.substring(0, 40)}..." - ${error.message}`);
             
-            // 실패한 텍스트에 대해 재시도 (1회)
+            // 429 에러 (할당량 초과) 체크 - 심각한 에러이므로 즉시 중지
+            const is429Error = error.message.includes('429') || 
+                               error.message.includes('quota') || 
+                               error.message.includes('Too Many Requests') ||
+                               error.message.includes('RESOURCE_EXHAUSTED');
+            
+            if (is429Error) {
+              console.error(`[Rate Limit] API quota exceeded - stopping translation`);
+              shouldStop = true; // 중지 플래그 설정
+              // 429 에러를 상위로 전파하여 번역 중지
+              throw new Error('API_QUOTA_EXCEEDED: ' + error.message);
+            }
+            
+            // 다른 실패한 텍스트에 대해 재시도 (1회)
             let retryResult = text; // 기본값은 원문
             try {
               console.log(`[Parallel Retry] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
@@ -1022,6 +1085,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
   // 향상된 SRT 번역 (진행률 콜백 지원)
   async translateSRTFile(inputPath, outputPath, method = 'mymemory', targetLang = null, progressCallback = null, sourceLang = null) {
+    this.resetAbort();
     try {
       const srtContent = fs.readFileSync(inputPath, 'utf8');
       const translatedContent = await this.translateSRTContent(srtContent, method, targetLang, progressCallback, sourceLang);

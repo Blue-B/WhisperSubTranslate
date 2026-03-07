@@ -581,25 +581,27 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 40px;
+      gap: 6px;
+      min-width: 40px;
       height: 40px;
-      background: var(--bg-card);
-      color: var(--text-secondary);
-      border: 1px solid var(--border);
+      padding: 0 14px;
+      background: #dc3545;
+      color: #fff;
+      border: none;
       border-radius: 8px;
       cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
       transition: all 0.2s;
     }
 
     .btn-control:hover {
-      border-color: var(--border-hover);
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
+      background: #c82333;
     }
 
     .btn-control svg {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
     }
 
     .btn-sm {
@@ -618,6 +620,28 @@
       border-color: var(--border-hover);
       color: var(--text-primary);
       background: var(--bg-card);
+    }
+
+    .btn-sm.btn-danger {
+      background: #dc3545;
+      color: #fff;
+      border-color: #dc3545;
+    }
+    .btn-sm.btn-danger:hover {
+      background: #c82333;
+      border-color: #c82333;
+      color: #fff;
+    }
+
+    .btn-sm.btn-warning {
+      background: #fd7e14;
+      color: #fff;
+      border-color: #fd7e14;
+    }
+    .btn-sm.btn-warning:hover {
+      background: #e8590c;
+      border-color: #e8590c;
+      color: #fff;
     }
 
     /* Resize Handle */

@@ -17,13 +17,24 @@ const { Menu } = require('electron');
 let ffmpegStaticPath = null;
 try {
   ffmpegStaticPath = require('ffmpeg-static');
-  // 빌드된 앱에서는 app.asar.unpacked 경로로 변환 필요
   if (ffmpegStaticPath && ffmpegStaticPath.includes('app.asar')) {
     ffmpegStaticPath = ffmpegStaticPath.replace('app.asar', 'app.asar.unpacked');
   }
   console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStaticPath);
 } catch (_error) {
   console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local ffmpeg.exe');
+}
+
+// ffprobe-static: npm 패키지에서 자동으로 플랫폼별 ffprobe 바이너리 제공
+let ffprobeStaticPath = null;
+try {
+  ffprobeStaticPath = require('ffprobe-static').path;
+  if (ffprobeStaticPath && ffprobeStaticPath.includes('app.asar')) {
+    ffprobeStaticPath = ffprobeStaticPath.replace('app.asar', 'app.asar.unpacked');
+  }
+  console.log('[FFprobe] Using ffprobe-static:', ffprobeStaticPath);
+} catch (_error) {
+  console.log('[FFprobe] ffprobe-static not available, will use system PATH or local ffprobe.exe');
 }
 
 // Allow autoplay of audio (오디오 자동재생 허용)
@@ -66,14 +77,45 @@ function cancelActiveDownloads() {
 }
 
 // ===== Device auto-selection helper (장치 자동 선택 헬퍼) =====
-function isCudaAvailable() {
+// CUDA 12 requires compute capability >= 5.0 (Maxwell+)
+const CUDA12_MIN_COMPUTE = 5.0;
+let _gpuInfoCache = null;
+let _gpuWarningShown = false;
+
+function getGpuInfo() {
+  if (_gpuInfoCache !== null) return _gpuInfoCache;
   try {
-    // Treat presence of NVIDIA SMI as GPU-capable (NVIDIA SMI가 있으면 GPU 가능)
-    execSync('nvidia-smi -L', { stdio: 'ignore', timeout: 2000 });
-    return true;
+    const raw = execSync('nvidia-smi --query-gpu=name,compute_cap --format=csv,noheader', {
+      encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (!raw) { _gpuInfoCache = { available: false }; return _gpuInfoCache; }
+    const firstLine = raw.split('\n')[0];
+    const parts = firstLine.split(',').map(s => s.trim());
+    const gpuName = parts[0] || 'Unknown GPU';
+    const computeCap = parseFloat(parts[1]) || 0;
+    _gpuInfoCache = {
+      available: true,
+      name: gpuName,
+      computeCap,
+      cudaCompatible: computeCap >= CUDA12_MIN_COMPUTE
+    };
+    console.log(`[GPU Info] ${gpuName}, Compute Capability: ${computeCap}, CUDA 12 compatible: ${computeCap >= CUDA12_MIN_COMPUTE}`);
   } catch {
-    return false;
+    try {
+      // 상세 쿼리 실패 시 nvidia-smi -L로 GPU 존재만 확인
+      // compute_cap을 알 수 없으므로 안전하게 CPU 사용 (구형 GPU에서 CUDA 12 크래시 방지)
+      execSync('nvidia-smi -L', { stdio: 'ignore', timeout: 2000 });
+      _gpuInfoCache = { available: true, name: 'Unknown NVIDIA GPU', computeCap: 0, cudaCompatible: false };
+    } catch {
+      _gpuInfoCache = { available: false };
+    }
   }
+  return _gpuInfoCache;
+}
+
+function isCudaAvailable() {
+  const info = getGpuInfo();
+  return info.available && info.cudaCompatible;
 }
 
 function resolveDevice(requestedDevice) {
@@ -85,7 +127,6 @@ function resolveDevice(requestedDevice) {
     return 'cpu';
   }
   if (req !== 'cuda' && req !== 'cpu') {
-    // 인식하지 못하는 값은 보수적으로 cpu
     return 'cpu';
   }
   return req;
@@ -504,6 +545,348 @@ function isAsciiPath(filePath) {
     return /^[\x00-\x7F]*$/.test(filePath);
 }
 
+// ===== Long Audio Splitting (장시간 오디오 분할 처리) =====
+const SEGMENT_DURATION = 30 * 60; // 30분 (초)
+const OVERLAP_DURATION = 5; // 5초 오버랩 (경계 자막 누락 방지)
+
+// 영상/오디오 길이 확인 (ffprobe 사용)
+function getMediaDuration(inputPath) {
+    return new Promise((resolve, reject) => {
+        const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+        let ffprobePath = 'ffprobe';
+        
+        // ffprobe 경로 설정 (우선순위: ffprobe-static > 로컬 파일 > 시스템 PATH)
+        if (ffprobeStaticPath && fs.existsSync(ffprobeStaticPath)) {
+            ffprobePath = ffprobeStaticPath;
+            console.log('[Media] Using ffprobe-static');
+        } else {
+            const localFfprobe = path.join(basePath, 'ffprobe.exe');
+            if (fs.existsSync(localFfprobe)) {
+                ffprobePath = localFfprobe;
+                console.log('[Media] Using local ffprobe.exe');
+            } else {
+                console.log('[Media] Using system PATH ffprobe');
+            }
+        }
+        
+        const args = [
+            '-v', 'error',
+            '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            inputPath
+        ];
+        
+        const proc = spawn(ffprobePath, args, { windowsHide: true });
+        let output = '';
+
+        const probeTimeout = setTimeout(() => {
+            if (proc && !proc.killed) {
+                console.log('[Media] ffprobe timeout, proceeding without split');
+                proc.kill('SIGKILL');
+            }
+        }, 30000);
+        
+        proc.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+        
+        proc.on('close', (code) => {
+            clearTimeout(probeTimeout);
+            if (code === 0) {
+                const duration = parseFloat(output.trim());
+                if (!isNaN(duration)) {
+                    console.log(`[Media] Duration: ${duration.toFixed(1)}s (${(duration/60).toFixed(1)} min)`);
+                    resolve(duration);
+                } else {
+                    reject(new Error('Failed to parse duration'));
+                }
+            } else {
+                // ffprobe 실패 시 분할 없이 진행
+                console.log('[Media] ffprobe failed, proceeding without split');
+                resolve(0);
+            }
+        });
+        
+        proc.on('error', () => {
+            clearTimeout(probeTimeout);
+            console.log('[Media] ffprobe not found, proceeding without split');
+            resolve(0);
+        });
+    });
+}
+
+// 오디오를 여러 세그먼트로 분할
+async function splitAudioToSegments(wavPath, duration) {
+        const segments = [];
+        const safeTempDir = getSafeTempDir();
+        
+        // 분할이 필요 없으면 원본 반환
+        if (duration <= SEGMENT_DURATION + 60) { // 31분 이하면 분할 안 함
+            return [{ path: wavPath, startTime: 0, isOriginal: true }];
+        }
+        
+        console.log(`[Split] Splitting ${(duration/60).toFixed(1)} min audio into segments...`);
+        mainWindow.webContents.send('output-update', `Splitting long audio into segments for stable processing...\n`);
+        
+        const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+        let ffmpegPath = ffmpegStaticPath || 'ffmpeg';
+        const localFfmpeg = path.join(basePath, 'ffmpeg.exe');
+        if (fs.existsSync(localFfmpeg)) {
+            ffmpegPath = localFfmpeg;
+        }
+        
+        let currentStart = 0;
+        let segmentIndex = 0;
+        
+        while (currentStart < duration) {
+            const segmentPath = path.join(safeTempDir, `segment_${Date.now()}_${segmentIndex}.wav`);
+            const segmentDuration = Math.min(SEGMENT_DURATION + OVERLAP_DURATION, duration - currentStart);
+            
+            try {
+                await new Promise((res, rej) => {
+                    const args = [
+                        '-y',
+                        '-ss', currentStart.toString(),
+                        '-i', wavPath,
+                        '-t', segmentDuration.toString(),
+                        '-ar', '16000',
+                        '-ac', '1',
+                        '-c:a', 'pcm_s16le',
+                        segmentPath
+                    ];
+                    
+                    const proc = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+                    
+                    proc.on('close', (code) => {
+                        if (code === 0 && fs.existsSync(segmentPath)) {
+                            res();
+                        } else {
+                            rej(new Error(`Segment ${segmentIndex} creation failed`));
+                        }
+                    });
+                    
+                    proc.on('error', rej);
+                });
+                
+                segments.push({
+                    path: segmentPath,
+                    startTime: currentStart,
+                    isOriginal: false
+                });
+                
+                console.log(`[Split] Created segment ${segmentIndex + 1}: ${currentStart}s - ${currentStart + segmentDuration}s`);
+                mainWindow.webContents.send('output-update', `Created segment ${segmentIndex + 1}/${Math.ceil(duration / SEGMENT_DURATION)}\n`);
+                
+                segmentIndex++;
+                currentStart += SEGMENT_DURATION; // 다음 세그먼트 시작 (오버랩 포함)
+                
+            } catch (err) {
+                // 분할 실패 시 이미 생성된 세그먼트 정리 후 원본으로 진행
+                console.error('[Split] Segment creation failed:', err.message);
+                for (const seg of segments) {
+                    try { fs.unlinkSync(seg.path); } catch (_e) { /* ignore */ }
+                }
+                return [{ path: wavPath, startTime: 0, isOriginal: true }];
+            }
+        }
+        
+        console.log(`[Split] Created ${segments.length} segments`);
+        return segments;
+}
+
+// SRT 타임스탬프 조정 (오프셋 추가)
+function adjustSrtTimestamps(srtContent, offsetSeconds) {
+    if (offsetSeconds === 0) return srtContent;
+    
+    const lines = srtContent.split('\n');
+    const result = [];
+    
+    // SRT 타임스탬프 형식: 00:00:00,000 --> 00:00:00,000
+    const timestampRegex = /(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/;
+    
+    for (const line of lines) {
+        const match = line.match(timestampRegex);
+        if (match) {
+            const startMs = (parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3])) * 1000 + parseInt(match[4]);
+            const endMs = (parseInt(match[5]) * 3600 + parseInt(match[6]) * 60 + parseInt(match[7])) * 1000 + parseInt(match[8]);
+            
+            const newStartMs = startMs + (offsetSeconds * 1000);
+            const newEndMs = endMs + (offsetSeconds * 1000);
+            
+            const formatTime = (ms) => {
+                const hours = Math.floor(ms / 3600000);
+                const mins = Math.floor((ms % 3600000) / 60000);
+                const secs = Math.floor((ms % 60000) / 1000);
+                const millis = ms % 1000;
+                return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${millis.toString().padStart(3, '0')}`;
+            };
+            
+            result.push(`${formatTime(newStartMs)} --> ${formatTime(newEndMs)}`);
+        } else {
+            result.push(line);
+        }
+    }
+    
+    return result.join('\n');
+}
+
+// 여러 SRT 파일 합치기 (중복 제거 포함)
+function mergeSrtFiles(srtContents, startTimes) {
+    const allEntries = [];
+    
+    for (let i = 0; i < srtContents.length; i++) {
+        const content = srtContents[i];
+        const offsetSeconds = startTimes[i];
+        const adjustedContent = adjustSrtTimestamps(content, offsetSeconds);
+        
+        // SRT 엔트리 파싱
+        const entries = parseSrtEntries(adjustedContent);
+        allEntries.push(...entries);
+    }
+    
+    // 시작 시간 기준 정렬
+    allEntries.sort((a, b) => a.startMs - b.startMs);
+    
+    // 중복 제거 (오버랩 구간에서 같은 자막이 양쪽 세그먼트에 중복 인식됨)
+    // 시간 + 텍스트 유사도 모두 확인하여 실제 다른 대사는 보존
+    const uniqueEntries = [];
+    for (const entry of allEntries) {
+        const isDuplicate = uniqueEntries.some(existing => {
+            if (Math.abs(existing.startMs - entry.startMs) >= 1500) return false;
+            const a = existing.text.trim().toLowerCase();
+            const b = entry.text.trim().toLowerCase();
+            if (!a || !b) return false;
+            if (a === b) return true;
+            // 길이 비율이 비슷하고(±30%) 한쪽이 다른쪽을 포함하면 중복
+            const ratio = Math.min(a.length, b.length) / Math.max(a.length, b.length);
+            if (ratio < 0.7) return false;
+            const shorter = a.length < b.length ? a : b;
+            const longer = a.length < b.length ? b : a;
+            return longer.includes(shorter);
+        });
+        if (!isDuplicate) {
+            uniqueEntries.push(entry);
+        }
+    }
+    
+    // SRT 형식으로 재생성
+    let result = '';
+    for (let i = 0; i < uniqueEntries.length; i++) {
+        const entry = uniqueEntries[i];
+        result += `${i + 1}\n`;
+        result += `${entry.timestamp}\n`;
+        result += `${entry.text}\n\n`;
+    }
+    
+    return result.trim();
+}
+
+// SRT 엔트리 파싱 헬퍼
+function parseSrtEntries(srtContent) {
+    const entries = [];
+    const normalized = srtContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const blocks = normalized.trim().split(/\n\n+/);
+    
+    for (const block of blocks) {
+        const lines = block.split('\n');
+        if (lines.length >= 3) {
+            const timestampLine = lines[1];
+            const timestampRegex = /(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/;
+            const match = timestampLine.match(timestampRegex);
+            
+            if (match) {
+                const startMs = (parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3])) * 1000 + parseInt(match[4]);
+                const text = lines.slice(2).join('\n');
+                
+                entries.push({
+                    startMs,
+                    timestamp: timestampLine,
+                    text
+                });
+            }
+        }
+    }
+    
+    return entries;
+}
+
+// 단일 세그먼트 처리 (분할 처리용)
+function processSegment(segmentPath, modelPath, device, language, whisperDir, exePath) {
+    return new Promise((resolve, reject) => {
+        const safeTempDir = getSafeTempDir();
+        const tempBaseName = `segment_out_${Date.now()}`;
+        const outputBase = path.join(safeTempDir, tempBaseName);
+        const srtPath = outputBase + '.srt';
+        
+        const args = [
+            '-m', modelPath,
+            '-f', segmentPath,
+            '-osrt',
+            '-of', outputBase,
+            ...getWhisperCppSettings(device),
+        ];
+        
+        if (language && language !== 'auto') {
+            args.push('-l', language);
+        } else {
+            args.push('-l', 'auto');
+        }
+        
+        console.log(`[Segment] Processing: ${path.basename(segmentPath)}`);
+        
+        const proc = spawn(exePath, args, {
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            cwd: whisperDir
+        });
+        currentProcess = proc;
+
+        const segTimeout = setTimeout(() => {
+            if (proc && !proc.killed) {
+                console.log(`[Segment TIMEOUT] ${path.basename(segmentPath)} - exceeded 30 min`);
+                proc.kill('SIGKILL');
+            }
+        }, 1800000);
+        
+        proc.stdout.on('data', (data) => {
+            mainWindow.webContents.send('output-update', data.toString('utf8'));
+        });
+        
+        proc.stderr.on('data', (data) => {
+            const output = data.toString('utf8');
+            if (output.includes('error') || output.includes('Error')) {
+                mainWindow.webContents.send('output-update', '[ERROR] ' + output);
+            } else {
+                mainWindow.webContents.send('output-update', output);
+            }
+        });
+        
+        proc.on('close', (code) => {
+            clearTimeout(segTimeout);
+            if (isUserStopped) {
+                return reject(new Error('Stopped by user'));
+            }
+            if ((code === 0 || fs.existsSync(srtPath)) && fs.existsSync(srtPath)) {
+                try {
+                    const content = fs.readFileSync(srtPath, 'utf-8');
+                    // 임시 SRT 파일 삭제
+                    try { fs.unlinkSync(srtPath); } catch (_e) { /* ignore */ }
+                    resolve(content);
+                } catch (err) {
+                    reject(new Error(`Failed to read segment SRT: ${err.message}`));
+                }
+            } else {
+                reject(new Error(`Segment processing failed (code: ${code})`));
+            }
+        });
+        
+        proc.on('error', (err) => {
+            clearTimeout(segTimeout);
+            reject(err);
+        });
+    });
+}
+
 // ===== Audio Conversion Helper (오디오 변환 헬퍼) =====
 // 유니코드 경로 문제 해결: 안전한 temp 경로에 WAV 생성
 function convertToWav(inputPath) {
@@ -567,6 +950,7 @@ function convertToWav(inputPath) {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe']
         });
+        currentProcess = ffmpegProcess;
 
         ffmpegProcess.stderr.on('data', (data) => {
             // ffmpeg는 진행 정보를 stderr로 출력
@@ -581,10 +965,17 @@ function convertToWav(inputPath) {
         });
 
         ffmpegProcess.on('close', (code) => {
+            currentProcess = null;
+            if (isUserStopped) {
+                // 임시 WAV 정리
+                if (usingSafeTemp && fs.existsSync(wavPath)) {
+                    try { fs.unlinkSync(wavPath); } catch (_e) { /* ignore */ }
+                }
+                return reject(new Error('Stopped by user'));
+            }
             if (code === 0 && fs.existsSync(wavPath)) {
                 console.log(`[Audio] WAV conversion successful: ${path.basename(wavPath)}`);
                 mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
-                // 객체로 반환: wavPath, usingSafeTemp 플래그, 원본 경로
                 resolve({ wavPath, usingSafeTemp, originalWavPath });
             } else {
                 reject(new Error(`Audio conversion failed (code: ${code})`));
@@ -663,6 +1054,7 @@ function getWhisperCppSettings(device) {
 // Single File Subtitle Extraction (Promise-based) - whisper.cpp 버전
 function extractSingleFile(filePath, model, language, device) {
     return new Promise(async (resolve, reject) => {
+      try {
         console.log(`[START] Processing: ${path.basename(filePath)}`);
         isUserStopped = false;
 
@@ -671,6 +1063,8 @@ function extractSingleFile(filePath, model, language, device) {
 
         // 실제 사용할 장치 결정
         const chosenDevice = resolveDevice(device);
+        const gpuInfo = getGpuInfo();
+
         if (device === 'auto') {
             const line = `Auto device: using ${chosenDevice.toUpperCase()}`;
             console.log(line);
@@ -681,11 +1075,25 @@ function extractSingleFile(filePath, model, language, device) {
             mainWindow.webContents.send('output-update', `${line}\n`);
         }
 
+        // GPU가 있지만 CUDA 12 미지원인 경우 안내 (배치에서 1회만)
+        if (gpuInfo.available && !gpuInfo.cudaCompatible && !_gpuWarningShown) {
+            _gpuWarningShown = true;
+            const warn = `[GPU] ${gpuInfo.name} (Compute ${gpuInfo.computeCap}) - CUDA 12 requires Compute 5.0+. Auto CPU mode.`;
+            console.log(warn);
+            mainWindow.webContents.send('output-update', warn + '\n');
+        }
+
         const basePath = app.isPackaged ? process.resourcesPath : __dirname;
 
         // whisper.cpp 실행 파일 경로
         const whisperDir = path.join(basePath, 'whisper-cpp');
-        const exePath = path.join(whisperDir, 'whisper-cli.exe');
+        const cpuDir = path.join(whisperDir, 'cpu');
+        const cpuExePath = path.join(cpuDir, 'whisper-cli.exe');
+        // CPU 모드일 때 CPU 전용 바이너리 우선 사용 (CUDA DLL 의존성 없음)
+        const useCpuBuild = chosenDevice !== 'cuda' && fs.existsSync(cpuExePath);
+        const exePath = useCpuBuild ? cpuExePath : path.join(whisperDir, 'whisper-cli.exe');
+        const exeCwd = useCpuBuild ? cpuDir : whisperDir;
+        console.log(`[Whisper] Using: ${useCpuBuild ? 'cpu/whisper-cli.exe (CPU build)' : 'whisper-cli.exe (CUDA build)'} (${chosenDevice})`);
 
         // WAV 변환 (whisper.cpp는 WAV만 지원)
         let wavPath, usingSafeTemp = false;
@@ -698,7 +1106,15 @@ function extractSingleFile(filePath, model, language, device) {
             return reject(convErr);
         }
 
-        // 모델 경로
+        // WAV 변환 후 사용자 중지 체크
+        if (isUserStopped) {
+            if (usingSafeTemp && fs.existsSync(wavPath)) {
+                try { fs.unlinkSync(wavPath); } catch (_e) { /* ignore */ }
+            }
+            return reject(new Error('Stopped by user'));
+        }
+
+        // 모델 경로 (분할 처리에서도 필요하므로 먼저 선언)
         const modelPath = getGgmlModelPath(model);
         if (!fs.existsSync(modelPath)) {
             return reject(new Error(
@@ -706,6 +1122,98 @@ function extractSingleFile(filePath, model, language, device) {
                 `Expected path: ${modelPath}\n\n` +
                 `Please download the GGML model file.`
             ));
+        }
+
+        // 영상 길이 확인 및 분할 처리 결정
+        let segments = [];
+        let useSegmentedProcessing = false;
+        try {
+            const duration = await getMediaDuration(wavPath);
+            if (duration > SEGMENT_DURATION + 60) { // 31분 이상이면 분할
+                segments = await splitAudioToSegments(wavPath, duration);
+                useSegmentedProcessing = segments.length > 1;
+                if (useSegmentedProcessing) {
+                    console.log(`[Split] Will process ${segments.length} segments for ${(duration/60).toFixed(1)} min audio`);
+                }
+            }
+        } catch (err) {
+            console.log('[Split] Duration check failed, proceeding without split:', err.message);
+        }
+
+        // 분할 처리가 필요하면 각 세그먼트 처리 후 합치기
+        if (useSegmentedProcessing) {
+            try {
+                const srtContents = [];
+                const startTimes = [];
+                
+                for (let i = 0; i < segments.length; i++) {
+                    // 세그먼트 간 사용자 중지 체크
+                    if (isUserStopped) {
+                        for (const seg of segments) {
+                            if (!seg.isOriginal && fs.existsSync(seg.path)) {
+                                try { fs.unlinkSync(seg.path); } catch (_e) { /* ignore */ }
+                            }
+                        }
+                        return reject(new Error('Stopped by user'));
+                    }
+
+                    const segment = segments[i];
+                    mainWindow.webContents.send('output-update', `\n=== Processing segment ${i + 1}/${segments.length} ===\n`);
+                    
+                    // 각 세그먼트에 대해 whisper.cpp 실행
+                    const segmentSrt = await processSegment(segment.path, modelPath, chosenDevice, language, exeCwd, exePath);
+                    currentProcess = null;
+                    srtContents.push(segmentSrt);
+                    startTimes.push(segment.startTime);
+                    
+                    // 세그먼트 임시 파일 정리
+                    if (!segment.isOriginal && fs.existsSync(segment.path)) {
+                        try {
+                            fs.unlinkSync(segment.path);
+                        } catch (_e) { /* ignore */ }
+                    }
+                    
+                    // 메모리 정리
+                    await forceMemoryCleanup(chosenDevice, true);
+                    
+                    // GPU 모드면 잠시 대기
+                    if (chosenDevice === 'cuda' && i < segments.length - 1) {
+                        mainWindow.webContents.send('output-update', `Cleaning memory before next segment...\n`);
+                        await new Promise(r => setTimeout(r, 5000));
+                    }
+                }
+                
+                // SRT 합치기
+                mainWindow.webContents.send('output-update', `\nMerging ${segments.length} subtitle segments...\n`);
+                const mergedSrt = mergeSrtFiles(srtContents, startTimes);
+                
+                // 최종 SRT 파일 저장
+                const originalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+                fs.writeFileSync(originalSrtPath, mergedSrt, 'utf-8');
+                console.log(`[Split] Merged SRT saved: ${originalSrtPath}`);
+                mainWindow.webContents.send('output-update', `Subtitle merge completed!\n`);
+                
+                // WAV 임시 파일 정리
+                if (wavPath !== filePath && fs.existsSync(wavPath)) {
+                    try {
+                        fs.unlinkSync(wavPath);
+                    } catch (_e) { /* ignore */ }
+                }
+                
+                return resolve(originalSrtPath);
+                
+            } catch (segErr) {
+                // 분할 처리 실패 시 원본 방식으로 재시도
+                console.error('[Split] Segmented processing failed:', segErr.message);
+                mainWindow.webContents.send('output-update', `Segmented processing failed, trying standard method...\n`);
+                // 세그먼트 임시 파일 정리
+                for (const seg of segments) {
+                    if (!seg.isOriginal && fs.existsSync(seg.path)) {
+                        try { fs.unlinkSync(seg.path); } catch (_e) { /* ignore */ }
+                    }
+                }
+                // 아래 일반 처리로 계속 진행
+            }
         }
 
         // SRT 출력 경로
@@ -746,6 +1254,14 @@ function extractSingleFile(filePath, model, language, device) {
 
         console.log(`[EXEC] ${exePath} ${args.join(' ')}`);
 
+        // whisper 실행 직전 사용자 중지 체크
+        if (isUserStopped) {
+            if (usingSafeTemp && wavPath && fs.existsSync(wavPath)) {
+                try { fs.unlinkSync(wavPath); } catch (_e) { /* ignore */ }
+            }
+            return reject(new Error('Stopped by user'));
+        }
+
         if (chosenDevice === 'cuda') {
             mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CUDA, flash-attn)...\n');
             console.log('[GPU Config] whisper.cpp with CUDA acceleration');
@@ -756,8 +1272,7 @@ function extractSingleFile(filePath, model, language, device) {
         currentProcess = spawn(exePath, args, {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: whisperDir,
-            timeout: 1800000 // 30 minutes safety timeout
+            cwd: exeCwd
         });
 
         // Process timeout handling
@@ -833,7 +1348,25 @@ function extractSingleFile(filePath, model, language, device) {
                 resolve(finalSrtPath);
             } else {
                 let errorMessage = `Error code: ${code}`;
-                if (code === 3221226505) {
+                if (code === 3221225785) {
+                    // 0xC0000139 STATUS_ENTRYPOINT_NOT_FOUND
+                    const cpuAvailable = fs.existsSync(cpuExePath);
+                    if (cpuAvailable) {
+                        errorMessage = 'DLL entry point not found (0xC0000139). ' +
+                            'CUDA DLLs are incompatible with your GPU driver. ' +
+                            'CPU build is available - please change device to CPU in settings.';
+                    } else {
+                        errorMessage = 'DLL entry point not found (0xC0000139). ' +
+                            'CUDA DLLs are incompatible with your GPU driver. ' +
+                            'Please download the CPU-only build and place it in the whisper-cpp/cpu/ folder.\n' +
+                            'Solution: Download whisper-bin-x64.zip from GitHub, extract whisper-cli.exe to whisper-cpp/cpu/ folder.';
+                    }
+                } else if (code === 3221225781) {
+                    // 0xC0000135 STATUS_DLL_NOT_FOUND
+                    errorMessage = 'Required DLL not found (0xC0000135). ' +
+                        'Please install Visual C++ Redistributable 2015-2022 or use CPU-only whisper-cli build.\n' +
+                        'Download: https://aka.ms/vs/17/release/vc_redist.x64.exe';
+                } else if (code === 3221226505) {
                     errorMessage = 'GPU memory shortage or driver issue';
                 } else if (code === null || code === undefined) {
                     errorMessage = 'Process terminated abnormally (possible memory shortage)';
@@ -894,6 +1427,9 @@ function extractSingleFile(filePath, model, language, device) {
                 reject(err);
             }
         });
+      } catch (err) {
+        reject(err);
+      }
     });
 }
 
@@ -1090,8 +1626,8 @@ ipcMain.handle('download-model', async (event, modelName) => {
       const emit = (pct) => {
         try {
         mainWindow.webContents.send('output-update', `${path.basename(destPath)} ${pct}%\n`);
-      } catch (error) {
-        console.log('[Download] Failed to send progress update:', error.message);
+      } catch (_e) {
+        console.log('[Download] Failed to send progress update:', _e.message);
       }
       };
       response.data.on('data', (chunk) => {
@@ -1124,23 +1660,23 @@ ipcMain.handle('download-model', async (event, modelName) => {
     if (fs.existsSync(targetPath)) {
       try {
         mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
-      } catch (error) {
-        console.log('[Download] Failed to send model ready message:', error.message);
+      } catch (_e) {
+        console.log('[Download] Failed to send model ready message:', _e.message);
       }
       return { success: true };
     }
 
     try {
       mainWindow.webContents.send('output-update', `Starting GGML model download: ${modelName}\n`);
-    } catch (error) {
-      console.log('[Download] Failed to send download start message:', error.message);
+    } catch (_e) {
+      console.log('[Download] Failed to send download start message:', _e.message);
     }
 
     // 부분 다운로드 중단되었을 경우 기존 파일 제거 후 다운로드
     try {
       if (fs.existsSync(targetPath)) fs.unlinkSync(targetPath);
-    } catch (error) {
-      console.log('[Download] Failed to delete partial file:', error.message);
+    } catch (_e) {
+      console.log('[Download] Failed to delete partial file:', _e.message);
     }
 
     if (downloadsCancelled) throw new Error('cancelled');
@@ -1148,8 +1684,8 @@ ipcMain.handle('download-model', async (event, modelName) => {
 
     try {
       mainWindow.webContents.send('output-update', `GGML Model download completed: ${modelName}\n`);
-    } catch (error) {
-      console.log('[Download] Failed to send completion message:', error.message);
+    } catch (_e) {
+      console.log('[Download] Failed to send completion message:', _e.message);
     }
     return { success: true };
   } catch (error) {
@@ -1157,42 +1693,41 @@ ipcMain.handle('download-model', async (event, modelName) => {
     if (String(error && error.message).includes('cancelled') || String(error && error.name).includes('AbortError')) {
       try {
         mainWindow.webContents.send('output-update', `Model download cancelled\n`);
-      } catch (error) {
-        console.log('[Download] Failed to send cancellation message:', error.message);
+      } catch (_e) {
+        console.log('[Download] Failed to send cancellation message:', _e.message);
       }
       return { success: false, error: 'cancelled' };
     }
     try {
       mainWindow.webContents.send('output-update', `[ERROR] Model download failed: ${error.message}\n`);
-    } catch (error) {
-      console.log('[Download] Failed to send error message:', error.message);
+    } catch (_e) {
+      console.log('[Download] Failed to send error message:', _e.message);
     }
     return { success: false, error: error.message };
   }
 });
 
 ipcMain.handle('stop-current-process', async () => {
+  isUserStopped = true;
+  
   if (currentProcess && !currentProcess.killed) {
-    isUserStopped = true;
     currentProcess.kill('SIGKILL');
     console.log('Process stopped by user.');
-    try {
-      cancelActiveDownloads();
-    } catch (error) {
-      console.log('[Process] Failed to cancel downloads:', error.message);
-    }
-    return { success: true };
   }
-  // 실행 중인 프로세스가 없어도 다운로드가 있다면 취소
-  if (activeDownloads.size > 0) {
+  
+  // 번역 중이면 translator에도 중지 시그널 전달
+  if (translator && typeof translator.abort === 'function') {
     try {
-      cancelActiveDownloads();
-    } catch (error) {
-      console.log('[Process] Failed to cancel active downloads:', error.message);
-    }
-    return { success: true };
+      translator.abort();
+      console.log('Translation aborted by user.');
+    } catch (_e) { /* ignore */ }
   }
-  return { success: false };
+  
+  try {
+    cancelActiveDownloads();
+  } catch (_e) { /* ignore */ }
+  
+  return { success: true };
 });
 
 // ========== 번역 관련 IPC 핸들러 ==========
@@ -1285,6 +1820,10 @@ ipcMain.handle('translate-subtitle', async (event, { filePath, method, targetLan
 
     return { success: true, outputPath: result };
   } catch (error) {
+    if (error.message && error.message.includes('ABORTED')) {
+      event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user' });
+      return { success: false, error: 'Stopped by user', userStopped: true };
+    }
     event.sender.send('translation-progress', { stage: 'error', errorMessage: error.message });
     return { success: false, error: error.message };
   }
@@ -1324,6 +1863,10 @@ ipcMain.handle('get-current-version', async () => {
   return CURRENT_VERSION;
 });
 
+ipcMain.handle('get-gpu-info', async () => {
+  return getGpuInfo();
+});
+
 // nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)
 ipcMain.handle('get-audio-data', async (event, filename) => {
   try {
@@ -1346,5 +1889,20 @@ ipcMain.handle('get-audio-data', async (event, filename) => {
 });
 
 // App Exit Cleanup
-app.on('before-quit', () => forceMemoryCleanup('cuda'));
-process.on('exit', () => forceMemoryCleanup('cuda'));
+let _isCleaningUp = false;
+app.on('before-quit', async () => {
+  if (_isCleaningUp) return;
+  _isCleaningUp = true;
+  console.log('[Cleanup] App closing, cleaning up...');
+  await forceMemoryCleanup('cuda', true);
+});
+
+process.on('SIGINT', () => {
+  console.log('[Cleanup] SIGINT received');
+  app.quit();
+});
+
+process.on('SIGTERM', () => {
+  console.log('[Cleanup] SIGTERM received');
+  app.quit();
+});
