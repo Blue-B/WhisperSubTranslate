@@ -1,5 +1,5 @@
 // Queue-based renderer for multi-file processing (memory-leak safe) (대기열 기반 렌더러 - 다중 파일 처리)
-console.log('[Renderer] renderer.js v1.4.0 loaded');
+console.log('[Renderer] renderer.js v1.5.0 loaded');
 
 let fileQueue = []; // processing queue (처리 대기열)
 let isProcessing = false;
@@ -96,7 +96,7 @@ function _formatETA(ms) {
     en: 'left',
     ja: '残り',
     zh: '剩余',
-  }[lang] || '남음';
+  }[lang] || 'left';
   if (sec < 60) return `${sec}s ${suffix}`;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -157,7 +157,7 @@ function updateUIMode() {
     }
     // 드롭존 힌트 변경
     const dropHint1 = document.getElementById('dropHint1');
-    if (dropHint1) dropHint1.textContent = d.srtModeHint || 'SRT 번역 모드 - 번역 방법을 선택하세요';
+    if (dropHint1) dropHint1.textContent = d.srtModeHint || 'SRT translation mode - select a translation method';
   } else {
     // 일반 모드: 모든 옵션 표시
     if (modelCard) modelCard.style.display = '';
@@ -172,7 +172,7 @@ function updateUIMode() {
   // 혼합 모드 경고 (동영상 + SRT 섞여 있을 때)
   if (hasSrt && !srtOnlyMode && fileQueue.length > 0) {
     let mixedWarning = document.getElementById('mixedFileWarning');
-    const warningText = d.mixedFileWarning || '동영상과 SRT 파일이 섞여 있습니다. 각 파일 유형에 맞게 처리됩니다.';
+    const warningText = d.mixedFileWarning || 'Mixed video and SRT files. Each file type will be processed accordingly.';
 
     if (!mixedWarning) {
       mixedWarning = document.createElement('div');
@@ -187,7 +187,7 @@ function updateUIMode() {
     // "번역 안함" 선택 시 SRT 스킵 예고 경고 추가
     const translationValue = translationSelect?.value;
     if (translationValue === 'none') {
-      const skipWarningText = d.srtWillBeSkipped || 'SRT 파일은 번역 설정이 없어 스킵됩니다. 번역 방법을 선택하세요.';
+      const skipWarningText = d.srtWillBeSkipped || 'SRT files will be skipped without translation settings. Please select a translation method.';
       mixedWarning.innerHTML = `<span>${warningText}</span><span class="skip-warning">${skipWarningText}</span>`;
     } else {
       mixedWarning.innerHTML = `<span>${warningText}</span>`;
@@ -204,7 +204,7 @@ async function checkModelStatus() {
     availableModels = await window.electronAPI.checkModelStatus();
     updateModelSelect();
   } catch (error) {
-    console.error('모델 상태 확인 실패:', error);
+    console.error('Model status check failed:', error);
   }
 }
 
@@ -221,7 +221,7 @@ function setupQueueDragAndDrop() {
 
   const items = queueList.querySelectorAll('.queue-item.draggable');
   const dragHandles = queueList.querySelectorAll('.drag-handle');
-  console.log('[DragDrop] 드래그 가능한 아이템:', items.length, '드래그 핸들:', dragHandles.length);
+  console.log('[DragDrop] Draggable items:', items.length, 'Drag handles:', dragHandles.length);
 
   items.forEach(item => {
     // 처음에는 드래그 비활성화 (핸들로만 드래그 가능하게)
@@ -231,7 +231,7 @@ function setupQueueDragAndDrop() {
     const handle = item.querySelector('.drag-handle');
     if (handle) {
       handle.addEventListener('mousedown', (e) => {
-        console.log('[DragDrop] 핸들 mousedown - 드래그 활성화');
+        console.log('[DragDrop] Handle mousedown - drag activated');
         item.setAttribute('draggable', 'true');
         e.stopPropagation(); // 이벤트 전파 방지
       });
@@ -256,7 +256,7 @@ function setupQueueDragAndDrop() {
 }
 
 function handleDragStart(e) {
-  console.log('[DragDrop] dragstart 이벤트 발생, index:', this.dataset.index);
+  console.log('[DragDrop] dragstart event fired, index:', this.dataset.index);
   draggedItem = this;
   draggedIndex = parseInt(this.dataset.index);
   this.classList.add('dragging');
@@ -306,11 +306,11 @@ function handleDragLeave(_e) {
 function handleDrop(e) {
   e.preventDefault();
   e.stopPropagation();
-  console.log('[DragDrop] drop 이벤트 발생, target:', this.dataset.index, 'dragged:', draggedIndex);
+  console.log('[DragDrop] drop event fired, target:', this.dataset.index, 'dragged:', draggedIndex);
 
   const targetIndex = parseInt(this.dataset.index);
   if (targetIndex === draggedIndex || isNaN(targetIndex) || isNaN(draggedIndex)) {
-    console.log('[DragDrop] drop 취소 - 같은 위치 또는 유효하지 않은 인덱스');
+    console.log('[DragDrop] Drop cancelled - same position or invalid index');
     return;
   }
 
@@ -368,11 +368,11 @@ function updateProgress(progress, text) {
   if (progressTitle) {
     const d = I18N[currentUiLang];
     if (lastProgress >= 100) {
-      progressTitle.textContent = d.progressComplete || '완료!';
+      progressTitle.textContent = d.progressComplete || 'Complete!';
     } else if (lastProgress > 0) {
-      progressTitle.textContent = d.progressProcessing || '처리 중...';
+      progressTitle.textContent = d.progressProcessing || 'Processing...';
     } else {
-      progressTitle.textContent = d.progressPreparing || '준비 중...';
+      progressTitle.textContent = d.progressPreparing || 'Preparing...';
     }
   }
 
@@ -439,10 +439,10 @@ async function selectFile() {
     const result = await window.electronAPI.showOpenDialog({
       properties: ['openFile', 'multiSelections'], // allow multi-selection (다중 선택 허용)
       filters: [
-        { name: '동영상 및 자막 파일', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'srt'] },
-        { name: '동영상 파일', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
-        { name: '자막 파일 (SRT)', extensions: ['srt'] },
-        { name: '모든 파일', extensions: ['*'] }
+        { name: 'Video & Subtitle Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'srt'] },
+        { name: 'Video Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
+        { name: 'Subtitle Files (SRT)', extensions: ['srt'] },
+        { name: 'All Files', extensions: ['*'] }
       ]
     });
 
@@ -463,7 +463,7 @@ async function selectFile() {
 function addToQueue(filePath) {
   // deduplicate files (중복 파일 체크)
   if (fileQueue.some(file => file.path === filePath)) {
-    addOutput(`${I18N[currentUiLang].alreadyInQueue(filePath.split('\\').pop())}\n`);
+    addOutput(`${I18N[currentUiLang].alreadyInQueue(filePath.split('\\').pop() || filePath.split('/').pop())}\n`);
     return;
   }
   
@@ -575,7 +575,7 @@ function copyToClipboard(text, type) {
       toast.classList.remove('show');
     }, 1500);
   }).catch(err => {
-    console.error('복사 실패:', err);
+    console.error('Copy failed:', err);
   });
 }
 
@@ -591,7 +591,7 @@ async function openOutputFolder() {
 // 처리 계속 함수 (일시정지 재개 시에도 사용) - 전역 함수로 선언
 async function continueProcessing() {
   console.log('[continueProcessing] Called, isProcessing:', isProcessing);
-  console.log('[continueProcessing] Queue status:', fileQueue.map(f => ({ path: f.path.split('\\').pop(), status: f.status })));
+  console.log('[continueProcessing] Queue status:', fileQueue.map(f => ({ path: f.path.split('\\').pop() || f.path.split('/').pop(), status: f.status })));
 
   const model = document.getElementById('modelSelect').value;
   const language = document.getElementById('languageSelect').value;
@@ -608,7 +608,7 @@ async function continueProcessing() {
 
   for (let i = 0; i < fileQueue.length; i++) {
     const file = fileQueue[i];
-    console.log(`[continueProcessing] File ${i}: status=${file.status}, path=${file.path.split('\\').pop()}`);
+    console.log(`[continueProcessing] File ${i}: status=${file.status}, path=${file.path.split('\\').pop() || file.path.split('/').pop()}`);
 
     if (file.status !== 'completed' &&
         file.status !== 'error' &&
@@ -664,7 +664,7 @@ async function continueProcessing() {
         file.status = 'skipped';
         updateQueueDisplay();
         const d = I18N[currentUiLang] || I18N.ko;
-        addOutput(`⏭️ ${d.srtSkippedNoTranslation || 'SRT 파일 스킵 (번역 설정 없음)'}: ${fileName}\n`);
+        addOutput(`⏭️ ${d.srtSkippedNoTranslation || 'SRT file skipped (no translation settings)'}: ${fileName}\n`);
         // 다음 파일 처리 계속
         setTimeout(() => continueProcessing(), 100);
         return;
@@ -676,7 +676,7 @@ async function continueProcessing() {
         return;
       }
 
-      console.log('[continueProcessing] SRT 파일 직접 번역 시작, index:', i, 'fileName:', fileName);
+      console.log('[continueProcessing] SRT file direct translation start, index:', i, 'fileName:', fileName);
       currentProcessingIndex = i;
       file.status = 'translating';
       file.progress = 0;
@@ -696,25 +696,25 @@ async function continueProcessing() {
 
       try {
         translationSessionActive = true;
-        setProgressTarget(10, I18N[currentUiLang].translationStarting || '번역 시작 중...');
+        setProgressTarget(10, I18N[currentUiLang].translationStarting || 'Starting translation...');
 
         // 번역 방식에 따른 안내 메시지
         let translationInfo = '';
         switch (methodAtStart) {
           case 'mymemory':
-            translationInfo = 'MyMemory (무료)';
+            translationInfo = 'MyMemory (free)';
             break;
           case 'deepl':
-            translationInfo = 'DeepL (API 키 확인 중...)';
+            translationInfo = 'DeepL (verifying API key...)';
             break;
           case 'chatgpt':
-            translationInfo = 'GPT-5-nano (API 키 확인 중...)';
+            translationInfo = 'GPT-5-nano (verifying API key...)';
             break;
           case 'gemini':
-            translationInfo = 'Gemini (API 키 확인 중...)';
+            translationInfo = 'Gemini (verifying API key...)';
             break;
           case 'offline':
-            translationInfo = 'Offline (오프라인 번역)';
+            translationInfo = 'Offline (local translation)';
             break;
           default:
             translationInfo = methodAtStart;
@@ -768,8 +768,8 @@ async function continueProcessing() {
         const errorCount = fileQueue.filter(f => f.status === 'error').length;
         const stoppedCount = fileQueue.filter(f => f.status === 'stopped').length;
 
-        setProgressTarget(100, I18N[currentUiLang].allDoneWithTr || '모두 완료!');
-        showToast(I18N[currentUiLang].allDoneWithTr || '모두 완료!', { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
+        setProgressTarget(100, I18N[currentUiLang].allDoneWithTr || 'All done!');
+        showToast(I18N[currentUiLang].allDoneWithTr || 'All done!', { label: I18N[currentUiLang].toastOpenFolder, onClick: openOutputFolder });
         try {
           playCompletionSound();
         } catch (error) {
@@ -785,7 +785,7 @@ async function continueProcessing() {
     if (!isVideoFile(file.path)) {
       file.status = 'error';
       updateQueueDisplay();
-      addOutput(`${I18N[currentUiLang].unsupportedFormat(file.path.split('\\').pop())}\n`);
+      addOutput(`${I18N[currentUiLang].unsupportedFormat(file.path.split('\\').pop() || file.path.split('/').pop())}\n`);
       // 다음 파일 처리 계속
       setTimeout(() => continueProcessing(), 100);
       return;
@@ -797,7 +797,7 @@ async function continueProcessing() {
       return;
     }
 
-    console.log('[continueProcessing] 파일 처리 시작, index:', i, 'fileName:', file.path.split('\\').pop());
+    console.log('[continueProcessing] Processing file, index:', i, 'fileName:', file.path.split('\\').pop() || file.path.split('/').pop());
     currentProcessingIndex = i;
     file.status = 'processing';
     file.progress = 0;
@@ -824,7 +824,7 @@ async function continueProcessing() {
       const extractionMaxProgress = hasTranslation ? 50 : 95;
       startIndeterminate(extractionMaxProgress, 'extract');
 
-      console.log('[continueProcessing] extractSubtitles 호출 시작');
+      console.log('[continueProcessing] extractSubtitles call started');
       const result = await window.electronAPI.extractSubtitles({
         filePath: file.path,
         model: model,
@@ -869,25 +869,25 @@ async function continueProcessing() {
           translationSessionActive = true;
           updateQueueDisplay();
           // 프로그레스바: 추출 완료(50%) → 번역 시작으로 자연스럽게 연결
-          setProgressTarget(Math.max(lastProgress, 51), I18N[currentUiLang].translationStarting || '번역 시작 중...');
+          setProgressTarget(Math.max(lastProgress, 51), I18N[currentUiLang].translationStarting || 'Starting translation...');
           try {
             // 번역 방식에 따른 안내 메시지
             let translationInfo = '';
             switch (translationMethod) {
               case 'mymemory':
-                translationInfo = 'MyMemory (무료)';
+                translationInfo = 'MyMemory (free)';
                 break;
               case 'deepl':
-                translationInfo = 'DeepL (API 키 확인 중...)';
+                translationInfo = 'DeepL (verifying API key...)';
                 break;
               case 'chatgpt':
-                translationInfo = 'GPT-5-nano (API 키 확인 중...)';
+                translationInfo = 'GPT-5-nano (verifying API key...)';
                 break;
               case 'gemini':
-                translationInfo = 'Gemini (API 키 확인 중...)';
+                translationInfo = 'Gemini (verifying API key...)';
                 break;
               case 'offline':
-                translationInfo = 'Offline (오프라인 번역)';
+                translationInfo = 'Offline (local translation)';
                 break;
               default:
                 translationInfo = translationMethod;
@@ -979,7 +979,7 @@ async function continueProcessing() {
 
   // 번역 없이 자막 추출만 한 경우 즉시 완료 처리
   if (file.status === 'completed') {
-    setProgressTarget(100, I18N[currentUiLang].fileProcessed(file.path.split('\\').pop()));
+    setProgressTarget(100, I18N[currentUiLang].fileProcessed(file.path.split('\\').pop() || file.path.split('/').pop()));
   }
 
   // 자동 처리: 다음 파일 확인 및 처리 (재귀 호출)
@@ -988,7 +988,7 @@ async function continueProcessing() {
   console.log('[continueProcessing] Auto-process check:', {
     remainingFiles,
     shouldStop,
-    fileQueue: fileQueue.map(f => ({ path: f.path.split('\\').pop(), status: f.status }))
+    fileQueue: fileQueue.map(f => ({ path: f.path.split('\\').pop() || f.path.split('/').pop(), status: f.status }))
   });
 
   if (remainingFiles > 0 && !shouldStop) {
@@ -1080,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
   dropZone.ondrop = (e) => {
     // 대기열 아이템 드래그 중이면 무시
     if (draggedItem) {
-      console.log('[DragDrop] 파일 드롭존에서 대기열 드래그 무시');
+      console.log('[DragDrop] Ignoring queue drag on file dropzone');
       return;
     }
     e.preventDefault();
@@ -1095,7 +1095,7 @@ document.addEventListener('DOMContentLoaded', () => {
       let addedCount = 0;
       
       files.forEach(file => {
-        console.log('=== 드래그앤드롭 파일 분석 ===');
+        console.log('=== Drag and drop file analysis ===');
         console.log('File:', file.name);
         
         // Try multiple ways to read file path (여러 방법으로 파일 경로 시도)
@@ -1104,15 +1104,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Method 1: direct file.path access (방법 1)
         if (file.path && typeof file.path === 'string' && file.path.trim()) {
           extractedPath = file.path;
-          console.log('[OK] 방법 1 성공 (file.path):', extractedPath);
+          console.log('[OK] Method 1 success (file.path):', extractedPath);
         }
         // Method 2: use webUtils (방법 2)
         else {
           try {
             extractedPath = window.electronAPI.getFilePathFromFile(file);
-            console.log('[OK] 방법 2 시도 (webUtils):', extractedPath);
+            console.log('[OK] Method 2 attempt (webUtils):', extractedPath);
           } catch (error) {
-            console.error('방법 2 실패:', error);
+            console.error('Method 2 failed:', error);
           }
         }
         
@@ -1378,7 +1378,7 @@ function getLocalizedError(errorMessage) {
   if (errorMessage.includes('Whisper processing failed') || errorMessage.includes('Whisper 처리 실패')) {
     return lang.errorWhisperFailed;
   }
-  if (errorMessage.includes('whisper-cli.exe not found') || errorMessage.includes('whisper-cli.exe를 찾을 수 없음')) {
+  if (errorMessage.includes('whisper-cli') && (errorMessage.includes('not found') || errorMessage.includes('찾을 수 없음') || errorMessage.includes('permission denied'))) {
     return lang.errorWhisperNotFound;
   }
   if (errorMessage.includes('CPU build is available') || errorMessage.includes('CPU 빌드가 설치')) {
@@ -1563,7 +1563,7 @@ function rebuildTargetLanguageNames(lang) {
 
 function updateProgressInitial(lang) {
   const t = document.getElementById('progressText');
-  if (t && (!t.textContent || t.textContent.trim() === '' || t.textContent.includes('준비') || t.textContent.includes('Ready'))) {
+  if (t && (!t.textContent || t.textContent.trim() === '' || t.textContent.includes('준비') || t.textContent.includes('Ready') || t.textContent.includes('Preparing'))) {
     t.textContent = I18N[lang].progressReady;
   }
 }
@@ -1769,7 +1769,7 @@ function updateQueueDisplayImmediate() {
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
         <polyline points="14 2 14 8 20 8"/>
       </svg>
-      <span>${d.queueEmpty || '파일을 드래그하여 추가하세요'}</span>
+      <span>${d.queueEmpty || 'Drag files here to add'}</span>
     </div>`;
     return;
   }
@@ -1825,7 +1825,7 @@ function updateQueueDisplayImmediate() {
       statusText = d.qStopped;
       itemClass = 'queue-item error';
     } else if (file.status === 'skipped') {
-      statusText = d.qSkipped || '스킵됨';
+      statusText = d.qSkipped || 'Skipped';
       itemClass = 'queue-item skipped';
     } else if (file.status === 'error') {
       statusText = d.qError;
@@ -1850,11 +1850,11 @@ function updateQueueDisplayImmediate() {
 
     return `
       <div class="${itemClass}${isDraggable ? ' draggable' : ''}" ${dragAttr}>
-        ${isDraggable ? `<div class="drag-handle" title="${d.dragHandleTooltip || '드래그하여 순서 변경'}">☰</div>` : ''}
+        ${isDraggable ? `<div class="drag-handle" title="${d.dragHandleTooltip || 'Drag to reorder'}">☰</div>` : ''}
         <div class="file-info">
-          <div class="file-name"><span class="name-text" title="${fullFileName} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${fullFileName.replace(/'/g, "\\'")}', 'filename')">${displayName}</span>${extBadge}</div>
-          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path} (${d.clickToCopy || '클릭하여 복사'})" onclick="copyToClipboard('${file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', 'path')">${displayPath}</div>
-          <div class="file-status">${d.statusLabel || '상태'}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
+          <div class="file-name"><span class="name-text" title="${fullFileName} (${d.clickToCopy || 'Click to copy'})" onclick="copyToClipboard('${fullFileName.replace(/'/g, "\\'")}', 'filename')">${displayName}</span>${extBadge}</div>
+          <div class="file-path" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.path} (${d.clickToCopy || 'Click to copy'})" onclick="copyToClipboard('${file.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', 'path')">${displayPath}</div>
+          <div class="file-status">${d.statusLabel || 'Status'}: ${statusText} ${file.progress ? `(${file.progress}%)` : ''}</div>
         </div>
         <div>
           ${file.status === 'completed' ?
@@ -1862,7 +1862,7 @@ function updateQueueDisplayImmediate() {
             (file.status === 'processing' || file.status === 'translating') ?
             processingBadge :
             (file.status === 'error' || file.status === 'stopped') ?
-            `<button onclick="retryQueueItem(${index})" class="btn-warning btn-sm" style="margin-right:4px;">${d.btnRetry || '재시도'}</button><button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">${btnRemove}</button>` :
+            `<button onclick="retryQueueItem(${index})" class="btn-warning btn-sm" style="margin-right:4px;">${d.btnRetry || 'Retry'}</button><button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">${btnRemove}</button>` :
             `<button onclick="removeFromQueue(${index})" class="btn-danger btn-sm">${btnRemove}</button>`
           }
         </div>
@@ -1982,7 +1982,7 @@ if (window?.electronAPI) {
         if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
           fileQueue[currentProcessingIndex].status = isErrorStage ? 'error' : 'completed';
           fileQueue[currentProcessingIndex].progress = isErrorStage ? 0 : 100;
-          console.log(`[onTranslationProgress] 파일 상태 ${isErrorStage ? 'error' : 'completed'}로 변경, index:`, currentProcessingIndex);
+          console.log(`[onTranslationProgress] File status changed to ${isErrorStage ? 'error' : 'completed'}, index:`, currentProcessingIndex);
         }
 
         // 단일 파일 처리 완료 후 잠시 대기 (메모리 정리 시간 확보)

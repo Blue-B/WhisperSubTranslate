@@ -433,7 +433,7 @@ class EnhancedSubtitleTranslator {
       error: error.message,
       stack: error.stack
     };
-    console.error('[Translation Error / 번역 오류]', errorInfo);
+    console.error('[Translation Error]', errorInfo);
 
     // 파일에도 에러 로그 저장 (디버깅용)
     // 로그 위치: %APPDATA%\whispersubtranslate\logs\translation-errors.log
@@ -463,7 +463,7 @@ class EnhancedSubtitleTranslator {
         return await translateFn(text);
       } catch (error) {
         lastError = error;
-        this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed (번역 시도 실패)`, error);
+        this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed`, error);
         
         // Do not retry on permanent errors (영구적 오류는 재시도 안함)
         if (error.message.includes('401') || error.message.includes('403') ||
@@ -481,7 +481,7 @@ class EnhancedSubtitleTranslator {
   // Improved DeepL translation (개선된 DeepL 번역)
   async translateWithDeepL(text, targetLang = 'KO') {
     if (!this.apiKeys.deepl) {
-      throw new Error('DeepL API 키가 설정되지 않았습니다.');
+      throw new Error('DeepL API key is not configured.');
     }
 
     // 캐시 확인
@@ -531,7 +531,7 @@ class EnhancedSubtitleTranslator {
         text: text.substring(0, 50) + '...',
         error: error.message
       });
-      this.logError('DeepL 번역 실패', error);
+      this.logError('DeepL translation failed', error);
       throw error;
     }
   }
@@ -539,9 +539,9 @@ class EnhancedSubtitleTranslator {
   // OpenAI 번역 (GPT-5-nano - 2025년 최신 모델, 고처리량/저비용)
   // 참고: https://platform.openai.com/docs/models
   // GPT-5 모델은 temperature, top_p 파라미터를 지원하지 않음
-  async translateWithChatGPT(text, targetLang = '한국어') {
+  async translateWithChatGPT(text, targetLang = 'Korean') {
     if (!this.apiKeys.openai) {
-      throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+      throw new Error('OpenAI API key is not configured.');
     }
 
     // 캐시 확인
@@ -637,7 +637,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         console.error('[GPT-5-nano Empty Response]', errorInfo);
 
         // 파일에 에러 로그 저장 (디버깅용)
-        this.logError('GPT-5-nano 빈 응답', new Error(JSON.stringify(errorInfo)));
+        this.logError('GPT-5-nano empty response', new Error(JSON.stringify(errorInfo)));
 
         throw new Error(`GPT-5-nano returned empty translation (finish_reason: ${finishReason})`);
       }
@@ -667,16 +667,16 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         data: error.response?.data,
         code: error.code
       });
-      this.logError('GPT-5-nano 번역 실패', error);
+      this.logError('GPT-5-nano translation failed', error);
       throw error;
     }
   }
 
   // Google Gemini 번역 (Gemini 3 Flash - 무료 사용 가능)
   // 참고: https://ai.google.dev/gemini-api
-  async translateWithGemini(text, targetLang = '한국어') {
+  async translateWithGemini(text, targetLang = 'Korean') {
     if (!this.apiKeys.gemini) {
-      throw new Error('Gemini API 키가 설정되지 않았습니다.');
+      throw new Error('Gemini API key is not configured.');
     }
 
     // 캐시 확인
@@ -767,7 +767,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           hasCandidates: !!candidates
         };
         console.error('[Gemini Empty Response]', errorInfo);
-        this.logError('Gemini 빈 응답', new Error(JSON.stringify(errorInfo)));
+        this.logError('Gemini empty response', new Error(JSON.stringify(errorInfo)));
         throw new Error('Gemini returned empty translation');
       }
 
@@ -796,7 +796,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         data: error.response?.data,
         code: error.code
       });
-      this.logError('Gemini 번역 실패', error);
+      this.logError('Gemini translation failed', error);
       throw error;
     }
   }
@@ -819,7 +819,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       this.setCachedTranslation(text, 'mymemory', targetLang, result);
       return result;
     } catch (error) {
-      this.logError('MyMemory 번역 실패', error);
+      this.logError('MyMemory translation failed', error);
       throw error;
     }
   }
@@ -841,8 +841,8 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       { name: preferredMethod, lang: targetLanguage },
       { name: 'mymemory', lang: targetLanguage === 'KO' ? 'ko' : targetLanguage },
       { name: 'deepl', lang: this.mapToDeepLLang(targetLanguage) },
-      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' },
-      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : '한국어' }
+      { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : 'Korean' },
+      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : 'Korean' }
     ];
 
     const uniqueMethods = methods.filter((m, i, a) => a.findIndex(x => x.name === m.name) === i);
@@ -978,7 +978,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             } catch (retryError) {
               console.error(`[Retry ${retry} Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
               if (retry === 2) {
-                console.warn(`[Give Up] ${i + 1}/${texts.length}: 모든 재시도 실패 - 원문 유지`);
+                console.warn(`[Give Up] ${i + 1}/${texts.length}: All retries failed - keeping original`);
               }
             }
           }
@@ -1067,7 +1067,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
               retryResult = await this.translateAuto(text, method, targetLang);
               console.log(`[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`);
             } catch (retryError) {
-              console.error(`[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - 원문 유지`);
+              console.error(`[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - keeping original`);
             }
             
             batchResults.push(retryResult);
@@ -1093,7 +1093,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       fs.writeFileSync(outputPath, translatedContent, 'utf8');
       return outputPath;
     } catch (error) {
-      this.logError('SRT 파일 번역 실패', error);
+      this.logError('SRT file translation failed', error);
       throw error;
     }
   }
@@ -1274,7 +1274,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         });
         results.openai = true;
       } catch (error) {
-        console.error('[OpenAI Validation] 실패:', error.response?.data || error.message);
+        console.error('[OpenAI Validation] Failed:', error.response?.data || error.message);
         results.errors.openai = this.classifyError(error, 'openai', 'ko');
       }
     } else {
@@ -1299,7 +1299,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         results.gemini = true;
         console.log('[Gemini Validation Success]');
       } catch (error) {
-        console.error('[Gemini Validation] 실패:', error.response?.data || error.message);
+        console.error('[Gemini Validation] Failed:', error.response?.data || error.message);
         results.errors.gemini = this.classifyError(error, 'gemini', 'ko');
       }
     } else {
@@ -1390,7 +1390,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   // 캐시 관리
   clearCache() {
     this.translationCache.clear();
-    console.log('번역 캐시가 초기화되었습니다.');
+    console.log('Translation cache cleared.');
   }
 
   getCacheStats() {

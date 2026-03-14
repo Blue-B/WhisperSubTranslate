@@ -22,7 +22,7 @@ try {
   }
   console.log('[FFmpeg] Using ffmpeg-static:', ffmpegStaticPath);
 } catch (_error) {
-  console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local ffmpeg.exe');
+  console.log('[FFmpeg] ffmpeg-static not available, will use system PATH or local binary');
 }
 
 // ffprobe-static: npm 패키지에서 자동으로 플랫폼별 ffprobe 바이너리 제공
@@ -34,7 +34,7 @@ try {
   }
   console.log('[FFprobe] Using ffprobe-static:', ffprobeStaticPath);
 } catch (_error) {
-  console.log('[FFprobe] ffprobe-static not available, will use system PATH or local ffprobe.exe');
+  console.log('[FFprobe] ffprobe-static not available, will use system PATH or local binary');
 }
 
 // Allow autoplay of audio (오디오 자동재생 허용)
@@ -77,6 +77,9 @@ function cancelActiveDownloads() {
 }
 
 // ===== Device auto-selection helper (장치 자동 선택 헬퍼) =====
+// Platform-specific whisper-cli binary name
+const WHISPER_CLI_NAME = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli';
+
 // CUDA 12 requires compute capability >= 5.0 (Maxwell+)
 const CUDA12_MIN_COMPUTE = 5.0;
 let _gpuInfoCache = null;
@@ -211,25 +214,25 @@ function _getOptimalWhisperSettings(device) {
 // Enhanced memory/GPU cleanup across files (파일 간 메모리/GPU 정리)
 function forceMemoryCleanup(device, isFileTransition = false) {
     return new Promise(resolve => {
-        const cleanupType = isFileTransition ? '파일 간 메모리 정리' : '일반 메모리 정리';
-        console.log(`${cleanupType} 시작...`);
+        const cleanupType = isFileTransition ? 'Inter-file memory cleanup' : 'General memory cleanup';
+        console.log(`${cleanupType} starting...`);
 
         try {
             // 1. Kill current process
             if (currentProcess && !currentProcess.killed) {
                 currentProcess.kill('SIGKILL');
                 currentProcess = null;
-                console.log('   - 현재 프로세스 강제 종료 완료');
+                console.log('   - Current process killed');
             }
 
             if (process.platform === 'win32') {
                 // 2. Kill all related processes
                 try {
-                    execSync('taskkill /F /IM whisper-cli.exe /T', { stdio: 'ignore' });
+                    execSync(`taskkill /F /IM ${WHISPER_CLI_NAME} /T`, { stdio: 'ignore' });
                     execSync('taskkill /F /IM ffmpeg.exe /T', { stdio: 'ignore' });
-                    console.log('   - 모든 관련 프로세스 정리 완료');
+                    console.log('   - All related processes cleaned up');
                 } catch (_e) {
-                    console.log('   - 정리할 프로세스 없음');
+                    console.log('   - No processes to clean up');
                 }
 
                 // 3. Enhanced GPU cleanup for CUDA
@@ -238,13 +241,13 @@ function forceMemoryCleanup(device, isFileTransition = false) {
 
                     setTimeout(() => {
                         try {
-                            console.log('   - GPU 캐시 강제 비우기...');
+                            console.log('   - Flushing GPU cache...');
 
                             // Kill all CUDA processes first
                             try {
                                 execSync('taskkill /F /IM "nvcc.exe" /T', { stdio: 'ignore' });
                                 execSync('taskkill /F /IM "nvidia-smi.exe" /T', { stdio: 'ignore' });
-                                console.log('   - CUDA 관련 프로세스 정리 완료');
+                                console.log('   - CUDA processes cleaned up');
                             } catch (e) {
                                 console.log('[GPU] CUDA process cleanup failed:', e.message);
                             }
@@ -257,17 +260,17 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                                     } else {
                                         execSync('nvidia-smi -r', { stdio: 'ignore', timeout: 10000 });
                                     }
-                                    console.log(`   - GPU 리셋 시도 ${i+1}/5 성공`);
+                                    console.log(`   - GPU reset attempt ${i+1}/5 succeeded`);
                                     break;
                                 } catch (_e) {
-                                    if (i === 4) console.log('   - GPU 리셋 실패, 계속 진행');
+                                    if (i === 4) console.log('   - GPU reset failed, continuing');
                                 }
                             }
 
-                            console.log('   - GPU 메모리 강제 정리 완료');
+                            console.log('   - GPU memory cleanup completed');
 
                         } catch (e) {
-                            console.log(`   - GPU 정리 시도 실패: ${e.message}`);
+                            console.log(`   - GPU cleanup attempt failed: ${e.message}`);
                         }
 
                         // 4. System memory cleanup
@@ -276,9 +279,9 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                                 stdio: 'ignore',
                                 timeout: 5000
                             });
-                            console.log('   - 시스템 메모리 정리 완료');
+                            console.log('   - System memory cleanup completed');
                         } catch (_e) {
-                            console.log('   - 시스템 메모리 정리 건너뛰기');
+                            console.log('   - System memory cleanup skipped');
                         }
 
                         resolve();
@@ -295,11 +298,11 @@ function forceMemoryCleanup(device, isFileTransition = false) {
                 for (let i = 0; i < 5; i++) {
                     global.gc();
                 }
-                console.log('   - Node.js 가비지 컬렉션 완료');
+                console.log('   - Node.js garbage collection completed');
             }
 
         } catch (e) {
-            console.error(`[ERROR] 메모리 정리 중 오류: ${e.message}`);
+            console.error(`[ERROR] Memory cleanup error: ${e.message}`);
             resolve();
         }
     });
@@ -532,12 +535,17 @@ function getSafeTempDir() {
         return appTemp;
     }
 
-    // 2순위: C:\Users\Public (모든 Windows에서 항상 영어)
-    const publicTemp = path.join('C:', 'Users', 'Public', 'WhisperSubTranslate', 'temp');
-    if (!fs.existsSync(publicTemp)) {
-        fs.mkdirSync(publicTemp, { recursive: true });
+    // 2순위: 플랫폼별 안전한 fallback 경로
+    let fallbackTemp;
+    if (process.platform === 'win32') {
+        fallbackTemp = path.join('C:', 'Users', 'Public', 'WhisperSubTranslate', 'temp');
+    } else {
+        fallbackTemp = path.join(os.tmpdir(), 'WhisperSubTranslate', 'temp');
     }
-    return publicTemp;
+    if (!fs.existsSync(fallbackTemp)) {
+        fs.mkdirSync(fallbackTemp, { recursive: true });
+    }
+    return fallbackTemp;
 }
 
 // 경로가 ASCII만 포함하는지 체크
@@ -560,10 +568,10 @@ function getMediaDuration(inputPath) {
             ffprobePath = ffprobeStaticPath;
             console.log('[Media] Using ffprobe-static');
         } else {
-            const localFfprobe = path.join(basePath, 'ffprobe.exe');
+            const localFfprobe = path.join(basePath, process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
             if (fs.existsSync(localFfprobe)) {
                 ffprobePath = localFfprobe;
-                console.log('[Media] Using local ffprobe.exe');
+                console.log('[Media] Using local ffprobe');
             } else {
                 console.log('[Media] Using system PATH ffprobe');
             }
@@ -630,7 +638,7 @@ async function splitAudioToSegments(wavPath, duration) {
         
         const basePath = app.isPackaged ? process.resourcesPath : __dirname;
         let ffmpegPath = ffmpegStaticPath || 'ffmpeg';
-        const localFfmpeg = path.join(basePath, 'ffmpeg.exe');
+        const localFfmpeg = path.join(basePath, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
         if (fs.existsSync(localFfmpeg)) {
             ffmpegPath = localFfmpeg;
         }
@@ -926,12 +934,12 @@ function convertToWav(inputPath) {
             ffmpegPath = ffmpegStaticPath;
             console.log('[Audio] Using ffmpeg-static');
         }
-        // 2. 프로젝트 내 ffmpeg.exe 확인 (배포판용)
+        // 2. 프로젝트 내 ffmpeg 확인 (배포판용)
         else {
-            const localFfmpeg = path.join(basePath, 'ffmpeg.exe');
+            const localFfmpeg = path.join(basePath, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
             if (fs.existsSync(localFfmpeg)) {
                 ffmpegPath = localFfmpeg;
-                console.log('[Audio] Using local ffmpeg.exe');
+                console.log('[Audio] Using local ffmpeg');
             } else {
                 console.log('[Audio] Using system PATH ffmpeg');
             }
@@ -986,8 +994,10 @@ function convertToWav(inputPath) {
             if (err.code === 'ENOENT') {
                 reject(new Error(
                     '[ERROR] ffmpeg not found!\n' +
-                    'Please install ffmpeg and add it to your PATH,\n' +
-                    'or place ffmpeg.exe in the project folder.\n\n' +
+                    'Please install ffmpeg and add it to your PATH.\n' +
+                    (process.platform === 'win32'
+                        ? 'Or place ffmpeg.exe in the project folder.\n\n'
+                        : 'Install: sudo apt install ffmpeg (Ubuntu/Debian) or brew install ffmpeg (macOS)\n\n') +
                     'Download: https://ffmpeg.org/download.html'
                 ));
             } else {
@@ -1088,12 +1098,12 @@ function extractSingleFile(filePath, model, language, device) {
         // whisper.cpp 실행 파일 경로
         const whisperDir = path.join(basePath, 'whisper-cpp');
         const cpuDir = path.join(whisperDir, 'cpu');
-        const cpuExePath = path.join(cpuDir, 'whisper-cli.exe');
+        const cpuExePath = path.join(cpuDir, WHISPER_CLI_NAME);
         // CPU 모드일 때 CPU 전용 바이너리 우선 사용 (CUDA DLL 의존성 없음)
         const useCpuBuild = chosenDevice !== 'cuda' && fs.existsSync(cpuExePath);
-        const exePath = useCpuBuild ? cpuExePath : path.join(whisperDir, 'whisper-cli.exe');
+        const exePath = useCpuBuild ? cpuExePath : path.join(whisperDir, WHISPER_CLI_NAME);
         const exeCwd = useCpuBuild ? cpuDir : whisperDir;
-        console.log(`[Whisper] Using: ${useCpuBuild ? 'cpu/whisper-cli.exe (CPU build)' : 'whisper-cli.exe (CUDA build)'} (${chosenDevice})`);
+        console.log(`[Whisper] Using: ${useCpuBuild ? 'cpu/' + WHISPER_CLI_NAME + ' (CPU build)' : WHISPER_CLI_NAME + ' (CUDA build)'} (${chosenDevice})`);
 
         // WAV 변환 (whisper.cpp는 WAV만 지원)
         let wavPath, usingSafeTemp = false;
@@ -1359,10 +1369,10 @@ function extractSingleFile(filePath, model, language, device) {
                         errorMessage = 'DLL entry point not found (0xC0000139). ' +
                             'CUDA DLLs are incompatible with your GPU driver. ' +
                             'Please download the CPU-only build and place it in the whisper-cpp/cpu/ folder.\n' +
-                            'Solution: Download whisper-bin-x64.zip from GitHub, extract whisper-cli.exe to whisper-cpp/cpu/ folder.';
+                            `Solution: Download whisper-bin-x64.zip from GitHub, extract ${WHISPER_CLI_NAME} to whisper-cpp/cpu/ folder.`;
                     }
                 } else if (code === 3221225781) {
-                    // 0xC0000135 STATUS_DLL_NOT_FOUND
+                    // 0xC0000135 STATUS_DLL_NOT_FOUND (Windows-specific)
                     errorMessage = 'Required DLL not found (0xC0000135). ' +
                         'Please install Visual C++ Redistributable 2015-2022 or use CPU-only whisper-cli build.\n' +
                         'Download: https://aka.ms/vs/17/release/vc_redist.x64.exe';
@@ -1373,7 +1383,7 @@ function extractSingleFile(filePath, model, language, device) {
                 } else if (code === 1) {
                     errorMessage = 'Whisper processing failed (file format or audio issue)';
                 } else if (code === 127) {
-                    errorMessage = 'whisper-cli.exe not found';
+                    errorMessage = `${WHISPER_CLI_NAME} not found`;
                 }
                 console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
                 reject(new Error(errorMessage));
@@ -1384,41 +1394,40 @@ function extractSingleFile(filePath, model, language, device) {
             clearTimeout(processTimeout); // Clear timeout
             await forceMemoryCleanup(chosenDevice, true);
 
-            // ENOENT 에러 = whisper-cli.exe 파일 없음
-            if (err.code === 'ENOENT') {
+            // ENOENT/EACCES 에러 = whisper-cli 파일 없음 또는 실행 권한 없음
+            if (err.code === 'ENOENT' || err.code === 'EACCES') {
+                const errDetail = err.code === 'EACCES'
+                    ? `[ERROR] ${WHISPER_CLI_NAME} permission denied! (EACCES)\n` +
+                      (process.platform !== 'win32' ? `Try: chmod +x "${exePath}"\n\n` : '\n')
+                    : `[ERROR] ${WHISPER_CLI_NAME} not found!\n\n`;
+
                 const missingFileError = new Error(
-                    '[ERROR] whisper-cli.exe not found!\n\n' +
+                    errDetail +
                     'Please download whisper.cpp:\n' +
                     '1. Visit: https://github.com/ggml-org/whisper.cpp/releases\n' +
-                    '2. Download: whisper-cublas-*.zip (for CUDA) or whisper-bin-*.zip (for CPU)\n' +
+                    '2. Download the appropriate build for your platform\n' +
                     '3. Extract to project folder under "whisper-cpp" directory\n' +
-                    '4. Restart the app\n\n' +
-                    '자막 추출 엔진(whisper-cli.exe)을 찾을 수 없습니다!\n' +
-                    '위 링크에서 다운로드 후 whisper-cpp 폴더에 압축 해제해주세요.'
+                    '4. Restart the app'
                 );
 
-                // UI에 자세한 안내 전송
                 mainWindow.webContents.send('output-update',
                     '\n' +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                    '[ERROR] WHISPER-CLI.EXE NOT FOUND\n' +
+                    `[ERROR] ${WHISPER_CLI_NAME.toUpperCase()} NOT FOUND\n` +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
                     'Download Required:\n' +
                     '   https://github.com/ggml-org/whisper.cpp/releases\n\n' +
                     'Files to download:\n' +
-                    '   - whisper-cublas-*.zip (CUDA/GPU)\n' +
-                    '   - OR whisper-bin-*.zip (CPU only)\n\n' +
+                    (process.platform === 'win32'
+                        ? '   - whisper-cublas-*.zip (CUDA/GPU)\n' +
+                          '   - OR whisper-bin-*.zip (CPU only)\n\n'
+                        : '   - Build from source: cmake -B build && cmake --build build\n' +
+                          '   - OR download pre-built binary for your platform\n\n') +
                     'Installation:\n' +
-                    '   1. Extract the .zip file\n' +
-                    '   2. Create "whisper-cpp" folder in project root\n' +
-                    '   3. Copy all files into whisper-cpp folder\n' +
-                    '   4. Restart this app\n\n' +
-                    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-                    '한국어 안내:\n' +
-                    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-                    '자막 추출 엔진(whisper-cli.exe)이 없습니다.\n' +
-                    '위 GitHub 링크에서 파일을 다운로드하여\n' +
-                    'whisper-cpp 폴더에 압축 해제 후 다시 실행해주세요.\n\n' +
+                    '   1. Extract or build the binary\n' +
+                    '   2. Place files into whisper-cpp folder\n' +
+                    (process.platform !== 'win32' ? `   3. chmod +x whisper-cpp/${WHISPER_CLI_NAME}\n` : '') +
+                    `   ${process.platform !== 'win32' ? '4' : '3'}. Restart this app\n\n` +
                     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
                 );
 
@@ -1534,7 +1543,7 @@ ipcMain.handle('open-file-location', async (event, filePath) => {
     shell.showItemInFolder(filePath);
     return { success: true };
   } catch (error) {
-    console.error('파일 위치 열기 실패:', error);
+    console.error('Failed to open file location:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1546,7 +1555,7 @@ ipcMain.handle('open-folder', async (event, folderPath) => {
     shell.openPath(folderPath);
     return { success: true };
   } catch (error) {
-    console.error('폴더 열기 실패:', error);
+    console.error('Failed to open folder:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1558,7 +1567,7 @@ ipcMain.handle('open-external', async (event, url) => {
     await shell.openExternal(url);
     return { success: true };
   } catch (error) {
-    console.error('외부 링크 열기 실패:', error);
+    console.error('Failed to open external link:', error);
     return { success: false, error: error.message };
   }
 });

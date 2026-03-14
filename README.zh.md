@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.4.0-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v1.5.0-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（默认提供免费 MyMemory，DeepL/OpenAI 需要你自己的 API 密钥）。
@@ -42,11 +42,48 @@
 npm install
 npm start
 ```
-- **whisper-cpp** 在 `npm install` 时自动下载（~700MB CUDA 版本）
+- **whisper-cpp** 在 `npm install` 时自动下载（Windows: ~700MB CUDA 版本）
+- 在 **Linux/macOS** 上，如果没有预构建二进制文件，将自动从源码构建（需要 `cmake`、`gcc`/`clang`、`git`）
 - **FFmpeg** 通过 npm 包自动包含
 - 首次运行如缺少选定的 GGML 模型，会自动下载至 `_models/`
 
 > 自动下载失败时，请从 [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) 手动下载并解压到 `whisper-cpp/` 文件夹。
+
+### Linux 安装
+
+WhisperSubTranslate 在 Linux 上只需几个额外步骤即可运行：
+
+**必需软件包：**
+```bash
+# Ubuntu/Debian
+sudo apt install cmake build-essential git ffmpeg
+
+# CUDA GPU 加速（可选，需要 NVIDIA GPU + 驱动程序）
+# 安装 CUDA Toolkit: https://developer.nvidia.com/cuda-downloads
+```
+
+**从源码运行：**
+```bash
+git clone https://github.com/Blue-B/WhisperSubTranslate.git
+cd WhisperSubTranslate
+npm install    # whisper.cpp 将自动从源码构建
+npm start
+```
+
+如果自动构建失败，请手动构建 whisper.cpp：
+```bash
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp
+
+# 仅 CPU
+cmake -B build && cmake --build build --config Release
+
+# 使用 CUDA（NVIDIA GPU）
+cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
+
+# 复制二进制文件
+cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
+```
 
 ### 构建（Windows）
 ```bash

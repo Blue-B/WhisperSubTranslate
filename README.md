@@ -33,7 +33,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ## Quick Start (Portable)
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.4.0-win-x64.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v1.5.0-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (free MyMemory is pre‑wired; DeepL/OpenAI require your own API keys).
@@ -44,11 +44,48 @@ That's it — extraction runs fully offline on your PC. Translation is optional 
 npm install
 npm start
 ```
-- **whisper-cpp** is automatically downloaded during `npm install` (~700MB CUDA version)
+- **whisper-cpp** is automatically downloaded during `npm install` (~700MB CUDA version on Windows)
+- On **Linux/macOS**, if no pre-built binary is available, whisper.cpp is automatically built from source (requires `cmake`, `gcc`/`clang`, and `git`)
 - **FFmpeg** is automatically included via npm package
 - First run will download the selected GGML model into `_models/` when missing
 
 > If auto-download fails, manually download from [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) and extract to `whisper-cpp/` folder.
+
+### Linux Setup
+
+WhisperSubTranslate works on Linux with a few extra steps:
+
+**Prerequisites:**
+```bash
+# Ubuntu/Debian
+sudo apt install cmake build-essential git ffmpeg
+
+# For CUDA GPU acceleration (optional, requires NVIDIA GPU + drivers)
+# Install CUDA Toolkit: https://developer.nvidia.com/cuda-downloads
+```
+
+**Run from source:**
+```bash
+git clone https://github.com/Blue-B/WhisperSubTranslate.git
+cd WhisperSubTranslate
+npm install    # whisper.cpp will be auto-built from source
+npm start
+```
+
+If auto-build fails, build whisper.cpp manually:
+```bash
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp
+
+# CPU only
+cmake -B build && cmake --build build --config Release
+
+# With CUDA (NVIDIA GPU)
+cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
+
+# Copy the binary
+cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
+```
 
 ### Build (Windows)
 ```bash

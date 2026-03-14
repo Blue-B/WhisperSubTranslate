@@ -31,7 +31,7 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.4.0-win-x64.zip`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v1.5.0-win-x64.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(무료 MyMemory 기본 제공, DeepL/OpenAI는 본인 API 키 필요).
@@ -42,11 +42,48 @@
 npm install
 npm start
 ```
-- **whisper-cpp**는 `npm install` 시 자동 다운로드됩니다 (~700MB CUDA 버전)
+- **whisper-cpp**는 `npm install` 시 자동 다운로드됩니다 (Windows: ~700MB CUDA 버전)
+- **Linux/macOS**에서는 사전 빌드 바이너리가 없을 경우, 소스에서 자동 빌드됩니다 (`cmake`, `gcc`/`clang`, `git` 필요)
 - **FFmpeg**는 npm 패키지를 통해 자동 포함됩니다
 - 첫 실행 시 선택한 GGML 모델이 없으면 `_models/`에 자동 다운로드됩니다
 
 > 자동 다운로드 실패 시, [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases)에서 수동 다운로드 후 `whisper-cpp/` 폴더에 압축 해제하세요.
+
+### Linux 설치
+
+WhisperSubTranslate는 몇 가지 추가 단계를 거치면 Linux에서도 작동합니다:
+
+**필수 패키지:**
+```bash
+# Ubuntu/Debian
+sudo apt install cmake build-essential git ffmpeg
+
+# CUDA GPU 가속 (선택사항, NVIDIA GPU + 드라이버 필요)
+# CUDA Toolkit 설치: https://developer.nvidia.com/cuda-downloads
+```
+
+**소스에서 실행:**
+```bash
+git clone https://github.com/Blue-B/WhisperSubTranslate.git
+cd WhisperSubTranslate
+npm install    # whisper.cpp가 소스에서 자동 빌드됩니다
+npm start
+```
+
+자동 빌드 실패 시, whisper.cpp를 수동으로 빌드하세요:
+```bash
+git clone https://github.com/ggml-org/whisper.cpp
+cd whisper.cpp
+
+# CPU 전용
+cmake -B build && cmake --build build --config Release
+
+# CUDA 포함 (NVIDIA GPU)
+cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
+
+# 바이너리 복사
+cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
+```
 
 ### Windows 빌드
 ```bash
