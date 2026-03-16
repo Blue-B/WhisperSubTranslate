@@ -121,6 +121,72 @@ function isCudaAvailable() {
   return info.available && info.cudaCompatible;
 }
 
+// ===== CUDA Library Path Helper (Linux LD_LIBRARY_PATH) =====
+// On Linux, CUDA-built whisper-cli needs LD_LIBRARY_PATH to find .so files.
+// Electron apps launched from desktop may not inherit shell env vars.
+let _cudaLibPathCache = null;
+
+function getCudaLibraryPaths() {
+  if (_cudaLibPathCache !== null) return _cudaLibPathCache;
+  if (process.platform === 'win32') { _cudaLibPathCache = []; return []; }
+
+  const found = [];
+  const candidates = [
+    '/usr/local/cuda/lib64',
+    '/usr/local/cuda/lib',
+    '/usr/lib/wsl/lib',           // WSL2 CUDA library path
+    '/usr/lib/x86_64-linux-gnu',
+    '/usr/lib64',
+  ];
+
+  // Detect versioned CUDA installations (e.g. /usr/local/cuda-13.2/lib64)
+  try {
+    const localDirs = fs.readdirSync('/usr/local');
+    for (const dir of localDirs) {
+      if (dir.startsWith('cuda-')) {
+        candidates.push(`/usr/local/${dir}/lib64`);
+        candidates.push(`/usr/local/${dir}/lib`);
+      }
+    }
+  } catch (_e) { /* ignore */ }
+
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) found.push(p); } catch (_e) { /* ignore */ }
+  }
+
+  _cudaLibPathCache = found;
+  if (found.length > 0) {
+    console.log('[CUDA Libs] Found library paths:', found.join(', '));
+  }
+  return found;
+}
+
+function getWhisperSpawnEnv(device, whisperDir) {
+  // On Windows, no env override needed
+  if (process.platform === 'win32') return undefined;
+
+  const cudaPaths = device === 'cuda' ? getCudaLibraryPaths() : [];
+  const allPaths = [];
+
+  // Always include whisper-cpp dir itself (for libwhisper.so/dylib, libggml*.so/dylib)
+  if (whisperDir) allPaths.push(whisperDir);
+  allPaths.push(...cudaPaths);
+
+  // Linux: LD_LIBRARY_PATH, macOS: DYLD_LIBRARY_PATH
+  const isMac = process.platform === 'darwin';
+  const envVar = isMac ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
+  const existingPath = process.env[envVar] || '';
+  allPaths.push(...existingPath.split(':').filter(Boolean));
+
+  // Deduplicate
+  const uniquePaths = [...new Set(allPaths)];
+  if (uniquePaths.length === 0) return undefined;
+
+  const newPath = uniquePaths.join(':');
+  console.log(`[Spawn Env] ${envVar}:`, newPath);
+  return { ...process.env, [envVar]: newPath };
+}
+
 function resolveDevice(requestedDevice) {
   const req = (requestedDevice || 'auto').toLowerCase();
   if (req === 'auto') {
@@ -842,10 +908,12 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
         
         console.log(`[Segment] Processing: ${path.basename(segmentPath)}`);
         
+        const spawnEnv = getWhisperSpawnEnv(device, whisperDir);
         const proc = spawn(exePath, args, {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: whisperDir
+            cwd: whisperDir,
+            ...(spawnEnv ? { env: spawnEnv } : {})
         });
         currentProcess = proc;
 
@@ -884,7 +952,12 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
                     reject(new Error(`Failed to read segment SRT: ${err.message}`));
                 }
             } else {
-                reject(new Error(`Segment processing failed (code: ${code})`));
+                let segError = `Segment processing failed (code: ${code})`;
+                if (code === 127 && process.platform !== 'win32') {
+                    segError += '. Required shared libraries (.so) not found. ' +
+                        'Ensure libwhisper.so and libggml*.so are in whisper-cpp/ folder.';
+                }
+                reject(new Error(segError));
             }
         });
         
@@ -1279,10 +1352,12 @@ function extractSingleFile(filePath, model, language, device) {
             mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CPU mode)...\n');
         }
 
+        const mainSpawnEnv = getWhisperSpawnEnv(chosenDevice, exeCwd);
         currentProcess = spawn(exePath, args, {
             windowsHide: true,
             stdio: ['ignore', 'pipe', 'pipe'],
-            cwd: exeCwd
+            cwd: exeCwd,
+            ...(mainSpawnEnv ? { env: mainSpawnEnv } : {})
         });
 
         // Process timeout handling
@@ -1383,7 +1458,18 @@ function extractSingleFile(filePath, model, language, device) {
                 } else if (code === 1) {
                     errorMessage = 'Whisper processing failed (file format or audio issue)';
                 } else if (code === 127) {
-                    errorMessage = `${WHISPER_CLI_NAME} not found`;
+                    if (process.platform !== 'win32') {
+                        errorMessage = `${WHISPER_CLI_NAME} failed to execute (code 127). ` +
+                            'This usually means required shared libraries (.so) were not found.\n' +
+                            'Check that libwhisper.so and libggml*.so exist in whisper-cpp/ folder.\n' +
+                            (chosenDevice === 'cuda'
+                                ? 'For CUDA: export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH\n' +
+                                  'Or rebuild without CUDA: cmake -B build && cmake --build build\n'
+                                : '') +
+                            'Then copy all built files (whisper-cli + *.so) to whisper-cpp/ folder.';
+                    } else {
+                        errorMessage = `${WHISPER_CLI_NAME} not found`;
+                    }
                 }
                 console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
                 reject(new Error(errorMessage));

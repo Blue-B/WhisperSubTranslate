@@ -9,7 +9,7 @@ assignees: ''
 ## Environment
 
 - **OS**: (e.g., Windows 11, Ubuntu 24.04, macOS 15)
-- **App Version**: (e.g., v1.5.0)
+- **App Version**: (e.g., v1.5.1)
 - **GPU**: (e.g., NVIDIA RTX 4070, or "No GPU / CPU only")
 - **Installation**: (Portable ZIP / Source `npm start`)
 

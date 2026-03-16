@@ -254,7 +254,28 @@ async function buildWhisperFromSource(withCuda) {
       timeout: 120000
     });
 
-    const cmakeArgs = withCuda ? '-DGGML_CUDA=ON' : '';
+    let cmakeArgs = withCuda ? '-DGGML_CUDA=ON' : '';
+
+    // Set RPATH so the binary can find CUDA shared libraries at runtime
+    // without relying on LD_LIBRARY_PATH (fixes Electron launch issues)
+    if (withCuda) {
+      const rpathCandidates = ['/usr/local/cuda/lib64', '/usr/lib/wsl/lib'];
+      try {
+        const localDirs = fs.readdirSync('/usr/local');
+        for (const dir of localDirs) {
+          if (dir.startsWith('cuda-')) {
+            rpathCandidates.push(`/usr/local/${dir}/lib64`);
+          }
+        }
+      } catch (_e) { /* ignore */ }
+      const existingRpaths = rpathCandidates.filter(p => fs.existsSync(p));
+      if (existingRpaths.length > 0) {
+        const rpathStr = existingRpaths.join(':');
+        cmakeArgs += ` -DCMAKE_BUILD_RPATH="${rpathStr}" -DCMAKE_INSTALL_RPATH="${rpathStr}" -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON`;
+        console.log(`  [Build] RPATH set to: ${rpathStr}`);
+      }
+    }
+
     console.log(`  [Build] Running cmake (${withCuda ? 'CUDA' : 'CPU'} mode)...`);
     execSync(`cmake -B build ${cmakeArgs}`, {
       cwd: buildTempDir,
@@ -293,6 +314,42 @@ async function buildWhisperFromSource(withCuda) {
     }
     fs.copyFileSync(builtBinary, WHISPER_CLI);
     fs.chmodSync(WHISPER_CLI, 0o755);
+
+    // Copy shared libraries (.so) needed at runtime (Linux/macOS)
+    if (process.platform !== 'win32') {
+      const buildDir = path.join(buildTempDir, 'build');
+      const soDirs = [
+        path.join(buildDir, 'src'),                    // libwhisper.so
+        path.join(buildDir, 'ggml', 'src'),            // libggml*.so
+        path.join(buildDir, 'ggml', 'src', 'ggml-cuda'), // libggml-cuda.so
+      ];
+      let soCount = 0;
+      for (const dir of soDirs) {
+        if (!fs.existsSync(dir)) continue;
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          const isSharedLib = file.endsWith('.so') || file.includes('.so.') ||
+                             file.endsWith('.dylib') || file.includes('.dylib.');
+          if (!isSharedLib) continue;
+          const src = path.join(dir, file);
+          const dest = path.join(WHISPER_CPP_DIR, file);
+          try {
+            const stat = fs.lstatSync(src);
+            if (stat.isSymbolicLink()) {
+              const linkTarget = fs.readlinkSync(src);
+              try { fs.unlinkSync(dest); } catch (_e) { /* ignore */ }
+              fs.symlinkSync(linkTarget, dest);
+            } else {
+              fs.copyFileSync(src, dest);
+            }
+            soCount++;
+          } catch (_e) { /* ignore individual file errors */ }
+        }
+      }
+      if (soCount > 0) {
+        console.log(`  Copied ${soCount} shared libraries to whisper-cpp/`);
+      }
+    }
 
     console.log('\n  [Build] whisper.cpp built and installed successfully!\n');
     return true;

@@ -1,5 +1,5 @@
 // Queue-based renderer for multi-file processing (memory-leak safe) (대기열 기반 렌더러 - 다중 파일 처리)
-console.log('[Renderer] renderer.js v1.5.0 loaded');
+console.log('[Renderer] renderer.js v1.5.1 loaded');
 
 let fileQueue = []; // processing queue (처리 대기열)
 let isProcessing = false;
