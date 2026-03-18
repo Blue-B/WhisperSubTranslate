@@ -1630,6 +1630,16 @@ ipcMain.handle('open-file-location', async (event, filePath) => {
     return { success: true };
   } catch (error) {
     console.error('Failed to open file location:', error);
+    if (process.platform === 'linux') {
+      try {
+        const dirPath = path.dirname(filePath);
+        const { exec } = require('child_process');
+        exec(`xdg-open "${dirPath}"`);
+        return { success: true };
+      } catch (fallbackError) {
+        console.error('xdg-open fallback also failed:', fallbackError);
+      }
+    }
     return { success: false, error: error.message };
   }
 });
@@ -1638,10 +1648,24 @@ ipcMain.handle('open-file-location', async (event, filePath) => {
 ipcMain.handle('open-folder', async (event, folderPath) => {
   const { shell } = require('electron');
   try {
-    shell.openPath(folderPath);
+    const result = await shell.openPath(folderPath);
+    // shell.openPath returns empty string on success, error message on failure
+    if (result && process.platform === 'linux') {
+      const { exec } = require('child_process');
+      exec(`xdg-open "${folderPath}"`);
+    }
     return { success: true };
   } catch (error) {
     console.error('Failed to open folder:', error);
+    if (process.platform === 'linux') {
+      try {
+        const { exec } = require('child_process');
+        exec(`xdg-open "${folderPath}"`);
+        return { success: true };
+      } catch (fallbackError) {
+        console.error('xdg-open fallback also failed:', fallbackError);
+      }
+    }
     return { success: false, error: error.message };
   }
 });
