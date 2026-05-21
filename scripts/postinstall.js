@@ -364,9 +364,77 @@ async function buildWhisperFromSource(withCuda) {
 }
 
 /**
+ * Ensure cross-platform node-llama-cpp binaries are installed.
+ * npm only installs optionalDependencies matching the current platform/arch,
+ * so we manually fetch the other platforms' binaries via npm.
+ */
+function ensureLlamaBinaries() {
+  const required = [
+    '@node-llama-cpp/win-x64',
+    '@node-llama-cpp/win-x64-cuda',
+    '@node-llama-cpp/win-x64-cuda-ext',
+    '@node-llama-cpp/win-x64-vulkan',
+    '@node-llama-cpp/win-arm64',
+    '@node-llama-cpp/linux-x64',
+    '@node-llama-cpp/linux-x64-cuda',
+    '@node-llama-cpp/linux-x64-cuda-ext',
+    '@node-llama-cpp/linux-x64-vulkan',
+    '@node-llama-cpp/linux-arm64',
+    '@node-llama-cpp/linux-armv7l',
+    '@node-llama-cpp/mac-arm64-metal',
+    '@node-llama-cpp/mac-x64'
+  ];
+  const root = path.join(__dirname, '..');
+  const missing = required.filter(pkg => {
+    return !fs.existsSync(path.join(root, 'node_modules', pkg, 'package.json'));
+  });
+  if (missing.length === 0) {
+    console.log('  [llama] All cross-platform binaries already installed.');
+    return;
+  }
+  // Read version from main node-llama-cpp
+  let version = '3.18.1';
+  try {
+    const main = require(path.join(root, 'node_modules', 'node-llama-cpp', 'package.json'));
+    version = main.version || version;
+  } catch (_e) { /* ignore */ }
+  console.log(`\n  [llama] Installing ${missing.length} cross-platform binary package(s)...`);
+  // npm honors os/cpu fields in package.json and skips non-matching optionalDependencies
+  // even with --force. Pass --os= and --cpu= per package so mac-arm64-metal/mac-x64/etc.
+  // actually get unpacked when installing from a non-matching host (e.g. Windows).
+  function flagsFor(pkg) {
+    let os = 'linux';
+    if (pkg.includes('win-')) os = 'win32';
+    else if (pkg.includes('mac-')) os = 'darwin';
+    let cpu = 'x64';
+    if (pkg.includes('armv7l')) cpu = 'arm';
+    else if (pkg.includes('arm64')) cpu = 'arm64';
+    return `--os=${os} --cpu=${cpu}`;
+  }
+  let failures = 0;
+  for (const pkg of missing) {
+    const cmd = `npm install --no-save --force --ignore-scripts ${flagsFor(pkg)} ${pkg}@${version}`;
+    try {
+      execSync(cmd, { stdio: 'inherit', cwd: root, timeout: 300000 });
+    } catch (err) {
+      failures++;
+      console.log(`  [llama] Failed to install ${pkg}: ${err.message}`);
+    }
+  }
+  if (failures === 0) {
+    console.log('  [llama] Cross-platform binaries installed.\n');
+  } else {
+    console.log(`  [llama] ${failures} package(s) failed. Local translation may only work on the current platform.\n`);
+  }
+}
+
+/**
  * Main installation function
  */
 async function main() {
+  // Ensure node-llama-cpp binaries for all platforms
+  try { ensureLlamaBinaries(); } catch (e) { console.log('  [llama] Skipped:', e.message); }
+
   console.log('\n[postinstall] Checking whisper-cpp...\n');
 
   // Skip if already installed

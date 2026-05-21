@@ -1,396 +1,736 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <title>WhisperSubTranslate</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <!-- 복사 토스트 -->
-  <div id="copyToast" class="copy-toast">복사됨</div>
+  <head>
+    <meta charset="UTF-8" />
+    <title>WhisperSubTranslate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/png" sizes="256x256" href="assets/app-icon-256.png?v=v4w" />
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/app-icon-32.png?v=v4w" />
+    <link rel="stylesheet" href="styles.css?v=v4log17" />
+  </head>
+  <body>
+    <!-- 복사 토스트 -->
+    <div id="copyToast" class="copy-toast" data-i18n="copyToastText">복사됨</div>
 
-  <!-- 업데이트 알림 배너 -->
-  <div id="updateBanner" class="update-banner" style="display: none;">
-    <div class="update-banner-content">
-      <svg class="update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="7 10 12 15 17 10"/>
-        <line x1="12" y1="15" x2="12" y2="3"/>
-      </svg>
-      <span id="updateMessage" class="update-message"></span>
-    </div>
-    <div class="update-banner-actions">
-      <button id="updateDownloadBtn" class="update-btn update-btn-primary">다운로드</button>
-      <button id="updateLaterBtn" class="update-btn update-btn-secondary">나중에</button>
-    </div>
-  </div>
-
-  <!-- Header -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo">
-        <svg viewBox="0 0 32 32" fill="none">
-          <rect width="32" height="32" rx="8" fill="#0f0f0f"/>
-          <path d="M8 10h4v12H8zM14 14h4v4h-4zM20 10h4v12h-4z" fill="#62DE61"/>
+    <!-- 업데이트 알림 배너 -->
+    <div id="updateBanner" class="update-banner" style="display: none">
+      <div class="update-banner-content">
+        <svg class="update-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
-        <span class="logo-text">WhisperSubTranslate</span>
+        <span id="updateMessage" class="update-message"></span>
       </div>
-      <span id="versionBadge" class="version-badge">v1.5.1</span>
-    </div>
-    <div class="header-right">
-      <select id="uiLanguageSelect" class="lang-select" title="UI Language">
-        <option value="ko" selected>한국어</option>
-        <option value="en">English</option>
-        <option value="ja">日本語</option>
-        <option value="zh">中文</option>
-        <option value="pl">Polski</option>
-      </select>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="main-container">
-    <!-- Left Panel - Settings -->
-    <section class="left-panel">
-      <!-- Drop Zone -->
-      <div id="dropZone" class="dropzone">
-        <div class="drop-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <h3 id="dropTitle" class="drop-title">파일 드래그 & 드롭</h3>
-        <p id="dropHint1" class="drop-hint">동영상 또는 SRT 파일을 여기에 드래그하세요</p>
-        <p id="dropHint2" class="drop-formats">MP4, AVI, MKV, MOV, WMV, WEBM, SRT</p>
-        <button id="selectFileBtn" class="btn-select-file">파일 선택</button>
+      <div class="update-banner-actions">
+        <button id="updateDownloadBtn" class="update-btn update-btn-primary" data-i18n="updateDownloadBtn">
+          다운로드
+        </button>
+        <button id="updateLaterBtn" class="update-btn update-btn-secondary" data-i18n="updateLaterBtn">나중에</button>
       </div>
+    </div>
 
-      <!-- Settings -->
-      <div class="settings-grid">
-        <!-- Model Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-            </svg>
-            <span id="labelModel">모델</span>
-          </label>
-          <select id="modelSelect" class="setting-select"></select>
-          <div id="modelStatus" class="setting-hint">모델 상태 확인 중...</div>
-          <div id="modelRequirements" class="setting-hint" style="margin-top: 4px; color: var(--text-muted);"></div>
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">
+          <img src="assets/app-icon-96.png?v=v4w" alt="" aria-hidden="true" class="logo-img" />
+          <span class="logo-text">WhisperSubTranslate</span>
         </div>
-
-        <!-- Language Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <span id="labelLanguage">언어</span>
-          </label>
-          <select id="languageSelect" class="setting-select">
-            <option value="auto" selected>자동 감지</option>
-            <option value="ko">한국어</option>
-            <option value="en">영어</option>
-            <option value="ja">일본어</option>
-            <option value="zh">중국어</option>
-            <option value="es">스페인어</option>
-            <option value="fr">프랑스어</option>
-            <option value="de">독일어</option>
-            <option value="it">이탈리아어</option>
-            <option value="pt">포르투갈어</option>
-            <option value="ru">러시아어</option>
-            <option value="hu">헝가리어</option>
-            <option value="ar">아랍어</option>
-            <option value="pl">폴란드어</option>
-          </select>
-          <div id="langStatusInfo" class="setting-hint"></div>
-        </div>
-
-        <!-- Device Selection -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
-              <rect x="9" y="9" width="6" height="6"/>
-              <line x1="9" y1="1" x2="9" y2="4"/>
-              <line x1="15" y1="1" x2="15" y2="4"/>
-              <line x1="9" y1="20" x2="9" y2="23"/>
-              <line x1="15" y1="20" x2="15" y2="23"/>
-              <line x1="20" y1="9" x2="23" y2="9"/>
-              <line x1="20" y1="14" x2="23" y2="14"/>
-              <line x1="1" y1="9" x2="4" y2="9"/>
-              <line x1="1" y1="14" x2="4" y2="14"/>
-            </svg>
-            <span id="labelDevice">처리 장치</span>
-          </label>
-          <select id="deviceSelect" class="setting-select">
-            <option value="auto" selected>자동 (GPU/CPU)</option>
-            <option value="cuda">GPU (CUDA)</option>
-            <option value="cpu">CPU</option>
-          </select>
-          <div id="deviceStatus" class="setting-hint"></div>
-        </div>
-
-        <!-- Translation -->
-        <div class="setting-card">
-          <label class="setting-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 8l6 6"/>
-              <path d="M4 14l6-6 2-3"/>
-              <path d="M2 5h12"/>
-              <path d="M7 2v3"/>
-              <path d="M22 22l-5-10-5 10"/>
-              <path d="M14 18h6"/>
-            </svg>
-            <span id="labelTranslation">번역</span>
-          </label>
-          <select id="translationSelect" class="setting-select">
-            <option value="none" selected>번역 안함</option>
-            <option value="mymemory">MyMemory (무료)</option>
-            <option value="deepl">DeepL (API 키 필요)</option>
-            <option value="chatgpt">GPT-5-nano (API 키 필요)</option>
-            <option value="gemini">Gemini (무료 API 키)</option>
-          </select>
-          <div id="translationStatus" class="setting-hint"></div>
-        </div>
-
-        <!-- Target Language (shown when translation selected) -->
-        <div class="setting-card" id="targetLanguageGroup" style="display: none;">
-        <label class="setting-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span id="labelTargetLanguage">번역 대상 언어</span>
-        </label>
-        <select id="targetLanguageSelect" class="setting-select">
+        <span id="versionBadge" class="version-badge">v2.0.0</span>
+      </div>
+      <div class="header-right">
+        <select id="uiLanguageSelect" class="lang-select" title="UI Language">
           <option value="ko" selected>한국어</option>
-          <option value="en">영어</option>
-          <option value="ja">일본어</option>
-          <option value="zh">중국어</option>
-          <option value="es">스페인어</option>
-          <option value="fr">프랑스어</option>
-          <option value="de">독일어</option>
-          <option value="it">이탈리아어</option>
-          <option value="pt">포르투갈어</option>
-          <option value="ru">러시아어</option>
-          <option value="hu">헝가리어</option>
-          <option value="ar">아랍어</option>
-          <option value="pl">폴란드어</option>
-          <option value="fa">페르시아어</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="zh">中文</option>
+          <option value="pl">Polski</option>
         </select>
-        <div id="targetLangNote" class="setting-hint"></div>
-        </div>
       </div>
+    </header>
 
-      <!-- Action Buttons -->
-      <div class="action-bar">
-        <button id="runBtn" class="btn-primary">자막 추출 시작</button>
-        <button id="pauseBtn" class="btn-control" style="display: none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="4" width="4" height="16"/>
-            <rect x="14" y="4" width="4" height="16"/>
+    <!-- Main Content -->
+    <main class="main-container">
+      <!-- Sidebar Rail -->
+      <nav class="sidebar-rail" aria-label="Navigation">
+        <button class="rail-btn active" data-view="workspace" data-i18n-title="railWorkspaceTitleAttr" title="작업공간">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="4" width="18" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="18" x2="12" y2="21" />
           </svg>
+          <span class="rail-kbd">1</span>
         </button>
-        <button id="stopBtn" class="btn-control" style="display: none;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="6" width="12" height="12"/>
+        <button class="rail-btn" data-view="history" data-i18n-title="railHistoryTitleAttr" title="히스토리">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <polyline points="3 4 3 9 8 9" />
+            <polyline points="12 7 12 12 15 14" />
           </svg>
-          <span id="stopBtnText">중지</span>
+          <span class="rail-kbd">2</span>
         </button>
-        <button id="settingsBtn" class="btn-secondary" style="flex: 0 0 auto;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        <button class="rail-btn" data-view="models" data-i18n-title="railModelsTitleAttr" title="모델 관리">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5" />
+            <path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6" />
           </svg>
-          <span id="settingsBtnText">설정</span>
+          <span class="rail-kbd">3</span>
         </button>
-      </div>
-    </section>
-
-    <!-- Resize Handle -->
-    <div id="resizeHandle" class="resize-handle" title="Drag to resize"></div>
-
-    <!-- Right Panel - Queue & Log -->
-    <aside id="queueContainer" class="right-panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/>
-            <line x1="8" y1="12" x2="21" y2="12"/>
-            <line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/>
-            <line x1="3" y1="12" x2="3.01" y2="12"/>
-            <line x1="3" y1="18" x2="3.01" y2="18"/>
+        <div class="rail-divider"></div>
+        <div class="rail-spacer"></div>
+        <button class="rail-btn" id="railSettingsBtn" data-i18n-title="railSettingsTitleAttr" title="설정">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+            />
           </svg>
-          <span id="queueTitle">처리 대기열</span>
-          <span id="queueCount" class="queue-count">0</span>
-        </div>
-        <div class="queue-actions">
-          <button id="openFolderBtn" class="btn-sm" title="출력 폴더 열기">출력 폴더</button>
-          <button id="clearQueueBtn" class="btn-sm" title="대기열 삭제">대기열 삭제</button>
-        </div>
-      </div>
+          <span class="rail-kbd">,</span>
+        </button>
+      </nav>
 
-      <!-- Queue List -->
-      <div id="queueList" class="queue-list">
-        <div class="queue-empty">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-          <span>파일을 드래그하여 추가하세요</span>
-        </div>
-      </div>
-
-      <!-- Progress -->
-      <div id="progressContainer" class="progress-section" style="display: none;">
-        <div class="progress-header">
-          <span id="progressTitle" class="progress-title">처리 중...</span>
-          <span id="progressPercent" class="progress-percent">0%</span>
-        </div>
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
-        <div id="progressText" class="progress-status">준비 중...</div>
-      </div>
-
-      <!-- Log Panel -->
-      <div class="log-panel">
-        <div class="log-header">
-          <div class="log-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-              <polyline points="13 2 13 9 20 9"/>
-            </svg>
-            <span id="logTitle">처리 로그</span>
+      <!-- Left Panel - Settings -->
+      <section class="left-panel">
+        <!-- Drop Zone -->
+        <div id="dropZone" class="dropzone">
+          <!-- ambient hero — 뒤 양옆으로 은은한 분위기 -->
+          <div class="drop-hero-bg" aria-hidden="true">
+            <img src="assets/px-hero-scene.png?v=v4rice4" alt="" />
           </div>
-        </div>
-        <div id="output" class="log-content"></div>
-      </div>
-    </aside>
-  </main>
 
-  <!-- Unified Settings Modal -->
-  <div id="settingsModal" class="modal-overlay">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="settingsModalTitle" class="modal-title">설정</h3>
-        <button id="closeSettingsBtn" class="modal-close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <!-- Sound Settings Section -->
-        <div class="settings-section">
-          <h4 id="soundSectionTitle" class="settings-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            </svg>
-            알림음
-          </h4>
-          <div class="sound-settings-row">
-            <label class="toggle-label">
-              <input type="checkbox" id="soundEnabledCheckbox" checked>
-              <span class="toggle-slider"></span>
-              <span id="soundEnabledLabel" class="toggle-text">알림음 사용</span>
-            </label>
-          </div>
-          <div class="sound-volume-row" id="soundVolumeRow">
-            <span id="soundVolumeLabelModal" class="volume-label">볼륨</span>
-            <input type="range" id="soundVolumeSliderModal" min="0" max="100" value="60" class="volume-slider-modal">
-            <span id="soundVolumeValueModal" class="volume-value-modal">60%</span>
-            <button id="soundTestBtnModal" class="btn-test-sound">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;">
-                <polygon points="5 3 19 12 5 21 5 3"/>
+          <!-- 중앙 수직 스택 -->
+          <div class="drop-stack">
+            <div class="drop-mascot-frame">
+              <img class="drop-mascot-img" src="assets/px-mascot-asr.png?v=v4w" alt="" aria-hidden="true" />
+            </div>
+            <h3 id="dropTitle" class="drop-title">여기에 파일을 놓아주세요</h3>
+            <p id="dropHint1" class="drop-hint">동영상이나 SRT 파일을 드래그 또는 클릭하세요</p>
+            <button id="selectFileBtn" class="btn-select-file">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
               </svg>
-              <span id="soundTestLabelModal">테스트</span>
+              <span>파일 선택</span>
+            </button>
+            <div class="drop-formats-row" id="dropHint2">
+              <span class="drop-format-chip">MP4</span>
+              <span class="drop-format-chip">MKV</span>
+              <span class="drop-format-chip">MOV</span>
+              <span class="drop-format-chip">WEBM</span>
+              <span class="drop-format-chip">AVI</span>
+              <span class="drop-format-chip">WMV</span>
+              <span class="drop-format-chip">FLV</span>
+              <span class="drop-format-chip">M4V</span>
+              <span class="drop-format-chip drop-format-chip--alt">SRT</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="settings-grid">
+          <!-- Model Selection -->
+          <div class="setting-card">
+            <label class="setting-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"
+                />
+              </svg>
+              <span id="labelModel">모델</span>
+            </label>
+            <select id="modelSelect" class="setting-select"></select>
+            <div id="modelStatus" class="setting-hint" data-i18n="modelStatusInitial">모델 상태 확인 중...</div>
+            <div id="modelRequirements" class="setting-hint" style="margin-top: 4px; color: var(--text-muted)"></div>
+          </div>
+
+          <!-- Language Selection -->
+          <div class="setting-card">
+            <label class="setting-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              <span id="labelLanguage">언어</span>
+            </label>
+            <select id="languageSelect" class="setting-select">
+              <option value="auto" selected>자동 감지</option>
+              <option value="ko">한국어</option>
+              <option value="en">영어</option>
+              <option value="ja">일본어</option>
+              <option value="zh">중국어</option>
+              <option value="es">스페인어</option>
+              <option value="fr">프랑스어</option>
+              <option value="de">독일어</option>
+              <option value="it">이탈리아어</option>
+              <option value="pt">포르투갈어</option>
+              <option value="ru">러시아어</option>
+              <option value="hu">헝가리어</option>
+              <option value="ar">아랍어</option>
+              <option value="pl">폴란드어</option>
+            </select>
+            <div id="langStatusInfo" class="setting-hint"></div>
+          </div>
+
+          <!-- Device Selection -->
+          <div class="setting-card">
+            <label class="setting-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2" />
+                <rect x="9" y="9" width="6" height="6" />
+                <line x1="9" y1="1" x2="9" y2="4" />
+                <line x1="15" y1="1" x2="15" y2="4" />
+                <line x1="9" y1="20" x2="9" y2="23" />
+                <line x1="15" y1="20" x2="15" y2="23" />
+                <line x1="20" y1="9" x2="23" y2="9" />
+                <line x1="20" y1="14" x2="23" y2="14" />
+                <line x1="1" y1="9" x2="4" y2="9" />
+                <line x1="1" y1="14" x2="4" y2="14" />
+              </svg>
+              <span id="labelDevice">처리 장치</span>
+            </label>
+            <select id="deviceSelect" class="setting-select">
+              <option value="auto" selected>자동 (GPU/CPU)</option>
+              <option value="cuda">GPU (CUDA)</option>
+              <option value="cpu">CPU</option>
+            </select>
+            <div id="deviceStatus" class="setting-hint"></div>
+          </div>
+
+          <!-- Translation -->
+          <div class="setting-card">
+            <label class="setting-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 8l6 6" />
+                <path d="M4 14l6-6 2-3" />
+                <path d="M2 5h12" />
+                <path d="M7 2v3" />
+                <path d="M22 22l-5-10-5 10" />
+                <path d="M14 18h6" />
+              </svg>
+              <span id="labelTranslation">번역</span>
+            </label>
+            <select id="translationSelect" class="setting-select">
+              <option value="none" selected></option>
+              <option value="local"></option>
+              <option value="mymemory"></option>
+              <option value="deepl"></option>
+              <option value="chatgpt"></option>
+              <option value="chatgpt-nano"></option>
+              <option value="gemini"></option>
+            </select>
+            <div id="translationStatus" class="setting-hint"></div>
+            <!-- Local model sub-selector (HY-MT 1.8B / 7B) -->
+            <div id="localModelGroup" class="local-model-sub" style="display: none; margin-top: 8px">
+              <label class="setting-label" style="font-size: 11px; opacity: 0.85">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M9 9h6v6H9z" />
+                </svg>
+                <span id="labelLocalModel">로컬 모델</span>
+              </label>
+              <select id="localModelSelect" class="setting-select">
+                <option value="1.8b" data-i18n="localModel18bOption">HY-MT 1.8B · 빠름 (권장)</option>
+                <option value="7b" data-i18n="localModel7bOption">HY-MT 7B · 고품질</option>
+              </select>
+              <div id="localModelRequirements" class="setting-hint" style="margin-top: 4px"></div>
+            </div>
+          </div>
+
+          <!-- Target Language (shown when translation selected) -->
+          <div class="setting-card" id="targetLanguageGroup" style="display: none">
+            <label class="setting-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span id="labelTargetLanguage">번역 대상 언어</span>
+            </label>
+            <select id="targetLanguageSelect" class="setting-select">
+              <option value="ko" selected>한국어</option>
+              <option value="en">영어</option>
+              <option value="ja">일본어</option>
+              <option value="zh">중국어</option>
+              <option value="es">스페인어</option>
+              <option value="fr">프랑스어</option>
+              <option value="de">독일어</option>
+              <option value="it">이탈리아어</option>
+              <option value="pt">포르투갈어</option>
+              <option value="ru">러시아어</option>
+              <option value="hu">헝가리어</option>
+              <option value="ar">아랍어</option>
+              <option value="pl">폴란드어</option>
+              <option value="fa">페르시아어</option>
+            </select>
+            <div id="targetLangNote" class="setting-hint"></div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-bar">
+          <button id="runBtn" class="btn-primary">자막 추출 시작</button>
+          <button id="pauseBtn" class="btn-control" style="display: none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
+            </svg>
+          </button>
+          <button id="stopBtn" class="btn-control" style="display: none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" />
+            </svg>
+            <span id="stopBtnText">중지</span>
+          </button>
+          <button id="settingsBtn" class="btn-secondary" style="display: none">
+            <span id="settingsBtnText">설정</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Resize Handle -->
+      <div id="resizeHandle" class="resize-handle" title="Drag to resize"></div>
+
+      <!-- Right Panel - Queue & Log -->
+      <aside id="queueContainer" class="right-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            <span id="queueTitle">처리 대기열</span>
+            <span id="queueCount" class="queue-count">0</span>
+          </div>
+          <div class="queue-actions">
+            <button id="openFolderBtn" class="btn-sm" data-i18n-title="openFolderBtnTitle" title="출력 폴더 열기">
+              출력 폴더
+            </button>
+            <button id="clearQueueBtn" class="btn-sm" data-i18n-title="clearQueueBtnTitle" title="대기열 삭제">
+              대기열 삭제
             </button>
           </div>
         </div>
 
-        <!-- API Keys Section -->
-        <div class="settings-section">
-          <h4 id="apiSectionTitle" class="settings-section-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;">
-              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+        <!-- Queue List -->
+        <div id="queueList" class="queue-list">
+          <div class="queue-empty">
+            <div class="queue-empty-icon queue-empty-pixel">
+              <img src="assets/px-empty-queue.png?v=v4w" alt="" aria-hidden="true" />
+            </div>
+            <p id="emptyQueueTitle" class="queue-empty-title">대기열 비어 있음</p>
+            <p id="emptyQueueHint" class="queue-empty-hint">동영상이나 SRT 파일을<br />왼쪽 드랍존에 드래그하세요</p>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div id="progressContainer" class="progress-section" style="display: none">
+          <!-- Step stepper -->
+          <div class="progress-steps">
+            <div class="progress-step" id="stepExtract">
+              <div class="progress-step-dot"></div>
+              <span id="stepLabelExtract">추출</span>
+            </div>
+            <div class="progress-step-line" id="stepLine1"></div>
+            <div class="progress-step" id="stepTranslate">
+              <div class="progress-step-dot"></div>
+              <span id="stepLabelTranslate">번역</span>
+            </div>
+            <div class="progress-step-line" id="stepLine2"></div>
+            <div class="progress-step" id="stepDone">
+              <div class="progress-step-dot"></div>
+              <span id="stepLabelDone">완료</span>
+            </div>
+          </div>
+          <div class="progress-header">
+            <span id="progressTitle" class="progress-title" data-i18n="progressTitleText">처리 중...</span>
+            <span id="progressPercent" class="progress-percent">0%</span>
+          </div>
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <div id="progressText" class="progress-status" data-i18n="progressTextInitial">준비 중...</div>
+        </div>
+
+        <!-- Log Panel -->
+        <div class="log-panel">
+          <div class="log-header">
+            <div class="log-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                <polyline points="13 2 13 9 20 9" />
+              </svg>
+              <span id="logTitle">처리 로그</span>
+            </div>
+          </div>
+          <div id="output" class="log-content"></div>
+        </div>
+      </aside>
+
+      <!-- View: History -->
+      <section id="viewHistory" class="view-panel">
+        <header class="view-header">
+          <div class="view-header-inner">
+            <div class="view-title-block">
+              <h1 class="view-title" id="historyTitle">히스토리</h1>
+              <p class="view-subtitle" id="historySubtitle">최근 처리한 파일 · 최대 200개 자동 보관</p>
+            </div>
+            <div class="view-actions">
+              <input
+                id="historySearch"
+                type="search"
+                class="view-search"
+                data-i18n-placeholder="historySearchPlaceholder"
+                placeholder="검색"
+              />
+              <button
+                id="clearHistoryBtn"
+                class="btn-sm"
+                data-i18n="clearHistoryBtn"
+                data-i18n-title="clearHistoryBtnTitle"
+                title="히스토리 지우기"
+              >
+                전체 지우기
+              </button>
+            </div>
+          </div>
+          <div class="view-stats" id="historyStats">
+            <div class="stat-pill">
+              <span class="stat-label" data-i18n="statTotalFilesLabel">총 파일</span
+              ><span class="stat-value" id="statTotalFiles">0</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label" data-i18n="statSuccessLabel">성공</span
+              ><span class="stat-value" id="statSuccess">0</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label" data-i18n="statFailedLabel">실패</span
+              ><span class="stat-value" id="statFailed">0</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label" data-i18n="statThisWeekLabel">이번 주</span
+              ><span class="stat-value" id="statThisWeek">0</span>
+            </div>
+          </div>
+        </header>
+        <div id="historyList" class="history-list">
+          <div class="history-empty">
+            <div class="history-empty-pixel">
+              <img src="assets/px-empty-history.png?v=v4w" alt="" aria-hidden="true" />
+            </div>
+            <p class="history-empty-title" id="historyEmptyTitle" data-i18n="historyEmptyTitleStatic">
+              아직 작업 이력이 없습니다
+            </p>
+            <p class="history-empty-hint" id="historyEmptyHint" data-i18n="historyEmptyHintStatic">
+              파일을 처리하면 여기에 자동으로 기록돼요
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- View: Models -->
+      <section id="viewModels" class="view-panel">
+        <header class="view-header">
+          <div class="view-header-inner">
+            <div class="view-title-block">
+              <h1 class="view-title" id="modelsTitle">모델 관리</h1>
+              <p class="view-subtitle" id="modelsSubtitle">다운로드된 음성 인식 · 번역 모델</p>
+            </div>
+            <div class="view-actions">
+              <button
+                id="refreshModelsBtn"
+                class="btn-sm"
+                data-i18n="refreshBtnText"
+                data-i18n-title="refreshBtnTitle"
+                title="상태 새로고침"
+              >
+                새로고침
+              </button>
+            </div>
+          </div>
+        </header>
+        <div class="models-grid" id="modelsGrid">
+          <!-- Models will be rendered by renderer.js -->
+        </div>
+      </section>
+    </main>
+
+    <!-- Unified Settings Modal -->
+    <div id="settingsModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="settingsModalTitle" class="modal-title">설정</h3>
+          <button id="closeSettingsBtn" class="modal-close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
-            번역 API 키
-          </h4>
-          <div class="form-group">
-            <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="deeplApiKey" class="form-input" placeholder="DeepL API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="deeplApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
+          </button>
+        </div>
+        <div class="modal-body">
+          <!-- Sound Settings Section -->
+          <div class="settings-section">
+            <h4 id="soundSectionTitle" class="settings-section-title">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="width: 16px; height: 16px"
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+              </svg>
+              알림음
+            </h4>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="soundEnabledCheckbox" checked />
+                <span class="toggle-slider"></span>
+                <span id="soundEnabledLabel" class="toggle-text">알림음 사용</span>
+              </label>
+            </div>
+            <div class="sound-volume-row" id="soundVolumeRow">
+              <span id="soundVolumeLabelModal" class="volume-label">볼륨</span>
+              <input
+                type="range"
+                id="soundVolumeSliderModal"
+                min="0"
+                max="100"
+                value="60"
+                class="volume-slider-modal"
+              />
+              <span id="soundVolumeValueModal" class="volume-value-modal">60%</span>
+              <button id="soundTestBtnModal" class="btn-test-sound">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  style="width: 12px; height: 12px"
+                >
+                  <polygon points="5 3 19 12 5 21 5 3" />
                 </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
+                <span id="soundTestLabelModal">테스트</span>
               </button>
             </div>
-            <p id="deeplHelp" class="form-hint"></p>
           </div>
-          <div class="form-group">
-            <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="openaiApiKey" class="form-input" placeholder="OpenAI API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="openaiApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
+
+          <!-- History Section -->
+          <div class="settings-section">
+            <h4 id="historySectionTitle" class="settings-section-title">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="width: 16px; height: 16px"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span id="historySectionTitleText">히스토리</span>
+            </h4>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="historyEnabledCheckbox" checked />
+                <span class="toggle-slider"></span>
+                <span id="historyEnabledLabel" class="toggle-text">작업 이력 기록</span>
+              </label>
             </div>
-            <p id="openaiHelp" class="form-hint"></p>
+            <p id="historyHint" class="settings-hint">
+              꺼면 이후 처리 파일이 기록되지 않아요. 기존 히스토리는 보존되며 '전체 지우기' 로 안전하게 삭제할 수
+              있어요.
+            </p>
           </div>
-          <div class="form-group">
-            <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
-            <div class="input-with-toggle">
-              <input type="password" id="geminiApiKey" class="form-input" placeholder="Gemini API 키를 입력하세요">
-              <button type="button" class="toggle-password" data-target="geminiApiKey" title="비밀번호 표시/숨기기">
-                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <svg class="eye-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                  <line x1="1" y1="1" x2="23" y2="23"/>
-                </svg>
-              </button>
+
+          <!-- API Keys Section -->
+          <div class="settings-section">
+            <h4 id="apiSectionTitle" class="settings-section-title">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="width: 16px; height: 16px"
+              >
+                <path
+                  d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
+                />
+              </svg>
+              번역 API 키
+            </h4>
+            <div class="form-group">
+              <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
+              <div class="input-with-toggle">
+                <input
+                  type="password"
+                  id="deeplApiKey"
+                  class="form-input"
+                  data-i18n-placeholder="deeplApiKeyPlaceholder"
+                  placeholder="DeepL API 키를 입력하세요"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  data-target="deeplApiKey"
+                  data-i18n-title="togglePasswordTitle"
+                  title="비밀번호 표시/숨기기"
+                >
+                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="eye-off-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    style="display: none"
+                  >
+                    <path
+                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </button>
+              </div>
+              <p id="deeplHelp" class="form-hint"></p>
             </div>
-            <p id="geminiHelp" class="form-hint"></p>
+            <div class="form-group">
+              <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
+              <div class="input-with-toggle">
+                <input
+                  type="password"
+                  id="openaiApiKey"
+                  class="form-input"
+                  data-i18n-placeholder="openaiApiKeyPlaceholder"
+                  placeholder="OpenAI API 키를 입력하세요"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  data-target="openaiApiKey"
+                  data-i18n-title="togglePasswordTitle"
+                  title="비밀번호 표시/숨기기"
+                >
+                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="eye-off-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    style="display: none"
+                  >
+                    <path
+                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </button>
+              </div>
+              <p id="openaiHelp" class="form-hint"></p>
+            </div>
+            <div class="form-group">
+              <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
+              <div class="input-with-toggle">
+                <input
+                  type="password"
+                  id="geminiApiKey"
+                  class="form-input"
+                  data-i18n-placeholder="geminiApiKeyPlaceholder"
+                  placeholder="Gemini API 키를 입력하세요"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  data-target="geminiApiKey"
+                  data-i18n-title="togglePasswordTitle"
+                  title="비밀번호 표시/숨기기"
+                >
+                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="eye-off-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    style="display: none"
+                  >
+                    <path
+                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                </button>
+              </div>
+              <p id="geminiHelp" class="form-hint"></p>
+            </div>
+            <div id="apiKeyStatus" class="api-status"></div>
           </div>
-          <div id="apiKeyStatus" class="api-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="testApiKeysBtn" class="btn-modal btn-modal-secondary">연결 테스트</button>
+          <button id="saveSettingsBtn" class="btn-modal btn-modal-primary">저장</button>
         </div>
       </div>
-      <div class="modal-footer">
-        <button id="testApiKeysBtn" class="btn-modal btn-modal-secondary">연결 테스트</button>
-        <button id="saveSettingsBtn" class="btn-modal btn-modal-primary">저장</button>
-      </div>
     </div>
-  </div>
 
-  <script src="locales/i18n.js"></script>
-  <script src="renderer.js"></script>
-</body>
+    <script src="locales/i18n.js?v=4ac67e1b"></script>
+    <script src="renderer.js?v=v4log17"></script>
+  </body>
 </html>

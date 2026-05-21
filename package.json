@@ -1,14 +1,18 @@
 {
   "name": "whispersubtranslate",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "main": "main.js",
   "scripts": {
     "start": "electron --expose-gc .",
     "build": "electron-builder --publish never",
     "build-win": "electron-builder --win",
     "postinstall": "node scripts/postinstall.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node scripts/smoke-test.js",
+    "test:e2e": "node scripts/e2e-smoke.js",
     "lint": "eslint *.js locales/*.js --fix",
+    "lint:check": "eslint *.js locales/*.js",
+    "check": "npm run lint:check && npm test",
+    "check:full": "npm run lint:check && npm test && npm run test:e2e",
     "format": "prettier --write \"*.js\" \"locales/*.js\" \"*.json\" \"*.html\" \"*.css\""
   },
   "keywords": [],
@@ -26,34 +30,83 @@
       "preload.js",
       "index.html",
       "styles.css",
-      "locales/i18n.js",
+      "icon.png",
+      "assets/**",
+      "locales/**",
       "renderer.js",
       "translator-enhanced.js",
-      "myMemoryTranslator.js"
+      "lib/**",
+      "local-translator.js",
+      "myMemoryTranslator.js",
+      "scripts/postinstall.js",
+      "node_modules/**/*",
+      "!node_modules/**/{*.md,*.markdown,LICENSE*,test,tests,__tests__,*.map}",
+      "!node_modules/@node-llama-cpp/linux-*/**",
+      "!node_modules/@node-llama-cpp/win-arm64/**",
+      "!node_modules/ffprobe-static/bin/linux/**",
+      "!node_modules/ffprobe-static/bin/darwin/**"
     ],
     "extraResources": [
       {
-        "from": "whisper-cpp",
-        "to": "whisper-cpp"
-      },
-      {
         "from": "nya.wav",
         "to": "nya.wav"
-      },
-      {
-        "from": "ffprobe.exe",
-        "to": "ffprobe.exe"
       }
     ],
     "asarUnpack": [
       "node_modules/ffmpeg-static/**",
-      "node_modules/ffprobe-static/**"
+      "node_modules/ffprobe-static/**",
+      "node_modules/node-llama-cpp/**",
+      "node_modules/@node-llama-cpp/**"
     ],
     "win": {
       "target": [
         "dir"
       ],
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "extraResources": [
+        {
+          "from": "whisper-cpp",
+          "to": "whisper-cpp"
+        },
+        {
+          "from": "ffprobe.exe",
+          "to": "ffprobe.exe"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "icon.png",
+      "extraResources": [
+        {
+          "from": "whisper-cpp",
+          "to": "whisper-cpp",
+          "filter": [
+            "whisper-cli",
+            "cpu/**",
+            "*.so*"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "icon": "icon.png",
+      "extraResources": [
+        {
+          "from": "whisper-cpp",
+          "to": "whisper-cpp",
+          "filter": [
+            "whisper-cli",
+            "cpu/**",
+            "*.dylib"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -69,12 +122,29 @@
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.1.0",
+    "playwright": "^1.60.0",
     "prettier": "^3.8.1"
   },
   "dependencies": {
     "axios": "^1.6.0",
     "deepl-node": "^1.13.0",
     "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0"
+    "ffprobe-static": "^3.1.0",
+    "node-llama-cpp": "^3.18.1"
+  },
+  "optionalDependencies": {
+    "@node-llama-cpp/linux-arm64": "3.18.1",
+    "@node-llama-cpp/linux-armv7l": "3.18.1",
+    "@node-llama-cpp/linux-x64": "3.18.1",
+    "@node-llama-cpp/linux-x64-cuda": "3.18.1",
+    "@node-llama-cpp/linux-x64-cuda-ext": "3.18.1",
+    "@node-llama-cpp/linux-x64-vulkan": "3.18.1",
+    "@node-llama-cpp/mac-arm64-metal": "3.18.1",
+    "@node-llama-cpp/mac-x64": "3.18.1",
+    "@node-llama-cpp/win-arm64": "3.18.1",
+    "@node-llama-cpp/win-x64": "3.18.1",
+    "@node-llama-cpp/win-x64-cuda": "3.18.1",
+    "@node-llama-cpp/win-x64-cuda-ext": "3.18.1",
+    "@node-llama-cpp/win-x64-vulkan": "3.18.1"
   }
 }

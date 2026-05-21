@@ -4,18 +4,67 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const MyMemoryTranslator = require('./myMemoryTranslator');
+const localTranslator = require('./local-translator');
 
 let electronApp = null;
+let electronSafeStorage = null;
 try {
-  const { app } = require('electron');
-  electronApp = app;
+  const electronModule = require('electron');
+  electronApp = electronModule.app || null;
+  electronSafeStorage = electronModule.safeStorage || null;
 } catch (error) {
   console.log('[Translator] Running without Electron app context:', error.message);
 }
 
-// Encryption settings (암호화 설정)
+// Legacy AES key remains only for one-shot migration off the hardcoded secret.
+// New writes go through Electron safeStorage (OS-level: DPAPI / Keychain / libsecret).
 const ENCRYPTION_KEY = 'whisper-sub-translate-secure-key-2024-32bytes!!';
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
+
+function safeStorageAvailable() {
+  try {
+    return !!(
+      electronSafeStorage &&
+      typeof electronSafeStorage.isEncryptionAvailable === 'function' &&
+      electronSafeStorage.isEncryptionAvailable()
+    );
+  } catch (_err) {
+    return false;
+  }
+}
+
+function getSafeStorageConfigPath() {
+  try {
+    if (electronApp && electronApp.getPath) {
+      return path.join(electronApp.getPath('userData'), 'translation-config-safe.json');
+    }
+  } catch (_err) {
+    /* noop */
+  }
+  return path.join(__dirname, 'translation-config-safe.json');
+}
+
+function safeStorageEncryptJson(jsonText) {
+  if (!safeStorageAvailable()) return null;
+  try {
+    const buf = electronSafeStorage.encryptString(jsonText);
+    return buf.toString('base64');
+  } catch (error) {
+    console.error('[safeStorage] encrypt failed:', error.message);
+    return null;
+  }
+}
+
+function safeStorageDecryptJson(base64Text) {
+  if (!safeStorageAvailable()) return null;
+  try {
+    const buf = Buffer.from(base64Text, 'base64');
+    return electronSafeStorage.decryptString(buf);
+  } catch (error) {
+    console.error('[safeStorage] decrypt failed:', error.message);
+    return null;
+  }
+}
 
 function getConfigPath() {
   try {
@@ -53,7 +102,8 @@ function getLogPath() {
         console.log('[Logs] Created logs directory:', logsDir);
       }
 
-      return path.join(logsDir, 'translation-errors.log');
+      // 통합 errors.log로 일본화 (이전엔 translation-errors.log)
+      return path.join(logsDir, 'errors.log');
     }
   } catch (error) {
     console.log('[Logs] Failed to get log path:', error.message);
@@ -73,7 +123,9 @@ function cleanupLogFile(logPath) {
     const stats = fs.statSync(logPath);
     if (stats.size <= LOG_MAX_SIZE) return;
 
-    console.log(`[Logs] Log file exceeds ${LOG_MAX_SIZE / 1024 / 1024}MB (${(stats.size / 1024 / 1024).toFixed(2)}MB), cleaning up...`);
+    console.log(
+      `[Logs] Log file exceeds ${LOG_MAX_SIZE / 1024 / 1024}MB (${(stats.size / 1024 / 1024).toFixed(2)}MB), cleaning up...`
+    );
 
     // 파일 읽어서 최근 1000줄만 유지
     const content = fs.readFileSync(logPath, 'utf8');
@@ -160,14 +212,15 @@ class EnhancedSubtitleTranslator {
     this.myMemoryTranslator = new MyMemoryTranslator();
     this.apiKeys = this.loadApiKeys();
     this.translationCache = new Map();
-    this.currentFileId = null;       // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
+    this.currentFileId = null; // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
     this.lastRequestTime = 0;
-    this.minRequestInterval = 20;    // 50ms → 20ms (더 빠르게)
-    this.maxRetries = 3;             // 번역 실패 최소화를 위해 재시도 횟수 증가
-    this.batchSize = 5;              // 3 → 5 (5개씩 묶어서 처리)
-    this.mainWindow = null;          // mainWindow 참조 저장
-    this.geminiApiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
-    this._aborted = false;           // 사용자 중지 플래그
+    this.minRequestInterval = 20; // 50ms → 20ms (더 빠르게)
+    this.maxRetries = 3; // 번역 실패 최소화를 위해 재시도 횟수 증가
+    this.batchSize = 5; // 3 → 5 (5개씩 묶어서 처리)
+    this.mainWindow = null; // mainWindow 참조 저장
+    this.geminiApiEndpoint =
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent';
+    this._aborted = false; // 사용자 중지 플래그
     this.cacheHits = 0;
     this.cacheMisses = 0;
   }
@@ -220,42 +273,73 @@ class EnhancedSubtitleTranslator {
           keysToDelete.push(key);
         }
       }
-      keysToDelete.forEach(key => this.translationCache.delete(key));
+      keysToDelete.forEach((key) => this.translationCache.delete(key));
       console.log(`[Cache] Removed ${keysToDelete.length} cached translations for ${this.currentFileId}`);
     }
     this.currentFileId = null;
   }
 
+  hydrateApiConfig(config) {
+    return {
+      deepl: config.deepl || '',
+      openai: config.openai || '',
+      openaiModel: config.openaiModel || 'gpt-5.4-mini',
+      gemini: config.gemini || '',
+      deepseek: config.deepseek || '',
+      preferredService: config.preferredService || 'mymemory',
+      enableCache: config.enableCache !== false,
+      batchTranslation: config.batchTranslation !== false,
+      maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
+      uiLanguage: config.uiLanguage || 'ko',
+      selectedModel: config.selectedModel || '',
+      selectedLanguage: config.selectedLanguage || '',
+      selectedDevice: config.selectedDevice || '',
+      selectedTranslation: config.selectedTranslation || '',
+      selectedTargetLanguage: config.selectedTargetLanguage || '',
+    };
+  }
+
   loadApiKeys() {
-    // Attempt migration from plaintext on first run (첫 실행 시 평문 마이그레이션 시도)
     migratePlaintextConfig();
 
-    const encryptedConfigPath = getEncryptedConfigPath();
+    const safePath = getSafeStorageConfigPath();
+    if (safeStorageAvailable() && fs.existsSync(safePath)) {
+      try {
+        const payload = JSON.parse(fs.readFileSync(safePath, 'utf8'));
+        const decrypted = safeStorageDecryptJson(payload.data);
+        if (decrypted) {
+          return this.hydrateApiConfig(JSON.parse(decrypted));
+        }
+      } catch (error) {
+        console.error('[Config] Failed to load safeStorage config:', error.message);
+      }
+    }
 
+    const encryptedConfigPath = getEncryptedConfigPath();
     try {
       if (fs.existsSync(encryptedConfigPath)) {
         const encryptedFile = JSON.parse(fs.readFileSync(encryptedConfigPath, 'utf8'));
         const decrypted = decryptData(encryptedFile.data);
-
         if (decrypted) {
-          const config = JSON.parse(decrypted);
-          return {
-            deepl: config.deepl || '',
-            openai: config.openai || '',
-            gemini: config.gemini || '',
-            deepseek: config.deepseek || '',
-            preferredService: config.preferredService || 'mymemory',
-            enableCache: config.enableCache !== false,
-            batchTranslation: config.batchTranslation !== false,
-            maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
-            uiLanguage: config.uiLanguage || 'ko',
-            // 앱 설정 (모델, 언어, 장치 등)
-            selectedModel: config.selectedModel || '',
-            selectedLanguage: config.selectedLanguage || '',
-            selectedDevice: config.selectedDevice || '',
-            selectedTranslation: config.selectedTranslation || '',
-            selectedTargetLanguage: config.selectedTargetLanguage || ''
-          };
+          const hydrated = this.hydrateApiConfig(JSON.parse(decrypted));
+          if (safeStorageAvailable()) {
+            try {
+              const reencrypted = safeStorageEncryptJson(JSON.stringify(hydrated));
+              if (reencrypted) {
+                fs.writeFileSync(safePath, JSON.stringify({ data: reencrypted }));
+                const legacyBackup = encryptedConfigPath + '.legacy-backup';
+                try {
+                  fs.renameSync(encryptedConfigPath, legacyBackup);
+                } catch (_e) {
+                  /* noop */
+                }
+                console.log('[Config] Migrated legacy AES config to safeStorage:', safePath);
+              }
+            } catch (error) {
+              console.warn('[Config] safeStorage migration failed:', error.message);
+            }
+          }
+          return hydrated;
         }
       }
     } catch (error) {
@@ -269,13 +353,14 @@ class EnhancedSubtitleTranslator {
     return {
       deepl: '',
       openai: '',
+      openaiModel: 'gpt-5.4-mini',
       gemini: '',
       deepseek: '',
       preferredService: 'mymemory',
       enableCache: true,
       batchTranslation: true,
       maxConcurrent: this.getOptimalConcurrency(),
-      uiLanguage: 'ko'
+      uiLanguage: 'ko',
     };
   }
 
@@ -299,9 +384,10 @@ class EnhancedSubtitleTranslator {
         concurrency = 2; // 저사양 PC (1→2)
       }
 
-      console.log(`[Performance] Detected: ${totalMemGB.toFixed(1)}GB RAM, ${cpuCount} CPU cores → Max concurrent: ${concurrency}`);
+      console.log(
+        `[Performance] Detected: ${totalMemGB.toFixed(1)}GB RAM, ${cpuCount} CPU cores → Max concurrent: ${concurrency}`
+      );
       return concurrency;
-
     } catch (_error) {
       console.warn('[Performance] Failed to detect system specs, using safe default (3)');
       return 3;
@@ -311,41 +397,48 @@ class EnhancedSubtitleTranslator {
   // 서비스별 최적 배치 크기 (더 공격적으로 설정하여 속도 개선)
   getOptimalBatchSize(service) {
     const batchSizes = {
-      'mymemory': 10,  // 무료 서비스 - 많이 묶어서 처리 (5→10)
-      'deepl': 8,      // 유료 API - 더 큰 배치 (3→8)
-      'chatgpt': 5,    // 고급 모델 - 중간 배치 (2→5)
-      'gemini': 6,     // Gemini - 중간 배치 (빠른 응답)
-      'offline': 15    // 오프라인 - 가장 큰 배치 (네트워크 없음)
+      mymemory: 10, // 무료 서비스 - 많이 묶어서 처리 (5→10)
+      deepl: 8, // 유료 API - 더 큰 배치 (3→8)
+      chatgpt: 5, // 고급 모델 - 중간 배치 (2→5)
+      gemini: 6, // Gemini - 중간 배치 (빠른 응답)
+      offline: 15, // 오프라인 - 가장 큰 배치 (네트워크 없음)
     };
 
     return batchSizes[service] || 8; // 기본값 3→8
   }
 
   saveApiKeys(keys) {
-    const encryptedConfigPath = getEncryptedConfigPath();
-
     try {
-      // Load existing config
       const existingConfig = this.loadApiKeys();
       const newConfig = { ...existingConfig, ...keys };
+      const json = JSON.stringify(newConfig);
 
-      // Encrypt and save
-      const encryptedData = encryptData(JSON.stringify(newConfig));
-      if (encryptedData) {
-        fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
-
-        // Reload keys
-        this.apiKeys = this.loadApiKeys();
-
-        if (this.apiKeys.deepl) {
-          this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
+      if (safeStorageAvailable()) {
+        const encryptedSafe = safeStorageEncryptJson(json);
+        if (encryptedSafe) {
+          fs.writeFileSync(getSafeStorageConfigPath(), JSON.stringify({ data: encryptedSafe }));
+          this.apiKeys = this.loadApiKeys();
+          if (this.apiKeys.deepl) {
+            this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
+          }
+          console.log('[Config] API keys saved via Electron safeStorage');
+          return true;
         }
+        console.warn('[Config] safeStorage save failed, falling back to legacy AES');
+      }
 
-        console.log('[Config] API keys saved securely with encryption');
-        return true;
-      } else {
+      const encryptedConfigPath = getEncryptedConfigPath();
+      const encryptedData = encryptData(json);
+      if (!encryptedData) {
         throw new Error('Encryption failed');
       }
+      fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
+      this.apiKeys = this.loadApiKeys();
+      if (this.apiKeys.deepl) {
+        this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
+      }
+      console.log('[Config] API keys saved with legacy AES (safeStorage unavailable)');
+      return true;
     } catch (error) {
       console.error('[Config] Failed to save API keys:', error.message);
       return false;
@@ -363,7 +456,7 @@ class EnhancedSubtitleTranslator {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // convert to 32-bit integer (32비트 정수로 변환)
     }
     return hash.toString();
@@ -413,16 +506,16 @@ class EnhancedSubtitleTranslator {
   async throttleRequest() {
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
-    
+
     if (timeSinceLastRequest < this.minRequestInterval) {
       await this.sleep(this.minRequestInterval - timeSinceLastRequest);
     }
-    
+
     this.lastRequestTime = Date.now();
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // Enhanced error handling (향상된 에러 처리) - 콘솔 + 파일 로그
@@ -431,7 +524,7 @@ class EnhancedSubtitleTranslator {
       timestamp: new Date().toISOString(),
       context,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     };
     console.error('[Translation Error]', errorInfo);
 
@@ -454,7 +547,7 @@ class EnhancedSubtitleTranslator {
   // Translation with retry (재시도 로직)
   async translateWithRetry(translateFn, text, maxRetries = this.maxRetries) {
     let lastError;
-    
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) {
@@ -464,17 +557,22 @@ class EnhancedSubtitleTranslator {
       } catch (error) {
         lastError = error;
         this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed`, error);
-        
+
         // Do not retry on permanent errors (영구적 오류는 재시도 안함)
-        if (error.message.includes('401') || error.message.includes('403') ||
-            error.message.includes('429') || error.message.includes('quota') ||
-            error.message.includes('Too Many Requests') || error.message.includes('RESOURCE_EXHAUSTED')) {
+        if (
+          error.message.includes('401') ||
+          error.message.includes('403') ||
+          error.message.includes('429') ||
+          error.message.includes('quota') ||
+          error.message.includes('Too Many Requests') ||
+          error.message.includes('RESOURCE_EXHAUSTED')
+        ) {
           // 429 에러는 API 할당량 초과이므로 재시도 무의미
           break;
         }
       }
     }
-    
+
     throw lastError;
   }
 
@@ -487,17 +585,17 @@ class EnhancedSubtitleTranslator {
     // 캐시 확인
     const cached = this.getCachedTranslation(text, 'deepl', targetLang);
     if (cached) {
-      console.log('[DeepL Cache Hit]', { 
-        text: text.substring(0, 30) + '...', 
-        cached: true 
+      console.log('[DeepL Cache Hit]', {
+        text: text.substring(0, 30) + '...',
+        cached: true,
       });
       return cached;
     }
 
-    console.log('[DeepL Translation]', { 
-      text: text.substring(0, 50) + '...', 
+    console.log('[DeepL Translation]', {
+      text: text.substring(0, 50) + '...',
       targetLang,
-      textLength: text.length 
+      textLength: text.length,
     });
 
     await this.throttleRequest();
@@ -510,35 +608,47 @@ class EnhancedSubtitleTranslator {
       const startTime = Date.now();
       const result = await this.deeplTranslator.translateText(text, null, targetLang);
       let translation = result.text;
-      
+
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       translation = translation.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
-      
+
       const duration = Date.now() - startTime;
-      
-      console.log('[DeepL Success]', { 
+
+      console.log('[DeepL Success]', {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
         duration: `${duration}ms`,
-        chars: text.length
+        chars: text.length,
       });
-      
+
       // 결과 캐시
       this.setCachedTranslation(text, 'deepl', targetLang, translation);
       return translation;
     } catch (error) {
       console.error('[DeepL Translation Failed]', {
         text: text.substring(0, 50) + '...',
-        error: error.message
+        error: error.message,
       });
       this.logError('DeepL translation failed', error);
       throw error;
     }
   }
 
-  // OpenAI 번역 (GPT-5-nano - 2025년 최신 모델, 고처리량/저비용)
+  getOpenAIModel() {
+    // 명시적 nano 요청이 있으면 nano로 고정
+    if (this._openaiModelOverride === 'nano') return 'gpt-5.4-nano';
+    if (this._openaiModelOverride === 'mini') return 'gpt-5.4-mini';
+    return (this.apiKeys.openaiModel || process.env.WST_OPENAI_MODEL || 'gpt-5.4-mini').trim();
+  }
+
+  setOpenAIModelTier(tier) {
+    // 'mini' 또는 'nano'
+    this._openaiModelOverride = tier === 'nano' ? 'nano' : tier === 'mini' ? 'mini' : null;
+  }
+
+  // OpenAI 번역 (저가 GPT 기본값 + 설정 가능)
   // 참고: https://platform.openai.com/docs/models
-  // GPT-5 모델은 temperature, top_p 파라미터를 지원하지 않음
+  // GPT-5 계열은 temperature, top_p 파라미터를 지원하지 않을 수 있음
   async translateWithChatGPT(text, targetLang = 'Korean') {
     if (!this.apiKeys.openai) {
       throw new Error('OpenAI API key is not configured.');
@@ -547,27 +657,30 @@ class EnhancedSubtitleTranslator {
     // 캐시 확인
     const cached = this.getCachedTranslation(text, 'chatgpt', targetLang);
     if (cached) {
-      console.log('[GPT-5-nano Cache Hit]', {
+      console.log('[OpenAI Cache Hit]', {
         text: text.substring(0, 30) + '...',
-        cached: true
+        cached: true,
       });
       return cached;
     }
 
-    console.log(`[GPT-5-nano] "${text.substring(0, 40)}..." → ${targetLang}`);
+    const model = this.getOpenAIModel();
+    console.log(`[OpenAI:${model}] "${text.substring(0, 40)}..." → ${targetLang}`);
 
     await this.throttleRequest();
 
     try {
       const startTime = Date.now();
 
-      // GPT-5 모델: Chat Completions API 사용
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-        model: 'gpt-5-nano',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
+      // GPT 모델: Chat Completions API 사용
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
 
 CRITICAL RULES:
 1. ALWAYS translate to ${targetLang} - never use English or other languages
@@ -599,21 +712,23 @@ STYLE ADAPTATION:
 - Documentaries: Clear, informative style
 - Thriller/Horror: Maintain intensity and impact
 
-IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`
-          },
-          {
-            role: 'user',
-            content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
-          }
-        ],
-        max_completion_tokens: Math.max(100, Math.min(1500, text.length * 3))
-      }, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKeys.openai}`,
-          'Content-Type': 'application/json'
+IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`,
+            },
+            {
+              role: 'user',
+              content: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`,
+            },
+          ],
+          max_completion_tokens: Math.max(100, Math.min(1500, text.length * 3)),
         },
-        timeout: 30000
-      });
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKeys.openai}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30000,
+        }
+      );
 
       // Chat Completions API 응답 검증
       const choices = response.data?.choices;
@@ -622,7 +737,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
       // finish_reason 확인 - 응답이 잘렸는지 체크
       if (finishReason === 'length') {
-        console.warn('[GPT-5-nano Warning] Response truncated due to max_completion_tokens');
+        console.warn(`[OpenAI:${model} Warning] Response truncated due to max_completion_tokens`);
       }
 
       // 응답 검증 - 빈 응답이면 에러 발생시켜 폴백 서비스로 넘김
@@ -632,14 +747,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           finishReason,
           responsePreview: JSON.stringify(response.data).substring(0, 300),
           hasChoices: !!choices,
-          choicesLength: choices?.length
+          choicesLength: choices?.length,
         };
-        console.error('[GPT-5-nano Empty Response]', errorInfo);
+        console.error(`[OpenAI:${model} Empty Response]`, errorInfo);
 
         // 파일에 에러 로그 저장 (디버깅용)
-        this.logError('GPT-5-nano empty response', new Error(JSON.stringify(errorInfo)));
+        this.logError(`OpenAI ${model} empty response`, new Error(JSON.stringify(errorInfo)));
 
-        throw new Error(`GPT-5-nano returned empty translation (finish_reason: ${finishReason})`);
+        throw new Error(`OpenAI ${model} returned empty translation (finish_reason: ${finishReason})`);
       }
 
       let translation = rawContent.trim();
@@ -649,10 +764,10 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
       const duration = Date.now() - startTime;
 
-      console.log('[GPT-5-nano OK]', {
+      console.log(`[OpenAI:${model} OK]`, {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
-        time: `${duration}ms`
+        time: `${duration}ms`,
       });
 
       // 결과 캐시
@@ -660,14 +775,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       return translation;
     } catch (error) {
       // API 에러 상세 로그
-      console.error('[GPT-5-nano Error]', {
+      console.error(`[OpenAI:${model} Error]`, {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
-        code: error.code
+        code: error.code,
       });
-      this.logError('GPT-5-nano translation failed', error);
+      this.logError(`OpenAI ${model} translation failed`, error);
       throw error;
     }
   }
@@ -684,7 +799,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     if (cached) {
       console.log('[Gemini Cache Hit]', {
         text: text.substring(0, 30) + '...',
-        cached: true
+        cached: true,
       });
       return cached;
     }
@@ -701,8 +816,9 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
         {
           system_instruction: {
-            parts: [{
-              text: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
+            parts: [
+              {
+                text: `You are a professional subtitle translator specializing in natural, contextual translation to ${targetLang}.
 
 CRITICAL RULES:
 1. ALWAYS translate to ${targetLang} - never use English or other languages
@@ -734,24 +850,29 @@ STYLE ADAPTATION:
 - Documentaries: Clear, informative style
 - Thriller/Horror: Maintain intensity and impact
 
-IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`
-            }]
+IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotation marks, brackets, or additional formatting.`,
+              },
+            ],
           },
-          contents: [{
-            parts: [{
-              text: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`
-            }]
-          }],
+          contents: [
+            {
+              parts: [
+                {
+                  text: `Translate this subtitle to natural, contextual ${targetLang}. Keep names and proper nouns as-is:\n\n"${text}"`,
+                },
+              ],
+            },
+          ],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: Math.max(100, Math.min(1500, text.length * 3))
-          }
+            maxOutputTokens: Math.max(100, Math.min(1500, text.length * 3)),
+          },
         },
         {
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
-          timeout: 30000
+          timeout: 30000,
         }
       );
 
@@ -764,7 +885,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         const errorInfo = {
           original: text.substring(0, 40) + '...',
           responsePreview: JSON.stringify(response.data).substring(0, 300),
-          hasCandidates: !!candidates
+          hasCandidates: !!candidates,
         };
         console.error('[Gemini Empty Response]', errorInfo);
         this.logError('Gemini empty response', new Error(JSON.stringify(errorInfo)));
@@ -781,7 +902,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       console.log('[Gemini OK]', {
         original: text.substring(0, 30) + '...',
         translated: translation.substring(0, 30) + '...',
-        time: `${duration}ms`
+        time: `${duration}ms`,
       });
 
       // 결과 캐시
@@ -794,7 +915,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
-        code: error.code
+        code: error.code,
       });
       this.logError('Gemini translation failed', error);
       throw error;
@@ -811,10 +932,10 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
     try {
       let result = await this.myMemoryTranslator.translate(text, 'auto', targetLang);
-      
+
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       result = result.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
-      
+
       // 결과 캐시
       this.setCachedTranslation(text, 'mymemory', targetLang, result);
       return result;
@@ -827,25 +948,37 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   // 스마트 자동 번역 (우선순위 + 폴백)
   async translateAuto(text, method = null, targetLang = null) {
     if (!text || !text.trim()) return text;
-    
+
     const cleanText = text.trim();
-    // 완전히 빈 텍스트만 건너뛰기 - 모든 텍스트를 번역 시도
-    if (cleanText.length === 0) {
-      return text;
+    if (cleanText.length === 0) return text;
+
+    // chatgpt-nano → chatgpt로 라우팅 (모델만 다름)
+    if (method === 'chatgpt-nano') {
+      this.setOpenAIModelTier('nano');
+      method = 'chatgpt';
+    } else if (method === 'chatgpt') {
+      this.setOpenAIModelTier('mini');
     }
 
     const preferredMethod = method || this.apiKeys.preferredService;
     const targetLanguage = targetLang || (preferredMethod === 'deepl' ? 'KO' : 'ko');
+
+    // Local HY-MT engine — direct call in main process
+    if (method === 'local') {
+      const device = this.localDevice || 'auto';
+      const modelId = this.localModelId || localTranslator.DEFAULT_MODEL_ID;
+      return await localTranslator.translateLocal(cleanText, targetLanguage, device, modelId);
+    }
 
     const methods = [
       { name: preferredMethod, lang: targetLanguage },
       { name: 'mymemory', lang: targetLanguage === 'KO' ? 'ko' : targetLanguage },
       { name: 'deepl', lang: this.mapToDeepLLang(targetLanguage) },
       { name: 'chatgpt', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : 'Korean' },
-      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : 'Korean' }
+      { name: 'gemini', lang: this.mapToHumanLang ? this.mapToHumanLang(targetLanguage) : 'Korean' },
     ];
 
-    const uniqueMethods = methods.filter((m, i, a) => a.findIndex(x => x.name === m.name) === i);
+    const uniqueMethods = methods.filter((m, i, a) => a.findIndex((x) => x.name === m.name) === i);
 
     for (const m of uniqueMethods) {
       try {
@@ -870,22 +1003,23 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         }
       } catch (err) {
         console.error(`[${m.name} Translation Failed] "${text.substring(0, 40)}..." - ${err.message}`);
-        
+
         // 429 에러 (할당량 초과)면 폴백하지 않고 즉시 throw
-        const is429Error = err.message.includes('429') || 
-                           err.message.includes('quota') || 
-                           err.message.includes('Too Many Requests') ||
-                           err.message.includes('RESOURCE_EXHAUSTED') ||
-                           err.message.includes('API_QUOTA_EXCEEDED');
+        const is429Error =
+          err.message.includes('429') ||
+          err.message.includes('quota') ||
+          err.message.includes('Too Many Requests') ||
+          err.message.includes('RESOURCE_EXHAUSTED') ||
+          err.message.includes('API_QUOTA_EXCEEDED');
         if (is429Error) {
           console.error(`[Rate Limit] API quota exceeded in translateAuto - stopping`);
           throw new Error('API_QUOTA_EXCEEDED: ' + err.message);
         }
-        
+
         continue;
       }
     }
-    
+
     // 모든 서비스가 실패했을 때 최후의 수단 - 기본 번역 서비스로 재시도
     console.warn(`[Final Attempt] All services failed, trying MyMemory as last resort: "${text.substring(0, 40)}..."`);
     try {
@@ -899,15 +1033,26 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
 
   mapToDeepLLang(targetLang) {
     const map = {
-      ko: 'KO', en: 'EN', ja: 'JA', zh: 'ZH', es: 'ES', fr: 'FR',
-      de: 'DE', it: 'IT', pt: 'PT-BR', ru: 'RU', hu: 'HU', ar: 'AR',
-      pl: 'PL', KO: 'KO',
+      ko: 'KO',
+      en: 'EN',
+      ja: 'JA',
+      zh: 'ZH',
+      es: 'ES',
+      fr: 'FR',
+      de: 'DE',
+      it: 'IT',
+      pt: 'PT-BR',
+      ru: 'RU',
+      hu: 'HU',
+      ar: 'AR',
+      pl: 'PL',
+      KO: 'KO',
     };
     return map[targetLang] || targetLang.toUpperCase();
   }
 
   mapToHumanLang(targetLang) {
-    // GPT-5-nano에 사람이 읽는 언어명 전달 (더 명확한 지시)
+    // LLM에 사람이 읽는 언어명 전달 (더 명확한 지시)
     const map = {
       ko: 'Korean (한국어)',
       en: 'English',
@@ -921,55 +1066,254 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       ru: 'Russian (Русский)',
       hu: 'Hungarian (Magyar)',
       ar: 'Arabic (العربية)',
+      pl: 'Polish (Polski)',
+      fa: 'Persian (فارسی)',
       hi: 'Hindi (हिन्दी)',
       th: 'Thai (ไทย)',
       vi: 'Vietnamese (Tiếng Việt)',
       KO: 'Korean (한국어)',
       'ko-KR': 'Korean (한국어)',
-      'korean': 'Korean (한국어)',
+      korean: 'Korean (한국어)',
       'en-US': 'English',
       'ja-JP': 'Japanese (日本語)',
       'zh-CN': 'Chinese (中文)',
-      'zh-TW': 'Traditional Chinese (繁體中文)'
+      'zh-TW': 'Traditional Chinese (繁體中文)',
     };
     return map[targetLang] || targetLang;
+  }
+
+  normalizeTranslationMethod(method) {
+    return method || this.apiKeys.preferredService || 'mymemory';
+  }
+
+  supportsContextAware(method) {
+    const selected = this.normalizeTranslationMethod(method);
+    if (selected === 'gemini') return !!(this.apiKeys.gemini && this.apiKeys.gemini.trim());
+    if (selected === 'chatgpt') return !!(this.apiKeys.openai && this.apiKeys.openai.trim());
+    return false;
+  }
+
+  parseContextAwareJson(rawContent) {
+    if (!rawContent || typeof rawContent !== 'string') {
+      throw new Error('Empty context-aware translation response');
+    }
+
+    let content = rawContent.trim();
+    content = content
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      content = content.slice(firstBrace, lastBrace + 1);
+    }
+
+    return JSON.parse(content);
+  }
+
+  buildContextAwarePrompt(batch, targetLang, context) {
+    const lines = batch.map((text, index) => `#${index + 1}\n${text}`).join('\n\n');
+    const previousSummary = context.summary || 'None yet.';
+    const glossary =
+      context.glossary && Object.keys(context.glossary).length > 0 ? JSON.stringify(context.glossary, null, 2) : '{}';
+
+    return `Translate the following subtitle lines to ${targetLang}.
+
+Rules:
+- Return STRICT JSON only. No markdown, no explanation.
+- JSON schema: {"translations":["..."],"summary":"short scene summary","glossary":{"source term":"target term"}}
+- translations.length MUST equal ${batch.length}.
+- Preserve line order and meaning.
+- Use natural subtitle dialogue, not literal word-for-word translation.
+- Preserve names, tags, placeholders, and line breaks when possible.
+- Use previous context only as reference. Do not translate previous context.
+
+Previous scene/batch summary:
+${previousSummary}
+
+Known glossary:
+${glossary}
+
+Subtitle lines:
+${lines}`;
+  }
+
+  mergeGlossary(current, incoming) {
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return current;
+    return { ...current, ...incoming };
+  }
+
+  sanitizeTranslationText(text) {
+    return String(text || '')
+      .trim()
+      .replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
+  }
+
+  async translateContextAwareChunk(batch, method, targetLang, context) {
+    const humanTargetLang = this.mapToHumanLang(targetLang || 'ko');
+    const prompt = this.buildContextAwarePrompt(batch, humanTargetLang, context);
+
+    if (method === 'chatgpt') {
+      const model = this.getOpenAIModel();
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional subtitle translation engine. Return only strict JSON. Translate to ${humanTargetLang}.`,
+            },
+            { role: 'user', content: prompt },
+          ],
+          max_completion_tokens: Math.max(600, Math.min(4000, batch.join('\n').length * 3)),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKeys.openai}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 45000,
+        }
+      );
+
+      return this.parseContextAwareJson(response.data?.choices?.[0]?.message?.content || '');
+    }
+
+    if (method === 'gemini') {
+      const response = await axios.post(
+        `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
+        {
+          system_instruction: {
+            parts: [
+              {
+                text: `You are a professional subtitle translation engine. Return only strict JSON. Translate to ${humanTargetLang}.`,
+              },
+            ],
+          },
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: Math.max(600, Math.min(4000, batch.join('\n').length * 3)),
+          },
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 45000,
+        }
+      );
+
+      return this.parseContextAwareJson(response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '');
+    }
+
+    throw new Error(`Context-aware translation is not supported for method: ${method}`);
+  }
+
+  async translateContextAwareBatch(
+    texts,
+    method = null,
+    targetLang = null,
+    _sourceLang = null,
+    progressCallback = null
+  ) {
+    const selectedMethod = this.normalizeTranslationMethod(method);
+    const batchSize = Math.max(
+      3,
+      Math.min(this.getOptimalBatchSize(selectedMethod), selectedMethod === 'gemini' ? 8 : 6)
+    );
+    const results = [];
+    const context = { summary: '', glossary: {} };
+
+    console.log(`[Context-Aware Translation] method=${selectedMethod}, batchSize=${batchSize}, total=${texts.length}`);
+
+    for (let start = 0; start < texts.length; start += batchSize) {
+      if (this._aborted) {
+        throw new Error('ABORTED: Translation stopped by user');
+      }
+
+      const batch = texts.slice(start, start + batchSize);
+      try {
+        await this.throttleRequest();
+        const parsed = await this.translateContextAwareChunk(batch, selectedMethod, targetLang, context);
+        const translations = Array.isArray(parsed.translations) ? parsed.translations : [];
+
+        if (translations.length !== batch.length) {
+          throw new Error(
+            `Context-aware response line count mismatch: expected ${batch.length}, got ${translations.length}`
+          );
+        }
+
+        const cleaned = translations.map((text) => this.sanitizeTranslationText(text));
+        cleaned.forEach((translation, index) => {
+          this.setCachedTranslation(batch[index], selectedMethod, targetLang, translation);
+        });
+
+        results.push(...cleaned);
+        context.summary =
+          typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : context.summary;
+        context.glossary = this.mergeGlossary(context.glossary, parsed.glossary);
+      } catch (error) {
+        console.error(`[Context-Aware Failed] batch ${Math.floor(start / batchSize) + 1}: ${error.message}`);
+        console.log('[Context-Aware Fallback] Falling back to per-line translation for this batch');
+
+        for (const text of batch) {
+          const fallback = await this.translateAuto(text, selectedMethod, targetLang);
+          results.push(fallback);
+        }
+      }
+
+      if (progressCallback) {
+        progressCallback({
+          stage: 'translating',
+          current: Math.min(start + batch.length, texts.length),
+          total: texts.length,
+          text: batch[batch.length - 1]?.substring(0, 50) + '...',
+        });
+      }
+    }
+
+    return results;
   }
 
   // 배치 번역 (성능 향상) - 동적 배치 크기 조정
   async translateBatch(texts, method = null, targetLang = null, _sourceLang = null, progressCallback = null) {
     const preferredMethod = method || this.apiKeys.preferredService;
-    
+
     if (!this.apiKeys.batchTranslation || texts.length <= 1) {
       // 배치 모드가 비활성화되어 있거나 텍스트가 1개 이하면 개별 번역
       const results = [];
       for (let i = 0; i < texts.length; i++) {
         try {
           console.log(`[Batch Translation] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
-          
+
           const result = await this.translateAuto(texts[i], method, targetLang);
           results.push(result);
-          
+
           console.log(`[Batch Success] ${i + 1}/${texts.length}: ${result.substring(0, 40)}...`);
-          
+
           // 진행률 업데이트
           if (progressCallback) {
             progressCallback({
               stage: 'translating',
               current: i + 1,
               total: texts.length,
-              text: texts[i].substring(0, 50) + '...'
+              text: texts[i].substring(0, 50) + '...',
             });
           }
         } catch (error) {
-          console.error(`[Batch Failed] ${i + 1}/${texts.length}: "${texts[i].substring(0, 40)}..." - ${error.message}`);
-          
+          console.error(
+            `[Batch Failed] ${i + 1}/${texts.length}: "${texts[i].substring(0, 40)}..." - ${error.message}`
+          );
+
           // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
           let retryResult = texts[i]; // 기본값은 원문
           for (let retry = 1; retry <= 2; retry++) {
             try {
               console.log(`[Retry ${retry}/2] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
-              await new Promise(resolve => setTimeout(resolve, retry * 1000)); // 점진적 지연
-              
+              await new Promise((resolve) => setTimeout(resolve, retry * 1000)); // 점진적 지연
+
               // 다른 번역 서비스로 시도
               const fallbackMethod = retry === 1 ? 'mymemory' : 'chatgpt';
               retryResult = await this.translateAuto(texts[i], fallbackMethod, targetLang);
@@ -982,7 +1326,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
               }
             }
           }
-          
+
           results.push(retryResult);
         }
       }
@@ -992,7 +1336,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     // 서비스별 최적 배치 크기
     const optimalBatchSize = this.getOptimalBatchSize(preferredMethod);
     console.log(`[Batch Processing] Using batch size: ${optimalBatchSize} for ${preferredMethod}`);
-    
+
     // 배치 크기로 분할
     const batches = [];
     for (let i = 0; i < texts.length; i += optimalBatchSize) {
@@ -1009,11 +1353,15 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       if (shouldStop || this._aborted) {
         const reason = this._aborted ? 'User aborted' : 'API quota exceeded';
         console.log(`[Translation] Stopping: ${reason}`);
-        throw new Error(this._aborted ? 'ABORTED: Translation stopped by user' : 'API_QUOTA_EXCEEDED: Translation stopped due to rate limit');
+        throw new Error(
+          this._aborted
+            ? 'ABORTED: Translation stopped by user'
+            : 'API_QUOTA_EXCEEDED: Translation stopped due to rate limit'
+        );
       }
-      
+
       const concurrentBatches = batches.slice(i, i + maxConcurrent);
-      
+
       const batchPromises = concurrentBatches.map(async (batch, batchIndex) => {
         const batchResults = [];
         for (let j = 0; j < batch.length; j++) {
@@ -1022,54 +1370,61 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
             batchResults.push(batch[j]); // 원문 유지
             continue;
           }
-          
+
           const text = batch[j];
           const currentIndex = results.length + batchIndex * optimalBatchSize + j + 1;
-          
+
           try {
             console.log(`[Parallel Translation] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
-            
+
             const result = await this.translateAuto(text, method, targetLang);
             batchResults.push(result);
-            
+
             console.log(`[Parallel Success] ${currentIndex}/${texts.length}: ${result.substring(0, 40)}...`);
-            
+
             // 진행률 콜백 호출
             if (progressCallback) {
               progressCallback({
                 stage: 'translating',
                 current: currentIndex,
                 total: texts.length,
-                text: text.substring(0, 50) + '...'
+                text: text.substring(0, 50) + '...',
               });
             }
           } catch (error) {
-            console.error(`[Parallel Failed] ${currentIndex}/${texts.length}: "${text.substring(0, 40)}..." - ${error.message}`);
-            
+            console.error(
+              `[Parallel Failed] ${currentIndex}/${texts.length}: "${text.substring(0, 40)}..." - ${error.message}`
+            );
+
             // 429 에러 (할당량 초과) 체크 - 심각한 에러이므로 즉시 중지
-            const is429Error = error.message.includes('429') || 
-                               error.message.includes('quota') || 
-                               error.message.includes('Too Many Requests') ||
-                               error.message.includes('RESOURCE_EXHAUSTED');
-            
+            const is429Error =
+              error.message.includes('429') ||
+              error.message.includes('quota') ||
+              error.message.includes('Too Many Requests') ||
+              error.message.includes('RESOURCE_EXHAUSTED');
+
             if (is429Error) {
               console.error(`[Rate Limit] API quota exceeded - stopping translation`);
               shouldStop = true; // 중지 플래그 설정
               // 429 에러를 상위로 전파하여 번역 중지
               throw new Error('API_QUOTA_EXCEEDED: ' + error.message);
             }
-            
+
             // 다른 실패한 텍스트에 대해 재시도 (1회)
             let retryResult = text; // 기본값은 원문
             try {
               console.log(`[Parallel Retry] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
-              await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
+              await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 대기
               retryResult = await this.translateAuto(text, method, targetLang);
-              console.log(`[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`);
+              console.log(
+                `[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`
+              );
             } catch (retryError) {
-              console.error(`[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - keeping original`);
+              console.error(
+                `[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - keeping original`
+              );
             }
-            
+
             batchResults.push(retryResult);
           }
         }
@@ -1084,12 +1439,32 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
   }
 
   // 향상된 SRT 번역 (진행률 콜백 지원)
-  async translateSRTFile(inputPath, outputPath, method = 'mymemory', targetLang = null, progressCallback = null, sourceLang = null) {
+  async translateSRTFile(
+    inputPath,
+    outputPath,
+    method = 'mymemory',
+    targetLang = null,
+    progressCallback = null,
+    sourceLang = null
+  ) {
     this.resetAbort();
+    // chatgpt-nano → chatgpt로 라우팅 (모델만 다름)
+    if (method === 'chatgpt-nano') {
+      this.setOpenAIModelTier('nano');
+      method = 'chatgpt';
+    } else if (method === 'chatgpt') {
+      this.setOpenAIModelTier('mini');
+    }
     try {
       const srtContent = fs.readFileSync(inputPath, 'utf8');
-      const translatedContent = await this.translateSRTContent(srtContent, method, targetLang, progressCallback, sourceLang);
-      
+      const translatedContent = await this.translateSRTContent(
+        srtContent,
+        method,
+        targetLang,
+        progressCallback,
+        sourceLang
+      );
+
       fs.writeFileSync(outputPath, translatedContent, 'utf8');
       return outputPath;
     } catch (error) {
@@ -1098,30 +1473,44 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     }
   }
 
-  // 비대사 부분 감지 (음악, 효과음, 빈 대사 등)
+  // 비대사 부분 감지 (번역 불가능한 순수 장식만 skip)
+  // 주의: SDH 자막의 (ラジオの音楽) 같은 괄호 내 실제 명사는 번역해야 함.
   isNonDialogue(text) {
     const trimmed = text.trim();
-
-    // 빈 문자열
     if (!trimmed) return true;
 
     // 음악 기호만 있는 경우 (♪, ♫, ♬, ♩)
     if (/^[♪♫♬♩\s]+$/.test(trimmed)) return true;
 
-    // 효과음/설명 대괄호 [...]만 있는 경우
-    if (/^\[.*\]$/.test(trimmed)) return true;
-
-    // 괄호만 있는 경우 (...)
-    if (/^\(.*\)$/.test(trimmed)) return true;
-
-    // 하이픈/대시만 있는 경우 (- - -, ---, etc)
+    // 하이픈/대시만 있는 경우
     if (/^[-–—\s]+$/.test(trimmed)) return true;
+
+    // 괄호/대괄호 안이 비언어 문자(숫자/기호/공백)만이면 skip.
+    // 일본어/한국어/중국어/라틴 문자 등 실제 명사가 들어있으면 번역함.
+    const innerOnlyMatch = trimmed.match(/^[\[\(]([\s\S]*)[\]\)]$/);
+    if (innerOnlyMatch) {
+      const inner = innerOnlyMatch[1];
+      // 어떤 한국어/일본어/중국어/라틴/키릴/아랍 글자도 없으면 비대사로 간주
+      if (
+        !/[\p{Script=Hangul}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Arabic}]/u.test(
+          inner
+        )
+      ) {
+        return true;
+      }
+    }
 
     return false;
   }
 
   // 향상된 SRT 내용 번역 (배치 처리 + 진행률)
-  async translateSRTContent(srtContent, method = 'mymemory', targetLang = null, progressCallback = null, sourceLang = null) {
+  async translateSRTContent(
+    srtContent,
+    method = 'mymemory',
+    targetLang = null,
+    progressCallback = null,
+    sourceLang = null
+  ) {
     const lines = srtContent.split('\n');
     const translatedLines = [];
     const textsToTranslate = [];
@@ -1195,19 +1584,21 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       progressCallback({ stage: 'translating', current: 0, total: textsToTranslate.length });
     }
 
-    const translatedTexts = await this.translateBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback);
+    const translatedTexts = this.supportsContextAware(method)
+      ? await this.translateContextAwareBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback)
+      : await this.translateBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback);
 
     // 3단계: 결과 삽입
     for (let k = 0; k < translatedTexts.length; k++) {
       const index = textIndices[k];
       translatedLines[index] = translatedTexts[k];
-      
+
       if (progressCallback) {
-        progressCallback({ 
-          stage: 'translating', 
-          current: k + 1, 
+        progressCallback({
+          stage: 'translating',
+          current: k + 1,
           total: textsToTranslate.length,
-          text: textsToTranslate[k].substring(0, 50) + '...'
+          text: textsToTranslate[k].substring(0, 50) + '...',
         });
       }
     }
@@ -1223,7 +1614,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       gemini: false,
       mymemory: true, // 항상 사용 가능
       errors: {},
-      usage: {}
+      usage: {},
     };
 
     // DeepL 검사 (단순화된 검증)
@@ -1238,15 +1629,14 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         results.deepl = true;
         results.usage.deepl = {
           character: usage.character,
-          limit: usage.character ? usage.character.limit : null
+          limit: usage.character ? usage.character.limit : null,
         };
 
         console.log('[DeepL Validation Success]', {
           hasUsage: !!usage,
           characterCount: usage?.character?.count,
-          characterLimit: usage?.character?.limit
+          characterLimit: usage?.character?.limit,
         });
-
       } catch (error) {
         console.error('[DeepL Validation Error]', error);
         results.deepl = false;
@@ -1257,21 +1647,25 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       results.errors.deepl = errorMsg.noApiKey;
     }
 
-    // OpenAI 검사 (GPT-5-nano - 2025년 최신 모델)
-    // GPT-5 모델: Chat Completions API 지원, max_completion_tokens 사용
+    // OpenAI 검사 (설정된 GPT 모델)
+    // GPT 모델: Chat Completions API 지원, max_completion_tokens 사용
     if (this.apiKeys.openai && this.apiKeys.openai.trim()) {
       try {
-        await axios.post('https://api.openai.com/v1/chat/completions', {
-          model: 'gpt-5-nano',
-          messages: [{ role: 'user', content: 'hi' }],
-          max_completion_tokens: 5
-        }, {
-          headers: {
-            'Authorization': `Bearer ${this.apiKeys.openai.trim()}`,
-            'Content-Type': 'application/json'
+        await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model: this.getOpenAIModel(),
+            messages: [{ role: 'user', content: 'hi' }],
+            max_completion_tokens: 5,
           },
-          timeout: 10000
-        });
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKeys.openai.trim()}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
         results.openai = true;
       } catch (error) {
         console.error('[OpenAI Validation] Failed:', error.response?.data || error.message);
@@ -1289,11 +1683,11 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
           `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini.trim()}`,
           {
             contents: [{ parts: [{ text: 'hi' }] }],
-            generationConfig: { maxOutputTokens: 5 }
+            generationConfig: { maxOutputTokens: 5 },
           },
           {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 10000
+            timeout: 10000,
           }
         );
         results.gemini = true;
@@ -1321,7 +1715,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         serverError: '서버 오류입니다. 잠시 후 다시 시도해주세요.',
         timeout: '요청 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.',
         connectionError: '연결 오류',
-        noApiKey: 'API 키가 입력되지 않았습니다.'
+        noApiKey: 'API 키가 입력되지 않았습니다.',
       },
       en: {
         invalidApiKey: 'Invalid API key. Please enter a correct key.',
@@ -1331,7 +1725,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         serverError: 'Server error. Please try again later.',
         timeout: 'Request timeout. Please check your network connection.',
         connectionError: 'Connection error',
-        noApiKey: 'API key not entered.'
+        noApiKey: 'API key not entered.',
       },
       ja: {
         invalidApiKey: 'APIキーが無効です。正しいキーを入力してください。',
@@ -1341,7 +1735,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         serverError: 'サーバーエラーです。しばらく後に再度お試しください。',
         timeout: 'リクエストタイムアウトです。ネットワーク接続を確認してください。',
         connectionError: '接続エラー',
-        noApiKey: 'APIキーが入力されていません。'
+        noApiKey: 'APIキーが入力されていません。',
       },
       zh: {
         invalidApiKey: 'API密钥无效。请输入正确的密钥。',
@@ -1351,8 +1745,8 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         serverError: '服务器错误。请稍后重试。',
         timeout: '请求超时。请检查您的网络连接。',
         connectionError: '连接错误',
-        noApiKey: '未输入API密钥。'
-      }
+        noApiKey: '未输入API密钥。',
+      },
     };
     return messages[lang] || messages.ko;
   }
@@ -1362,12 +1756,12 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     const message = error.message || '';
     const status = error.response?.status;
     const errorMsg = this.getErrorMessages(lang);
-    
+
     // DeepL 특수 에러 처리
     if (message.includes('Authentication failed') || message.includes('auth_key')) {
       return errorMsg.invalidApiKey;
     }
-    
+
     switch (status) {
       case 401:
         return errorMsg.invalidApiKey;
@@ -1397,7 +1791,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
     return {
       size: this.translationCache.size,
       maxSize: 1000,
-      hitRate: this.cacheHits / (this.cacheHits + this.cacheMisses) || 0
+      hitRate: this.cacheHits / (this.cacheHits + this.cacheMisses) || 0,
     };
   }
 }

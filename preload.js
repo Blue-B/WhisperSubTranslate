@@ -1,59 +1,86 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// E2E 테스트 신호 (process.env.E2E_SMOKE=1일 때만)
+if (process.env.E2E_SMOKE === '1') {
+  contextBridge.exposeInMainWorld('__E2E__', true);
+}
+
 // 간소화된 Electron API (파일 경로 안전 처리)
 contextBridge.exposeInMainWorld('electronAPI', {
   // 자막 추출 (단일 파일)
   extractSubtitles: (data) => {
     return ipcRenderer.invoke('extract-subtitles', data);
   },
-  
+
   // 파일 선택 다이얼로그
   showOpenDialog: (options) => {
     return ipcRenderer.invoke('show-open-dialog', options);
   },
-  
+
   // 모델 상태 확인
   checkModelStatus: () => {
     return ipcRenderer.invoke('check-model-status');
   },
-  
+
   // 모델 다운로드
   downloadModel: (modelName) => {
     return ipcRenderer.invoke('download-model', modelName);
   },
-  
+  // Whisper GGML 다운로드 취소
+  whisperModelCancel: () => ipcRenderer.invoke('whisper-model-cancel'),
+
+  // Whisper 모델 삭제
+  deleteWhisperModel: (modelName) => {
+    return ipcRenderer.invoke('delete-whisper-model', modelName);
+  },
+
+  // Whisper 다운로드 진행률 구독
+  onWhisperModelProgress: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('whisper-model-progress', handler);
+    return () => ipcRenderer.removeListener('whisper-model-progress', handler);
+  },
+
   // 파일 위치 열기
   openFileLocation: (filePath) => {
     return ipcRenderer.invoke('open-file-location', filePath);
   },
-  
+
   // 폴더 열기
   openFolder: (folderPath) => {
     return ipcRenderer.invoke('open-folder', folderPath);
   },
-  
+
+  // 히스토리 포렌식-안전 삭제 (localStorage 키 + LevelDB 디스크 공간 회수)
+  secureClearHistory: () => {
+    return ipcRenderer.invoke('secure-clear-history');
+  },
+  // userData/history.json 파일 상태 읽기/쓰기 — localStorage 대신 계속성 보장
+  historyLoad: () => ipcRenderer.invoke('history-load'),
+  historySave: (list) => ipcRenderer.invoke('history-save', list),
+
   // 현재 처리 중지
   stopCurrentProcess: () => {
     return ipcRenderer.invoke('stop-current-process');
   },
-  
+
   // ========== 번역 관련 API ==========
-  
+
   // API 키 저장
   saveApiKeys: (keys) => {
     return ipcRenderer.invoke('save-api-keys', keys);
   },
-  
+
   // API 키 불러오기
   loadApiKeys: () => {
     return ipcRenderer.invoke('load-api-keys');
   },
-  
+
   // API 키 유효성 검사 (임시 키 지원)
   validateApiKeys: (tempKeys) => {
     return ipcRenderer.invoke('validate-api-keys', tempKeys);
   },
-  
+
   // 자막 번역
   translateSubtitle: (data) => {
     return ipcRenderer.invoke('translate-subtitle', data);
@@ -68,7 +95,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLogDir: () => {
     return ipcRenderer.invoke('get-log-dir');
   },
-  
+
   // 텍스트 번역 (테스트용)
   translateText: (data) => {
     return ipcRenderer.invoke('translate-text', data);
@@ -110,9 +137,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       name: file.name,
       path: file.path,
       type: file.type,
-      size: file.size
+      size: file.size,
     });
-    
+
     // 방법 1: webUtils 사용 (최신 Electron 권장)
     try {
       if (webUtils && webUtils.getPathForFile) {
@@ -123,28 +150,39 @@ contextBridge.exposeInMainWorld('electronAPI', {
     } catch (error) {
       console.error('[ERROR] webUtils.getPathForFile failed:', error);
     }
-    
+
     // 방법 2: 직접 file.path 접근 (폴백)
     if (file.path && typeof file.path === 'string' && file.path.trim()) {
       console.log('[OK] Using file.path fallback:', file.path);
       return file.path;
     }
-    
+
     // 방법 3: 실패 시 파일명만이라도 반환
     console.error('[ERROR] Cannot extract file path, using name only:', file.name);
     return file.name; // 최소한 파일명은 반환
   },
-  
+
+  // Local HY-MT model
+  localModelList: () => ipcRenderer.invoke('local-model-list'),
+  localModelStatus: (modelId) => ipcRenderer.invoke('local-model-status', modelId),
+  localModelDownload: (modelId) => ipcRenderer.invoke('local-model-download', modelId),
+  localModelCancel: () => ipcRenderer.invoke('local-model-cancel'),
+  localModelDelete: (modelId) => ipcRenderer.invoke('local-model-delete', modelId),
+  localTranslate: (data) => ipcRenderer.invoke('local-translate', data),
+  onLocalModelProgress: (callback) => {
+    ipcRenderer.on('local-model-progress', (event, data) => callback(data));
+  },
+
   // 진행률 업데이트 리스너
   onProgressUpdate: (callback) => {
     ipcRenderer.on('progress-update', (event, data) => callback(data));
   },
-  
+
   // 출력 업데이트 리스너
   onOutputUpdate: (callback) => {
     ipcRenderer.on('output-update', (event, data) => callback(data));
   },
-  
+
   // 번역 진행률 리스너
   onTranslationProgress: (callback) => {
     ipcRenderer.on('translation-progress', (event, data) => callback(data));
@@ -161,5 +199,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('output-update');
     ipcRenderer.removeAllListeners('translation-progress');
     ipcRenderer.removeAllListeners('update-available');
-  }
+    ipcRenderer.removeAllListeners('local-model-progress');
+  },
 });
