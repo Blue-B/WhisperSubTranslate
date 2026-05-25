@@ -2472,7 +2472,11 @@ if (window?.electronAPI) {
       if (typeof data?.progress === 'number') {
         // 번역은 전체 작업의 50-100% 구간 (추출이 0-50%)
         const translationPct = Math.max(0, Math.min(100, data.progress));
-        const overallPct = 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
+        let overallPct = 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
+        // 'translating' 단계에서는 100%(="완료!")에 도달하지 않도록 99%로 상한 제한.
+        // 마지막 배치가 current===total로 progress=100을 보내더라도, SRT 조립·파일 저장 등
+        // 후처리가 아직 남아 있으므로 진짜 완료(=completed 단계)에서만 100%로 마무리한다.
+        if (data?.stage !== 'completed') overallPct = Math.min(overallPct, 99);
         setProgressTarget(Math.max(lastProgress, overallPct), I18N[currentUiLang].progressTranslating);
       }
       if (data?.stage === 'completed' || data?.stage === 'error') {
@@ -2487,10 +2491,12 @@ if (window?.electronAPI) {
         stopIndeterminate();
         translationSessionActive = false;
         const stageProgressTarget = isErrorStage ? 95 : 100;
-        setProgressTarget(
-          Math.max(lastProgress, stageProgressTarget),
-          data?.message || I18N[currentUiLang].progressTranslating
-        );
+        // 100%에 도달하는 완료 단계에서는 텍스트도 "완료" 계열로 맞춰 타이틀(완료!)과 일치시킨다.
+        // (이전에는 progressTranslating="번역 중..."이 남아 100%인데도 "번역 중"이 표시됐음)
+        const stageText = isErrorStage
+          ? data?.message || I18N[currentUiLang].progressTranslating
+          : data?.message || I18N[currentUiLang].translationCompleted || I18N[currentUiLang].progressComplete;
+        setProgressTarget(Math.max(lastProgress, stageProgressTarget), stageText);
 
         // 현재 처리 중인 파일을 completed로 마킹
         if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {

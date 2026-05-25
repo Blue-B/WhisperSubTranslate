@@ -2,6 +2,13 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] — 2026-05-25
+
+### Fixed
+
+- **Premature "Complete!" title during translation** — the progress title flipped to "Complete!" while the job was still translating. The final batch reported `progress: 100` on the `translating` stage, pushing the overall bar to 100% before subtitle assembly and file writing finished. Translation-stage progress is now capped at 99%; 100% is only reached on the genuine `completed` stage. Most visible in high-quality (context-aware) mode, where post-translation processing takes longer.
+- **Stale "Translating…" text at 100%** — on the completed stage the progress text now reads "Translation completed!" instead of leaving the stale "Translating…" label next to a 100% bar.
+
 ## [2.0.0] — 2026-05-21
 
 Major release: context-aware translation, local HY-MT translation engine, durable file-based history, safer downloads, polished UI, and a cleaner contributor-friendly codebase.
@@ -10,7 +17,7 @@ Major release: context-aware translation, local HY-MT translation engine, durabl
 
 - **Local HY-MT translation engine** — fully offline translation via `node-llama-cpp` (HY-MT 1.5 1.8B Q4, ~1.13 GB; HY-MT 7B optional). GPU/CPU selectable.
 - **Job history (up to 200 entries)** — stored in `%APPDATA%\whispersubtranslate\history.json` (file-based, portable across builds/origins). Each row has **Open** (play result file) and **Folder** (reveal in Explorer) actions.
-- **History toggle** — Settings → History to switch logging on/off. Turning it off only stops *new* entries; existing data is preserved.
+- **History toggle** — Settings → History to switch logging on/off. Turning it off only stops _new_ entries; existing data is preserved.
 - **Forensic-safe Clear All** — overwrites the history file with zeros, deletes it, and pads out any legacy `localStorage` residue to encourage compaction. (SSD wear-leveling means software cannot guarantee 100% unrecoverability — use full-disk encryption for hard guarantees.)
 - **Cancel button while downloading a model** — both Whisper GGML and local HY-MT.
 - **Safe download interruption** — closing the window mid-download aborts the transfer; `before-quit` cancels active downloads.
