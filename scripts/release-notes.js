@@ -63,8 +63,6 @@ if (fs.existsSync(notesFile)) {
     '---',
     '',
     `**Download (Windows portable):** \`${assetName}\` — unzip and run \`WhisperSubTranslate.exe\`.`,
-    '',
-    `_For richer multilingual notes, add \`release-notes/${vtag}.md\` and it will be used verbatim._`,
   ].join('\n');
   console.error(`[release-notes] built from CHANGELOG.md section [${version}]`);
 }
