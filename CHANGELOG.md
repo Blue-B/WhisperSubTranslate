@@ -15,6 +15,10 @@ Patch release: better local (HY-MT) translation quality and broader Linux compat
 - **Linux build fallback** — when no prebuilt whisper.cpp binary is available, the installer attempts a CUDA build and only retries a CPU-only build when a CUDA build was actually attempted (e.g. unsupported GPU architectures such as RTX 5090 with nvcc 12.0).
 - **Cross-platform Electron launcher (`scripts/start.js`)** — `npm start` now runs a Node launcher that unsets a leaked `ELECTRON_RUN_AS_NODE` so the app always starts in GUI mode. On Linux, when `chrome-sandbox` lacks the setuid bit it injects `--no-sandbox` to prevent SIGILL crashes and prints a `console.warn` noting the sandbox is reduced. Extra CLI args are forwarded to Electron.
 
+### Internal
+
+- **Translations are now Weblate-ready** — UI strings were split into per-language `locales/*.json` (interpolation/plural helpers kept in `locales/i18n.functions.js`). The bundled `locales/i18n.js` is now generated via `npm run i18n:build` and verified in CI with `npm run i18n:check`; no runtime/behaviour change (the generated object is equivalent to the previous hand-written one).
+
 ## [2.0.1] — 2026-05-25
 
 ### Fixed

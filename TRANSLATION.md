@@ -14,29 +14,22 @@ Want to help translate WhisperSubTranslate into a new language? This guide cover
 
 ## How to Add a New UI Language
 
-### 1. Add i18n strings
+### 1. Add translation strings
 
-Open `locales/i18n.js` and add a new language block. Copy the `en` block as a template:
+Translatable strings are split **per language as JSON**, and the bundled `locales/i18n.js` is **generated** from them — do not edit `locales/i18n.js` by hand.
 
-```js
-// locales/i18n.js
-const I18N = {
-  ko: { ... },
-  en: { ... },
-  ja: { ... },
-  zh: { ... },
-  pl: { ... },
-  // Add your language here:
-  xx: {
-    titleText: 'WhisperSubTranslate',
-    dropTitle: 'Drag & Drop Files',
-    dropHint1: 'Drag video or SRT files here',
-    // ... translate all keys from the 'en' block
-  }
-};
+1. Copy `locales/en.json` to `locales/<code>.json` (e.g. `locales/de.json`) and translate every value.
+2. If a string needs interpolation/pluralization (e.g. `"Removed: ${name}"`), it lives in `locales/i18n.functions.js` as a small arrow function — copy the `en` entry there for your language too.
+3. Regenerate the bundled global the app loads:
+
+```bash
+npm run i18n:build      # writes locales/i18n.js from the JSON + functions
+npm run i18n:check      # verifies i18n.js is in sync (also runs in `npm run check` / CI)
 ```
 
-> **Important**: All 142 keys must be present. Missing keys will cause the UI to fall back to English.
+> **Translate online**: You can also use [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/), which edits the same `locales/*.json` files.
+>
+> **Important**: All keys must be present (236 strings + 25 interpolation helpers). Missing keys fall back to English.
 
 ### 2. Add LOG_I18N mappings (renderer.js)
 
@@ -124,7 +117,8 @@ Add an `<option>` to the target language selector:
 - Use the `en` block as the source of truth — it has the most neutral phrasing
 - Keep translations concise — UI space is limited
 - Test all screens: main UI, settings modal, queue display, error messages
-- Run `npm run lint` before submitting
+- Edit `locales/*.json` (+ `i18n.functions.js` for interpolated strings), then run `npm run i18n:build`
+- Run `npm run check` before submitting (lint + i18n sync + tests)
 
 ## Questions?
 

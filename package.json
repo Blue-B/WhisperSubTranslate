@@ -5,13 +5,15 @@
   "scripts": {
     "start": "node scripts/start.js",
     "build": "electron-builder --publish never",
-    "build-win": "electron-builder --win",
+    "build-win": "npm run i18n:build && electron-builder --win",
     "postinstall": "node scripts/postinstall.js",
+    "i18n:build": "node scripts/build-i18n.js",
+    "i18n:check": "node scripts/build-i18n.js --check",
     "test": "node scripts/smoke-test.js",
     "test:e2e": "node scripts/e2e-smoke.js",
     "lint": "eslint *.js locales/*.js --fix",
     "lint:check": "eslint *.js locales/*.js",
-    "check": "npm run lint:check && npm test",
+    "check": "npm run i18n:check && npm run lint:check && npm test",
     "check:full": "npm run lint:check && npm test && npm run test:e2e",
     "format": "prettier --write \"*.js\" \"locales/*.js\" \"*.json\" \"*.html\" \"*.css\""
   },
