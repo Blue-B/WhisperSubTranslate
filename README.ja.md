@@ -31,7 +31,7 @@
 
 ### 一般ユーザー: ポータブル版で実行
 
-- Releases から最新のポータブルアーカイブをダウンロード:`WhisperSubTranslate-v2.0.0-win-x64.zip`
+- Releases から最新のポータブルアーカイブをダウンロード:`WhisperSubTranslate-v2.0.2-win-x64.zip`
 - 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
 すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション(ローカル HY-MT モデルで100%オフライン翻訳、無料MyMemory、あるいは自分のDeepL/OpenAI/Gemini APIキー)。

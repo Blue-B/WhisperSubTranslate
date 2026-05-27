@@ -31,7 +31,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ### Dla użytkowników: uruchom wersję przenośną
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.0.0-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.0.2-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).

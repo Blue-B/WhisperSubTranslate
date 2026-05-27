@@ -31,7 +31,7 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v2.0.0-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v2.0.2-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
 即可使用。提取在本机完全离线运行。翻译是可选的（本地 HY-MT 模型可实现100%离线翻译，或使用免费 MyMemory 以及自己的 DeepL/OpenAI/Gemini API 密钥）。
