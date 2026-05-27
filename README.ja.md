@@ -278,15 +278,11 @@ WhisperSubTranslate をより良くしてくれるすべての方に感謝しま
 
 ## 翻訳
 
-UI とドキュメントは **5言語** で管理されています。言語の追加・改善は [翻訳ガイド](TRANSLATION.md) を参照してください。
+WhisperSubTranslate の翻訳にご参加ください！翻訳文字列は [`locales/*.json`](locales/) にあり、[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) で管理されています。[翻訳ガイド](TRANSLATION.md) を参照してください。
 
-| 言語 | コード | UI | README |
-|------|:----:|:--:|:------:|
-| English | `en` | ✅ | ✅ |
-| 한국어 | `ko` | ✅ | ✅ |
-| 日本語 | `ja` | ✅ | ✅ |
-| 中文 | `zh` | ✅ | ✅ |
-| Polski | `pl` | ✅ | ✅ |
+<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
+  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="翻訳ステータス" />
+</a>
 
 ## スター履歴
 

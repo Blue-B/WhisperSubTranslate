@@ -278,15 +278,11 @@ fix: localize target language note
 
 ## 翻译
 
-UI 和文档以 **5 种语言** 维护。想新增或改进语言？请参阅 [翻译指南](TRANSLATION.md)。
+欢迎参与 WhisperSubTranslate 的翻译！可翻译字符串位于 [`locales/*.json`](locales/)，由 [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) 管理。请参阅 [翻译指南](TRANSLATION.md)。
 
-| 语言 | 代码 | UI | README |
-|------|:----:|:--:|:------:|
-| English | `en` | ✅ | ✅ |
-| 한국어 | `ko` | ✅ | ✅ |
-| 日本語 | `ja` | ✅ | ✅ |
-| 中文 | `zh` | ✅ | ✅ |
-| Polski | `pl` | ✅ | ✅ |
+<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
+  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="翻译状态" />
+</a>
 
 ## Star 历史
 

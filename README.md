@@ -287,15 +287,11 @@ Thanks to everyone who helps make WhisperSubTranslate better! 🙏
 
 ## Translations
 
-The UI and documentation are maintained in **5 languages**. Want to add or improve a language? See the [Translation Guide](TRANSLATION.md).
+Help translate WhisperSubTranslate into your language! Translatable strings live in [`locales/*.json`](locales/) and are managed on [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). See the [Translation Guide](TRANSLATION.md).
 
-| Language | Code | UI | README |
-|----------|:----:|:--:|:------:|
-| English | `en` | ✅ | ✅ |
-| 한국어 (Korean) | `ko` | ✅ | ✅ |
-| 日本語 (Japanese) | `ja` | ✅ | ✅ |
-| 中文 (Chinese) | `zh` | ✅ | ✅ |
-| Polski (Polish) | `pl` | ✅ | ✅ |
+<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
+  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Translation status" />
+</a>
 
 ## Star History
 

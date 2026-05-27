@@ -279,15 +279,11 @@ Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate! 🙏
 
 ## Tłumaczenia
 
-Interfejs i dokumentacja są utrzymywane w **5 językach**. Chcesz dodać lub poprawić język? Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
+Pomóż przetłumaczyć WhisperSubTranslate na swój język! Teksty do tłumaczenia znajdują się w [`locales/*.json`](locales/) i są zarządzane w [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
 
-| Język | Kod | UI | README |
-|-------|:---:|:--:|:------:|
-| English | `en` | ✅ | ✅ |
-| 한국어 | `ko` | ✅ | ✅ |
-| 日本語 | `ja` | ✅ | ✅ |
-| 中文 | `zh` | ✅ | ✅ |
-| Polski | `pl` | ✅ | ✅ |
+<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
+  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Stan tłumaczenia" />
+</a>
 
 ## Historia gwiazdek
 
