@@ -260,6 +260,41 @@ Jeśli ten projekt oszczędza Twój czas lub pomaga publikować lepsze napisy, w
 - whisper.cpp został opracowany przez Georgi Gerganova: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
+## Współtwórcy
+
+Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate! 🙏
+
+<a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+</a>
+
+## Aktywność repozytorium
+
+<!--
+  Repobeats wymaga adresu URL osadzenia dla repozytorium. Wygeneruj go za darmo
+  na https://repobeats.axiom.co (wpisz "Blue-B/WhisperSubTranslate"), a następnie
+  zastąp poniższy adres URL.
+-->
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/REPLACE_WITH_YOUR_REPOBEATS_HASH.svg "Repobeats analytics image")
+
+## Tłumaczenia
+
+Interfejs i dokumentacja są utrzymywane w **5 językach**. Chcesz dodać lub poprawić język? Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
+
+| Język | Kod | UI | README |
+|-------|:---:|:--:|:------:|
+| English | `en` | ✅ | ✅ |
+| 한국어 | `ko` | ✅ | ✅ |
+| 日本語 | `ja` | ✅ | ✅ |
+| 中文 | `zh` | ✅ | ✅ |
+| Polski | `pl` | ✅ | ✅ |
+
+## Historia gwiazdek
+
+<a href="https://star-history.com/#Blue-B/WhisperSubTranslate&Date">
+  <img src="https://api.star-history.com/svg?repos=Blue-B/WhisperSubTranslate&type=Date" alt="Star History Chart" width="600" />
+</a>
+
 ## Licencja
 
 GPL-3.0. Zewnętrzne API/usługi (DeepL, OpenAI itp.) wymagają przestrzegania ich własnych warunków.

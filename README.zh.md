@@ -260,6 +260,40 @@ fix: localize target language note
 - whisper.cpp 由 Georgi Gerganov 开发: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
+## 贡献者
+
+感谢每一位让 WhisperSubTranslate 变得更好的人！🙏
+
+<a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+</a>
+
+## 仓库活动
+
+<!--
+  Repobeats 需要每个仓库专属的嵌入 URL。请在 https://repobeats.axiom.co
+  输入 "Blue-B/WhisperSubTranslate" 免费生成，然后替换下面的 URL。
+-->
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/REPLACE_WITH_YOUR_REPOBEATS_HASH.svg "Repobeats analytics image")
+
+## 翻译
+
+UI 和文档以 **5 种语言** 维护。想新增或改进语言？请参阅 [翻译指南](TRANSLATION.md)。
+
+| 语言 | 代码 | UI | README |
+|------|:----:|:--:|:------:|
+| English | `en` | ✅ | ✅ |
+| 한국어 | `ko` | ✅ | ✅ |
+| 日本語 | `ja` | ✅ | ✅ |
+| 中文 | `zh` | ✅ | ✅ |
+| Polski | `pl` | ✅ | ✅ |
+
+## Star 历史
+
+<a href="https://star-history.com/#Blue-B/WhisperSubTranslate&Date">
+  <img src="https://api.star-history.com/svg?repos=Blue-B/WhisperSubTranslate&type=Date" alt="Star History Chart" width="600" />
+</a>
+
 ## 许可证
 
 GPL-3.0。使用外部服务（DeepL、OpenAI 等）时请遵守其各自条款。
