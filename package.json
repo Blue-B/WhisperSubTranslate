@@ -3,7 +3,7 @@
   "version": "2.0.1",
   "main": "main.js",
   "scripts": {
-    "start": "electron --expose-gc .",
+    "start": "node scripts/start.js",
     "build": "electron-builder --publish never",
     "build-win": "electron-builder --win",
     "postinstall": "node scripts/postinstall.js",
