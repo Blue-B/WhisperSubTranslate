@@ -270,11 +270,7 @@ fix: localize target language note
 
 ## 仓库活动
 
-<!--
-  Repobeats 需要每个仓库专属的嵌入 URL。请在 https://repobeats.axiom.co
-  输入 "Blue-B/WhisperSubTranslate" 免费生成，然后替换下面的 URL。
--->
-![Repobeats analytics image](https://repobeats.axiom.co/api/embed/REPLACE_WITH_YOUR_REPOBEATS_HASH.svg "Repobeats analytics image")
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/bb4da4df4fdd4f9193f24a6647d5f10022e9bab9.svg 'Repobeats analytics image')
 
 ## 翻译
 

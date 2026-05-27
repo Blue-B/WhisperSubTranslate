@@ -270,11 +270,7 @@ WhisperSubTranslate をより良くしてくれるすべての方に感謝しま
 
 ## リポジトリの活動
 
-<!--
-  Repobeats はリポジトリごとの埋め込み URL が必要です。https://repobeats.axiom.co で
-  "Blue-B/WhisperSubTranslate" を入力して無料で生成し、下の URL を置き換えてください。
--->
-![Repobeats analytics image](https://repobeats.axiom.co/api/embed/REPLACE_WITH_YOUR_REPOBEATS_HASH.svg "Repobeats analytics image")
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/bb4da4df4fdd4f9193f24a6647d5f10022e9bab9.svg 'Repobeats analytics image')
 
 ## 翻訳
 

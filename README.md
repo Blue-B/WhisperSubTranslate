@@ -278,12 +278,7 @@ Thanks to everyone who helps make WhisperSubTranslate better! 🙏
 
 ## Repository activity
 
-<!--
-  Repobeats needs a per-repo embed URL. Generate yours for free at
-  https://repobeats.axiom.co (enter "Blue-B/WhisperSubTranslate"), then replace
-  the URL below with the one it gives you.
--->
-![Repobeats analytics image](https://repobeats.axiom.co/api/embed/REPLACE_WITH_YOUR_REPOBEATS_HASH.svg "Repobeats analytics image")
+![Repobeats analytics image](https://repobeats.axiom.co/api/embed/bb4da4df4fdd4f9193f24a6647d5f10022e9bab9.svg 'Repobeats analytics image')
 
 ## Translations
 
