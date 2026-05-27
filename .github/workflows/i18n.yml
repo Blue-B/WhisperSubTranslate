@@ -1,0 +1,49 @@
+name: i18n
+
+# When translatable sources change on main (e.g. a Weblate sync), regenerate the
+# bundled locales/i18n.js so it never goes stale and the i18n:check guard in CI
+# (npm run check) stays green.
+#
+# Loop-safety: this job only commits locales/i18n.js, which does NOT match the
+# path filter below, so the bot's own commit never re-triggers the workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'locales/**/*.json'
+      - 'locales/i18n.functions.js'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: i18n-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    name: Regenerate locales/i18n.js
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # build-i18n.js has no third-party dependencies, so we skip `npm ci`
+      # (and its heavy CUDA/whisper postinstall).
+      - name: Regenerate
+        run: node scripts/build-i18n.js
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- locales/i18n.js; then
+            echo "locales/i18n.js already in sync — nothing to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add locales/i18n.js
+            git commit -m "chore(i18n): regenerate locales/i18n.js from translation sources [skip ci]"
+            git push
+          fi
