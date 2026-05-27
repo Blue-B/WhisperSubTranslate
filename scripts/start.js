@@ -21,7 +21,8 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 const electron = require('electron');
 
 // 3. Build the CLI arguments.
-const args = ['--expose-gc', '.'];
+const forwardedArgs = process.argv.slice(2);
+const args = ['--expose-gc', '.', ...forwardedArgs];
 
 // 4. Linux sandbox permission check.
 if (process.platform === 'linux') {

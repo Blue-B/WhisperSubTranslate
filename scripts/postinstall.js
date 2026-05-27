@@ -521,9 +521,12 @@ async function main() {
 
       if (!asset) {
         console.log('  [INFO] No pre-built Linux binary found. Attempting to build from source...');
-        if (await buildWhisperFromSource(hasCudaToolkit())) return;
-        console.log('  [INFO] CUDA build failed; trying CPU-only build...');
-        if (await buildWhisperFromSource(false)) return;
+        const withCuda = hasCudaToolkit();
+        if (await buildWhisperFromSource(withCuda)) return;
+        if (withCuda) {
+          console.log('  [INFO] CUDA build failed; trying CPU-only build...');
+          if (await buildWhisperFromSource(false)) return;
+        }
         console.log('  [ERROR] Auto-build failed. Please build manually:');
         console.log('    git clone https://github.com/ggml-org/whisper.cpp');
         console.log('    cd whisper.cpp && cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release');
