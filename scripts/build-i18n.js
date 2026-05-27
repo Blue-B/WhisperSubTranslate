@@ -60,12 +60,16 @@ function build() {
   return body;
 }
 
+// Normalize line endings so the sync check is platform-agnostic: Windows CI
+// checkouts may rewrite LF -> CRLF, which must not be treated as "out of sync".
+const normalizeEol = (s) => s.replace(/\r\n/g, '\n');
+
 const generated = build();
 const target = path.join(localesDir, 'i18n.js');
 
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
-  if (current !== generated) {
+  if (normalizeEol(current) !== normalizeEol(generated)) {
     console.error('[i18n] locales/i18n.js is OUT OF SYNC with its sources. Run: npm run i18n:build');
     process.exit(1);
   }

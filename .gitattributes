@@ -1,1 +1,7 @@
 locales/i18n.js linguist-generated=true
+
+# Keep i18n sources/output LF so the generated-file sync check is stable on Windows CI
+locales/i18n.js text eol=lf
+locales/*.json text eol=lf
+locales/i18n.functions.js text eol=lf
+scripts/build-i18n.js text eol=lf
