@@ -4,13 +4,13 @@ Want to help translate WhisperSubTranslate into a new language? This guide cover
 
 ## Current Languages
 
-| Language | Code | UI | Translation Target | Maintainer |
-|----------|------|----|--------------------|------------|
-| Korean | `ko` | ✅ | ✅ | @Blue-B |
-| English | `en` | ✅ | ✅ | @Blue-B |
-| Japanese | `ja` | ✅ | ✅ | @Blue-B |
-| Chinese | `zh` | ✅ | ✅ | @Blue-B |
-| Polish | `pl` | ✅ | ✅ | @Blue-B |
+| Language | Code | UI  | Translation Target | Maintainer |
+| -------- | ---- | --- | ------------------ | ---------- |
+| Korean   | `ko` | ✅  | ✅                 | @Blue-B    |
+| English  | `en` | ✅  | ✅                 | @Blue-B    |
+| Japanese | `ja` | ✅  | ✅                 | @Blue-B    |
+| Chinese  | `zh` | ✅  | ✅                 | @Blue-B    |
+| Polish   | `pl` | ✅  | ✅                 | @Blue-B    |
 
 ## How to Add a New UI Language
 
