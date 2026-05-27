@@ -243,22 +243,24 @@ async function _translateLocalImpl(text, targetLang, device, modelId) {
   }
   const { LlamaChatSession } = await import('node-llama-cpp');
   if (!_session) {
-    _session = new LlamaChatSession({ contextSequence: _context.getSequence() });
+    _session = new LlamaChatSession({
+      contextSequence: _context.getSequence(),
+      chatWrapper: 'auto',
+    });
   }
+  _session.resetChatHistory();
 
   const targetName = LANG_NAMES[targetLang] || targetLang;
-  const prompt = `Translate the following text to ${targetName}. Output only the translation, no explanation.\n\n${text}`;
+  const prompt = `Translate the following segment into ${targetName}, without additional explanation.\n\n${text}`;
 
   try {
     const response = await _session.prompt(prompt, {
-      temperature: 0.3,
+      temperature: 0.7,
       topK: 20,
       topP: 0.6,
       repeatPenalty: { penalty: 1.05 },
+      maxTokens: 256, // App-side safety cap (not a Tencent recommendation)
     });
-    if (_session.sequence && typeof _session.resetChatHistory === 'function') {
-      try { _session.resetChatHistory(); } catch (_e) { /* ignore */ }
-    }
     return response.trim();
   } catch (e) {
     try { _session = null; _context && await _context.dispose(); _context = null; } catch (_e) { /* ignore */ }
