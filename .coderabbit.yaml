@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration for WhisperSubTranslate (Electron + Node desktop app).
+# Docs: https://docs.coderabbit.ai/getting-started/configure-coderabbit
+language: en-US
+early_access: false
+tone_instructions: >-
+  Be concise and pragmatic. This is a small Electron desktop app maintained by a
+  solo developer with community PRs. Prioritise correctness, security (Electron
+  IPC / sandbox / secret leakage) and cross-platform behaviour over style nits.
+
+reviews:
+  profile: chill            # 'chill' = fewer nitpicks; use 'assertive' for stricter reviews
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+  # Skip generated / binary / vendored paths so reviews stay focused on source.
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/dist2/**"
+    - "!**/whisper-cpp/**"
+    - "!**/temp/**"
+    - "!**/*.min.js"
+    - "!**/*.zip"
+    - "!**/*.exe"
+    - "!**/*.dll"
+    - "!**/*.png"
+    - "!**/*.ico"
+    - "!package-lock.json"
+
+  # Targeted guidance per area of the codebase.
+  path_instructions:
+    - path: "main.js"
+      instructions: >-
+        Electron main process. Flag nodeIntegration:true without
+        contextIsolation:true, unvalidated ipcMain handlers, shell.openExternal
+        on untrusted input, and any API key / secret written to disk unencrypted.
+    - path: "preload.js"
+      instructions: >-
+        Only expose a minimal, explicit API via contextBridge. Flag exposing
+        ipcRenderer or Node primitives directly to the renderer.
+    - path: "renderer.js"
+      instructions: >-
+        Renderer (browser context). Flag innerHTML with untrusted data (XSS) and
+        direct Node/Electron access that should go through the preload bridge.
+    - path: "scripts/**"
+      instructions: >-
+        Build / install scripts. Watch for unpinned downloads, missing checksum
+        verification, and shell injection in spawn/exec calls.
+    - path: "locales/**"
+      instructions: >-
+        UI strings must stay in sync across all 5 languages (ko, en, ja, zh, pl).
+        Flag keys added to one language but missing in the others.
+
+  tools:
+    eslint:
+      enabled: true       # repo already ships an ESLint config; reuse it
+    markdownlint:
+      enabled: true
+
+chat:
+  auto_reply: true
