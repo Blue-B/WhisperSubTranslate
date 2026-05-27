@@ -31,8 +31,6 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ### Dla użytkowników: uruchom wersję przenośną
 
-## Szybki start (Przenośna)
-
 - Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.0.0-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 

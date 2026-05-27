@@ -1,9 +1,5 @@
 # WhisperSubTranslate
 
-<p align="center">
-  <img src="assets/hero/hero.png" alt="WhisperSubTranslate — local-first subtitle workstation" width="100%">
-</p>
-
 English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
 A local-first desktop workflow for turning videos into multilingual subtitles. Drop in a video, generate SRT with whisper.cpp, then translate it with free, paid, or upcoming local translation engines.
@@ -11,6 +7,12 @@ A local-first desktop workflow for turning videos into multilingual subtitles. D
 > Important: This app creates new SRT subtitles from your video's audio using whisper.cpp. It does not extract existing embedded subtitle tracks or on‑screen text (no OCR).
 >
 > v2.0 focus: context-aware translation, safer API key storage, local translation routing, and a more polished contributor-friendly codebase.
+
+## Preview
+
+<p align="center">
+  <img src="assets/hero/hero.png" alt="WhisperSubTranslate — main UI" width="100%">
+</p>
 
 ## Why use WhisperSubTranslate
 
@@ -34,8 +36,6 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 ## Getting started
 
 ### For users: run the portable release
-
-## Quick Start (Portable)
 
 - Download the latest portable archive from Releases: `WhisperSubTranslate-v2.0.0-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
