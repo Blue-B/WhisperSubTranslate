@@ -2,6 +2,19 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] — 2026-05-27
+
+Patch release: better local (HY-MT) translation quality and broader Linux compatibility. Thanks to community contributor [@matbgn](https://github.com/matbgn).
+
+### Fixed
+
+- **Local translation (HY-MT) hallucinations & runaway generation** — chat history is now reset before every segment so context no longer accumulates across an SRT file, and `chatWrapper: 'auto'` lets Hunyuan-MT select the correct chat template. Adopts Tencent's recommended sampling (`temperature 0.7`, `topK 20`, `topP 0.6`, `repeatPenalty 1.05`) and adds `maxTokens: 256` as an app-side safety cap (not a Tencent recommendation) to curb runaway output.
+
+### Improvements
+
+- **Linux build fallback** — when no prebuilt whisper.cpp binary is available, the installer attempts a CUDA build and only retries a CPU-only build when a CUDA build was actually attempted (e.g. unsupported GPU architectures such as RTX 5090 with nvcc 12.0).
+- **Cross-platform Electron launcher (`scripts/start.js`)** — `npm start` now runs a Node launcher that unsets a leaked `ELECTRON_RUN_AS_NODE` so the app always starts in GUI mode. On Linux, when `chrome-sandbox` lacks the setuid bit it injects `--no-sandbox` to prevent SIGILL crashes and prints a `console.warn` noting the sandbox is reduced. Extra CLI args are forwarded to Electron.
+
 ## [2.0.1] — 2026-05-25
 
 ### Fixed
