@@ -31,7 +31,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ### Dla użytkowników: uruchom wersję przenośną
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.1.0-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.2.0-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
@@ -43,6 +43,7 @@ npm install
 npm start
 ```
 
+- Wymagany **Node.js ≥ 20.19 lub ≥ 22.12** (łańcuch budowania Electron 42)
 - **whisper-cpp** jest automatycznie pobierany podczas `npm install` (Windows: ~700MB wersja CUDA)
 - Na **Linux/macOS**, jeśli nie ma gotowego pliku binarnego, whisper.cpp jest automatycznie budowany ze źródeł (wymaga `cmake`, `gcc`/`clang`, `git`)
 - **FFmpeg** jest automatycznie dołączony przez pakiet npm
@@ -107,18 +108,33 @@ Artefakty są generowane do `dist2/`.
 | Pakowanie                | electron-builder                                 |
 | Sieć                     | axios                                            |
 | Mowa-na-tekst            | whisper.cpp (modele GGML)                        |
-| Tłumaczenie (opcjonalne) | DeepL API, OpenAI (GPT-5-nano), Gemini, MyMemory |
+| Tłumaczenie (opcjonalne) | DeepL API, OpenAI (GPT-5.4 mini), Gemini, MyMemory |
 
 ## Silniki tłumaczenia
 
-| Silnik              | Koszt                | Klucz API | Limity / Uwagi                                                                                                       |
-| ------------------- | -------------------- | --------- | -------------------------------------------------------------------------------------------------------------------- |
-| MyMemory            | Darmowy              | Nie       | ~50K znaków/dzień na IP                                                                                              |
-| DeepL               | Darmowe 500K/miesiąc | Tak       | Dostępne płatne plany                                                                                                |
-| GPT-5-nano (OpenAI) | Płatny               | Tak       | $0.05 wejście / $0.40 wyjście za 1M tokenów                                                                          |
-| Gemini 3 Flash      | Darmowy/Płatny       | Tak       | Darmowy: 250 napisów/dzień (~20-30min), Płatny: bez limitu ([Pobierz klucz](https://aistudio.google.com/app/apikey)) |
+WhisperSubTranslate może tłumaczyć napisy **w pełni offline** za pomocą dołączonego modelu Tencent **Hy-MT2** lub korzystać z darmowych/płatnych silników online przy użyciu własnych kluczy API.
 
+| Silnik                               | Offline | Klucz API | Koszt                | Uwagi                                                                                                                |
+| ------------------------------------ | :-----: | :-------: | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Hy-MT2 1.8B** (lokalny · domyślny) |   ✅    |    Nie    | Darmowy              | ~1.13 GB · VRAM 2 GB / RAM 4 GB · 100% na urządzeniu                                                                 |
+| **Hy-MT2 7B** (lokalny)              |   ✅    |    Nie    | Darmowy              | ~6.16 GB · VRAM 8 GB / RAM 12 GB · większy model                                                                     |
+| MyMemory                             |   ❌    |    Nie    | Darmowy              | ~50K znaków/dzień na IP                                                                                              |
+| DeepL                                |   ❌    |    Tak    | Darmowe 500K/miesiąc | Dostępne płatne plany                                                                                                |
+| OpenAI GPT-5.4 mini | ❌ | Tak | Płatny | $0.075 wejście / $0.60 wyjście za 1M tokenów · uwzględnia kontekst |
+| OpenAI GPT-5.4 nano | ❌ | Tak | Płatny | Tańszy poziom — $0.20 wejście / $1.25 wyjście za 1M tokenów |
+| Gemini 3 Flash                       |   ❌    |    Tak    | Darmowy/Płatny       | Darmowy: 250 napisów/dzień (~20-30min), Płatny: bez limitu ([Pobierz klucz](https://aistudio.google.com/app/apikey)) |
+
+> **Prywatność:** lokalny silnik Hy-MT2 to jedyna opcja, która nie wymaga klucza API, sieci ani opłat za użycie — Twoje wideo i jego dialogi nigdy nie opuszczają Twojego komputera.
+>
 > **Wskazówka**: Dla długich filmów (1h+) MyMemory może osiągnąć dzienny limit. Użyj Gemini lub DeepL.
+
+### Jakość tłumaczenia (silnik offline)
+
+WhisperSubTranslate dołącza modele **Hy-MT2** firmy Tencent (domyślnie 1.8B, opcjonalnie 7B). W oficjalnej, wielobenchmarkowej ocenie Tencent rodzina Hy-MT2 jest konkurencyjna wobec — a w kilku benchmarkach wyprzedza — czołowe komercyjne API tłumaczeniowe:
+
+![Oficjalny benchmark Tencent Hy-MT2 (model dołączony do WhisperSubTranslate)](../assets/hy-mt2-benchmark.pl.png)
+
+> **Źródło:** oficjalne benchmarki opublikowane przez autorów modelu, Tencent — [repozytorium Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2) · [raport techniczny](https://arxiv.org/pdf/2605.22064) · [modele na HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). Powyższy wykres jest **przerysowany z oficjalnego Figure 1 Tencent**, a liczby modeli dołączonych (1.8B/7B) zweryfikowano z tabelami w pracy. Liczby te mierzą **sam model** na standardowych benchmarkach MT (WildMTBench, WMT25, FLORES-200 itd.), a **nie** są ponownym benchmarkiem aplikacji WhisperSubTranslate. Według Tencent rozmiary 7B/30B przewyższają otwarte modele takie jak DeepSeek-V4-Pro/Kimi, a lekki **1.8B (domyślny)** ogólnie przewyższa główne komercyjne API, takie jak Microsoft i Doubao.
 
 Klucze API i preferencje są zapisywane lokalnie na Twoim PC w `app.getPath('userData')` z podstawowym kodowaniem, aby zapobiec przypadkowemu ujawnieniu. Plik konfiguracyjny nigdy nie jest przesyłany do Git ani dołączany do buildów.
 
@@ -177,7 +193,7 @@ Modele są przechowywane w `_models/` i automatycznie pobierane na żądanie. Wy
 
 ## Strategia gałęzi
 
-Pojedynczy trunk: `main` to jedyna długotrwała gałąź. Maintainer commituje bezpośrednio na `main` i taguje wydania (np. `v2.1.0`).
+Pojedynczy trunk: `main` to jedyna długotrwała gałąź. Maintainer commituje bezpośrednio na `main` i taguje wydania (np. `v2.2.0`).
 
 **Współtworzący:** otwórz Pull Request z forka. Krótkotrwałe gałęzie `feature/<scope>` są mile widziane; zostaną zmergowane przez squash do `main`.
 

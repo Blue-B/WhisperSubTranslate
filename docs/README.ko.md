@@ -2,7 +2,7 @@
 
 [English](../README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 **로컬 모델(Hy-MT2 1.8B/7B GGUF, 오프라인)** 또는 온라인 엔진(MyMemory 무료, DeepL, GPT-5-nano/OpenAI, Gemini) 중 선택할 수 있습니다.
+로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 **로컬 모델(Hy-MT2 1.8B/7B GGUF, 오프라인)** 또는 온라인 엔진(MyMemory 무료, DeepL, OpenAI GPT-5.4 mini, Gemini) 중 선택할 수 있습니다.
 
 > 중요: 이 앱은 동영상의 소리를 whisper.cpp로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
 
@@ -31,7 +31,7 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v2.1.0-win-x64.zip`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v2.2.0-win-x64.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
 바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(로컬 Hy-MT2 모델로 100% 오프라인 번역 가능, 또는 무료 MyMemory/본인 DeepL·OpenAI·Gemini 키).
@@ -43,6 +43,7 @@ npm install
 npm start
 ```
 
+- **Node.js ≥ 20.19 또는 ≥ 22.12** 필요 (Electron 42 빌드 툴체인)
 - **whisper-cpp**는 `npm install` 시 자동 다운로드됩니다 (Windows: ~700MB CUDA 버전)
 - **Linux/macOS**에서는 사전 빌드 바이너리가 없을 경우, 소스에서 자동 빌드됩니다 (`cmake`, `gcc`/`clang`, `git` 필요)
 - **FFmpeg**는 npm 패키지를 통해 자동 포함됩니다
@@ -101,26 +102,39 @@ npm run build-win
 
 [![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/ko/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
 
-| 영역        | 설명                                                                                      |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| 런타임      | Electron, Node.js, JavaScript                                                             |
-| 패키징      | electron-builder                                                                          |
-| 네트워킹    | axios                                                                                     |
-| 음성→텍스트 | whisper.cpp (GGML 모델)                                                                   |
-| 번역(선택)  | 로컬(Hy-MT2 1.8B/7B GGUF, node-llama-cpp), DeepL API, OpenAI(GPT-5-nano), Gemini, MyMemory |
+| 영역        | 설명                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| 런타임      | Electron, Node.js, JavaScript                                                              |
+| 패키징      | electron-builder                                                                           |
+| 네트워킹    | axios                                                                                      |
+| 음성→텍스트 | whisper.cpp (GGML 모델)                                                                    |
+| 번역(선택)  | 로컬(Hy-MT2 1.8B/7B GGUF, node-llama-cpp), DeepL API, OpenAI(GPT-5.4 mini), Gemini, MyMemory |
 
 ## 번역 엔진
 
-| 엔진                | 비용              | 키         | 제한 / 비고                                                                                      |
-| ------------------- | ----------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| **로컬 Hy-MT2 1.8B** | **무료/오프라인** | **불필요** | **~1.13GB 모델, VRAM 2GB / RAM 4GB, 빠름**                                                       |
-| **로컬 Hy-MT2 7B**   | **무료/오프라인** | **불필요** | **~6.16GB 모델, VRAM 8GB / RAM 12GB, 고품질**                                                      |
-| MyMemory            | 무료              | 불필요     | IP당 일 약 5만자                                                                                 |
-| DeepL               | 월 50만자 무료    | 필요       | 유료 플랜 제공                                                                                   |
-| GPT-5-nano(OpenAI)  | 유료              | 필요       | 입력 $0.05 / 출력 $0.40 per 1M 토큰                                                              |
-| Gemini 3 Flash      | 무료/유료         | 필요       | 무료: 하루 250자막/20-30분, 유료: 무제한 ([API 키 발급](https://aistudio.google.com/app/apikey)) |
+WhisperSubTranslate는 번들된 Tencent **Hy-MT2** 모델로 자막을 **완전 오프라인** 번역하거나, 자신의 API 키로 무료/유료 온라인 엔진을 사용할 수 있습니다.
 
+| 엔진                          | 오프라인 |   키   | 비용           | 비고                                                                                             |
+| ----------------------------- | :------: | :----: | -------------- | ------------------------------------------------------------------------------------------------ |
+| **Hy-MT2 1.8B** (로컬 · 기본) |    ✅    | 불필요 | 무료           | ~1.13GB 모델, VRAM 2GB / RAM 4GB, 빠름                                                           |
+| **Hy-MT2 7B** (로컬)          |    ✅    | 불필요 | 무료           | ~6.16GB 모델, VRAM 8GB / RAM 12GB, 고품질                                                        |
+| MyMemory                      |    ❌    | 불필요 | 무료           | IP당 일 약 5만자                                                                                 |
+| DeepL                         |    ❌    |  필요  | 월 50만자 무료 | 유료 플랜 제공                                                                                   |
+| OpenAI GPT-5.4 mini | ❌ | 필요 | 유료 | 입력 $0.075 / 출력 $0.60 per 1M 토큰 · 문맥 인식 |
+| OpenAI GPT-5.4 nano | ❌ | 필요 | 유료 | 더 저렴한 등급 — 입력 $0.20 / 출력 $1.25 per 1M 토큰 |
+| Gemini 3 Flash                |    ❌    |  필요  | 무료/유료      | 무료: 하루 250자막/20-30분, 유료: 무제한 ([API 키 발급](https://aistudio.google.com/app/apikey)) |
+
+> **프라이버시:** 로컬 Hy-MT2 엔진만이 API 키·네트워크·사용료가 전혀 필요 없는 유일한 옵션입니다 — 영상과 대사가 PC를 벗어나지 않습니다.
+>
 > **팁**: 1시간 이상 긴 영상은 MyMemory 일일 한도에 걸릴 수 있어요. Gemini나 DeepL 사용 권장.
+
+### 번역 품질 (오프라인 엔진)
+
+WhisperSubTranslate는 Tencent의 **Hy-MT2** 모델(기본 1.8B, 선택 7B)을 번들로 제공합니다. Tencent 공식 멀티 벤치마크 평가에서 Hy-MT2 제품군은 주요 상용 번역 API와 경쟁력이 있으며, 일부 벤치마크에서는 이를 앞섭니다:
+
+![Tencent Hy-MT2 공식 벤치마크 (WhisperSubTranslate 번들 모델)](../assets/hy-mt2-benchmark.ko.png)
+
+> **출처:** 모델 제작사 Tencent가 발표한 공식 벤치마크 — [Hy-MT2 저장소](https://github.com/Tencent-Hunyuan/Hy-MT2) · [기술 보고서](https://arxiv.org/pdf/2605.22064) · [HuggingFace 모델](https://huggingface.co/tencent/Hy-MT2-1.8B). 위 그래프는 **Tencent 공식 Figure 1을 재작도**한 것으로, 내장 모델(1.8B/7B) 수치는 논문 표와 대조해 확인했습니다. 이 수치는 표준 기계번역 벤치마크(WildMTBench, WMT25, FLORES-200 등)에서 **모델 자체**를 측정한 것으로, WhisperSubTranslate 앱을 재측정한 것이 **아닙니다**. Tencent에 따르면 7B/30B는 DeepSeek-V4-Pro/Kimi 등 오픈 모델을 능가하며, 경량 **1.8B(기본값)** 도 Microsoft·Doubao 등 주요 상용 API를 전반적으로 능가합니다.
 
 API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 인코딩을 적용하여 저장됩니다. 파일 탐색기에서 우연히 열어도 평문으로 노출되지 않도록 보호하며, Git이나 배포 파일에는 절대 포함되지 않습니다.
 
@@ -179,7 +193,7 @@ whisper.cpp는 100개 이상의 언어를 지원합니다 (영어, 스페인어,
 
 ## 브랜치 전략
 
-단일 트렁크: `main` 하나만 장수 브랜치로 운용하며, 메인테이너는 `main`에 직접 커밋·태그합니다(예: `v2.1.0`).
+단일 트렁크: `main` 하나만 장수 브랜치로 운용하며, 메인테이너는 `main`에 직접 커밋·태그합니다(예: `v2.2.0`).
 
 **외부 기여자**는 포크 후 Pull Request를 열어주세요. `feature/<scope>` 형식의 짧은 수명 브랜치를 권장하며, squash 머지로 `main`에 올라갑니다.
 

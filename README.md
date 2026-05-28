@@ -37,7 +37,7 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ### For users: run the portable release
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v2.1.0-win-x64.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v2.2.0-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
 That's it — extraction runs fully offline on your PC. Translation is optional (local Hy-MT2 model for 100% offline, free MyMemory, or your own DeepL/OpenAI/Gemini API keys).
@@ -49,6 +49,7 @@ npm install
 npm start
 ```
 
+- **Node.js ≥ 20.19 or ≥ 22.12** is required (Electron 42 build toolchain)
 - **whisper-cpp** is automatically downloaded during `npm install` (~700MB CUDA version on Windows)
 - On **Linux/macOS**, if no pre-built binary is available, whisper.cpp is automatically built from source (requires `cmake`, `gcc`/`clang`, and `git`)
 - **FFmpeg** is automatically included via npm package
@@ -107,28 +108,39 @@ Artifacts are emitted to `dist2/`.
 
 [![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
 
-| Area                   | Details                                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| Runtime                | Electron, Node.js, JavaScript                                                                   |
-| Packaging              | electron‑builder                                                                                |
-| Networking             | axios                                                                                           |
-| Speech‑to‑text         | whisper.cpp (GGML models)                                                                       |
+| Area                   | Details                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| Runtime                | Electron, Node.js, JavaScript                                                                    |
+| Packaging              | electron‑builder                                                                                 |
+| Networking             | axios                                                                                            |
+| Speech‑to‑text         | whisper.cpp (GGML models)                                                                        |
 | Translation (optional) | **Local (Hy-MT2 1.8B/7B GGUF, offline via node-llama-cpp)**, MyMemory, DeepL, OpenAI GPT, Gemini |
 
 ## Translation engines
 
-| Engine               | Cost                        | API key | Limits / Notes                                                                       |
-| -------------------- | --------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| **Local Hy-MT2 1.8B** | **Free / Offline**          | **No**  | **~1.13GB model, VRAM 2GB / RAM 4GB, fast**                                          |
-| **Local Hy-MT2 7B**   | **Free / Offline**          | **No**  | **~6.16GB model, VRAM 8GB / RAM 12GB, high quality**                                   |
-| MyMemory             | Free                        | No      | ~50K chars/day per IP                                                                |
-| DeepL                | Free 500K/month             | Yes     | Stable deterministic translation                                                     |
-| OpenAI GPT-5.4 mini  | Paid                        | Yes     | $0.075 input / $0.60 output per 1M tokens (context-aware)                            |
-| OpenAI GPT-5.4 nano  | Paid                        | Yes     | Cheaper tier — $0.20 input / $1.25 output per 1M tokens                              |
-| Gemini 3 Flash       | Free/Paid                   | Yes     | Recommended low-cost LLM route ([Get key](https://aistudio.google.com/app/apikey))   |
-| Local (Hy-MT2)        | Free after ~1.1 GB download | No      | Offline, GPU/CPU selectable. Tencent Hy-MT2 1.8B Q4 (auto-downloads on first use) |
+WhisperSubTranslate can translate subtitles **fully offline** with the bundled Tencent **Hy-MT2** model, or route to free/paid online engines using your own API keys.
 
-> **Tip**: For long videos (1hr+), MyMemory's daily limit can cause slowdowns. Use Gemini, DeepL, or a configured GPT model instead.
+| Engine                            | Offline | API key | Cost            | Notes                                                                          |
+| --------------------------------- | :-----: | :-----: | --------------- | ------------------------------------------------------------------------------ |
+| **Hy-MT2 1.8B** (local · default) |   ✅    |   No    | Free            | ~1.13 GB · VRAM 2 GB / RAM 4 GB · 100% on-device                               |
+| **Hy-MT2 7B** (local)             |   ✅    |   No    | Free            | ~6.16 GB · VRAM 8 GB / RAM 12 GB · larger model                                |
+| MyMemory                          |   ❌    |   No    | Free            | ~50K chars/day per IP                                                          |
+| DeepL                             |   ❌    |   Yes   | Free 500K/month | Deterministic output                                                           |
+| OpenAI GPT-5.4 mini               |   ❌    |   Yes   | Paid            | $0.075 in / $0.60 out per 1M tokens · context-aware                            |
+| OpenAI GPT-5.4 nano               |   ❌    |   Yes   | Paid            | Cheaper tier — $0.20 in / $1.25 out per 1M tokens                              |
+| Gemini 3 Flash                    |   ❌    |   Yes   | Free / low-cost | Recommended low-cost route ([Get key](https://aistudio.google.com/app/apikey)) |
+
+> **Privacy:** the local Hy-MT2 engine is the only option that needs **no API key, no network, and no per-use cost** — your video and its dialogue never leave your machine.
+>
+> **Tip:** For long videos (1hr+), MyMemory's daily limit can cause slowdowns. Use Gemini, DeepL, or a configured GPT model instead.
+
+### Translation quality (offline engine)
+
+WhisperSubTranslate ships Tencent's **Hy-MT2** models (1.8B default, 7B optional). In Tencent's official multi-benchmark evaluation, the Hy-MT2 family is competitive with — and on several benchmarks ahead of — leading commercial translation APIs:
+
+![Hy-MT2 translation benchmark — official Tencent figures, bundled in WhisperSubTranslate](assets/hy-mt2-benchmark.png)
+
+> **Source:** official benchmarks published by the model's authors, Tencent — [Hy-MT2 repository](https://github.com/Tencent-Hunyuan/Hy-MT2) · [technical report](https://arxiv.org/pdf/2605.22064) · [models on HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). The chart above is **redrawn from Tencent's official Figure 1**, with our bundled-model (1.8B/7B) numbers verified against the paper tables. These figures measure the **underlying model** on standard MT benchmarks (WildMTBench, WMT25, FLORES-200, etc.), **not** an app-specific re-benchmark of WhisperSubTranslate. Per Tencent, the 7B/30B sizes outperform open models like DeepSeek-V4-Pro/Kimi, and the lightweight **1.8B (our default)** surpasses mainstream commercial APIs such as Microsoft and Doubao overall.
 
 API keys and preferences are saved locally on your PC under `app.getPath('userData')` with basic encoding to prevent casual exposure. The configuration file is never uploaded to Git or included in builds.
 
@@ -187,7 +199,7 @@ Models are stored under `_models/` and auto‑downloaded on demand. Choose a siz
 
 ## Branching model
 
-Single-trunk: `main` is the only long-lived branch. The maintainer commits directly to `main` and tags releases (e.g. `v2.1.0`).
+Single-trunk: `main` is the only long-lived branch. The maintainer commits directly to `main` and tags releases (e.g. `v2.2.0`).
 
 **Contributors:** open a Pull Request from your fork. Any short-lived `feature/<scope>` branch is welcome; it will be squash-merged into `main`.
 

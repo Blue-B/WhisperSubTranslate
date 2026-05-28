@@ -81,3 +81,6 @@ log-preview.png
 # Local-only dev/release tooling (not for GitHub)
 .playwright-cli/
 release-kit/
+
+# editor/backup leftovers
+*.bak
