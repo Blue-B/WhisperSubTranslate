@@ -187,7 +187,7 @@ Models are stored under `_models/` and auto‑downloaded on demand. Choose a siz
 
 ## Branching model
 
-Single-trunk: `main` is the only long-lived branch. The maintainer commits directly to `main` and tags releases (e.g. `v2.0.0`).
+Single-trunk: `main` is the only long-lived branch. The maintainer commits directly to `main` and tags releases (e.g. `v2.1.0`).
 
 **Contributors:** open a Pull Request from your fork. Any short-lived `feature/<scope>` branch is welcome; it will be squash-merged into `main`.
 

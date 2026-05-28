@@ -177,7 +177,7 @@ Modele są przechowywane w `_models/` i automatycznie pobierane na żądanie. Wy
 
 ## Strategia gałęzi
 
-Pojedynczy trunk: `main` to jedyna długotrwała gałąź. Maintainer commituje bezpośrednio na `main` i taguje wydania (np. `v2.0.0`).
+Pojedynczy trunk: `main` to jedyna długotrwała gałąź. Maintainer commituje bezpośrednio na `main` i taguje wydania (np. `v2.1.0`).
 
 **Współtworzący:** otwórz Pull Request z forka. Krótkotrwałe gałęzie `feature/<scope>` są mile widziane; zostaną zmergowane przez squash do `main`.
 
