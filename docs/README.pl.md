@@ -12,7 +12,7 @@ Szybka, lokalna aplikacja desktopowa do konwersji wideo na napisy (SRT) i tłuma
 
 ## Dlaczego WhisperSubTranslate
 
-Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza Twojego komputera. Brak przesyłania do chmury, brak kont, brak kart kredytowych. Twórz dokładne pliki SRT offline; tłumaczenie też może działać **w pełni offline** z lokalnym modelem HY-MT, albo poprzez darmowe/płatne silniki online (MyMemory, własne klucze DeepL/OpenAI/Gemini).
+Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza Twojego komputera. Brak przesyłania do chmury, brak kont, brak kart kredytowych. Twórz dokładne pliki SRT offline; tłumaczenie też może działać **w pełni offline** z lokalnym modelem Hy-MT2, albo poprzez darmowe/płatne silniki online (MyMemory, własne klucze DeepL/OpenAI/Gemini).
 
 ### Wartość w skrócie
 
@@ -31,7 +31,7 @@ Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza T
 
 ### Dla użytkowników: uruchom wersję przenośną
 
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.0.2-win-x64.zip`
+- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.1.0-win-x64.zip`
 - Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
 
 To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
@@ -263,7 +263,7 @@ Jeśli ten projekt oszczędza Twój czas lub pomaga publikować lepsze napisy, w
 Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate! 🙏
 
 <a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
 </a>
 
 ## Aktywność repozytorium

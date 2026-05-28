@@ -16,7 +16,7 @@ A local-first desktop workflow for turning videos into multilingual subtitles. D
 
 ## Why use WhisperSubTranslate
 
-Subtitle extraction runs 100% locally — your video never leaves your machine. No cloud uploads, no accounts, no credit cards. Create accurate SRT offline; translation can run **fully offline** with the bundled local HY-MT model, or use free/paid online engines (MyMemory, your own DeepL/OpenAI/Gemini keys).
+Subtitle extraction runs 100% locally — your video never leaves your machine. No cloud uploads, no accounts, no credit cards. Create accurate SRT offline; translation can run **fully offline** with the bundled local Hy-MT2 model, or use free/paid online engines (MyMemory, your own DeepL/OpenAI/Gemini keys).
 
 ### Value at a glance
 
@@ -37,10 +37,10 @@ Subtitle extraction runs 100% locally — your video never leaves your machine. 
 
 ### For users: run the portable release
 
-- Download the latest portable archive from Releases: `WhisperSubTranslate-v2.0.2-win-x64.zip`
+- Download the latest portable archive from Releases: `WhisperSubTranslate-v2.1.0-win-x64.zip`
 - Open the extracted folder and run `WhisperSubTranslate.exe`
 
-That's it — extraction runs fully offline on your PC. Translation is optional (local HY-MT model for 100% offline, free MyMemory, or your own DeepL/OpenAI/Gemini API keys).
+That's it — extraction runs fully offline on your PC. Translation is optional (local Hy-MT2 model for 100% offline, free MyMemory, or your own DeepL/OpenAI/Gemini API keys).
 
 ### For developers: run from source
 
@@ -113,20 +113,20 @@ Artifacts are emitted to `dist2/`.
 | Packaging              | electron‑builder                                                                                |
 | Networking             | axios                                                                                           |
 | Speech‑to‑text         | whisper.cpp (GGML models)                                                                       |
-| Translation (optional) | **Local (HY-MT 1.8B/7B GGUF, offline via node-llama-cpp)**, MyMemory, DeepL, OpenAI GPT, Gemini |
+| Translation (optional) | **Local (Hy-MT2 1.8B/7B GGUF, offline via node-llama-cpp)**, MyMemory, DeepL, OpenAI GPT, Gemini |
 
 ## Translation engines
 
 | Engine               | Cost                        | API key | Limits / Notes                                                                       |
 | -------------------- | --------------------------- | ------- | ------------------------------------------------------------------------------------ |
-| **Local HY-MT 1.8B** | **Free / Offline**          | **No**  | **~1.13GB model, VRAM 2GB / RAM 4GB, fast**                                          |
-| **Local HY-MT 7B**   | **Free / Offline**          | **No**  | **~4.4GB model, VRAM 6GB / RAM 8GB, high quality**                                   |
+| **Local Hy-MT2 1.8B** | **Free / Offline**          | **No**  | **~1.13GB model, VRAM 2GB / RAM 4GB, fast**                                          |
+| **Local Hy-MT2 7B**   | **Free / Offline**          | **No**  | **~6.16GB model, VRAM 8GB / RAM 12GB, high quality**                                   |
 | MyMemory             | Free                        | No      | ~50K chars/day per IP                                                                |
 | DeepL                | Free 500K/month             | Yes     | Stable deterministic translation                                                     |
 | OpenAI GPT-5.4 mini  | Paid                        | Yes     | $0.075 input / $0.60 output per 1M tokens (context-aware)                            |
 | OpenAI GPT-5.4 nano  | Paid                        | Yes     | Cheaper tier — $0.20 input / $1.25 output per 1M tokens                              |
 | Gemini 3 Flash       | Free/Paid                   | Yes     | Recommended low-cost LLM route ([Get key](https://aistudio.google.com/app/apikey))   |
-| Local (HY-MT)        | Free after ~1.1 GB download | No      | Offline, GPU/CPU selectable. Tencent HY-MT 1.5 1.8B Q4 (auto-downloads on first use) |
+| Local (Hy-MT2)        | Free after ~1.1 GB download | No      | Offline, GPU/CPU selectable. Tencent Hy-MT2 1.8B Q4 (auto-downloads on first use) |
 
 > **Tip**: For long videos (1hr+), MyMemory's daily limit can cause slowdowns. Use Gemini, DeepL, or a configured GPT model instead.
 
@@ -273,7 +273,7 @@ If this project saves you time or helps you publish better subtitles, supporting
 Thanks to everyone who helps make WhisperSubTranslate better! 🙏
 
 <a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
 </a>
 
 ## Repository activity

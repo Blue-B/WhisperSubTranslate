@@ -2,6 +2,24 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-05-28
+
+Minor release: upgrades the local translation engine to **Tencent Hy-MT2** (Apache-2.0) and tidies the repository layout.
+
+### Added
+
+- **Hy-MT2 local translation engine** — replaces HY-MT1.5. Default **1.8B (Q4_K_M, ~1.13 GB)**; the high-quality tier is upgraded to **7B (Q6_K, ~6.16 GB)**. Same `hunyuan-dense` GGUF architecture (drop-in via `node-llama-cpp`), now **Apache-2.0** licensed with **33+ supported languages**.
+- **Automatic cleanup of legacy HY-MT1.5 model files** — orphaned `HY-MT1.5-*.gguf` downloads are removed once on first model listing/translation.
+
+### Changed
+
+- Prompt aligned to Hy-MT2's official default template; `LANG_NAMES` expanded from 24 to 38; app-side `maxTokens` raised 256 → 1024 for long subtitle lines.
+- UI strings rebranded HY-MT → Hy-MT2 across all 5 locales (`i18n.js` regenerated).
+
+### Internal
+
+- Repository layout tidied: localized READMEs, `TRANSLATION.md`, and `CHANGELOG.md` moved into `docs/`; app icons moved into `build/`; the generated `log-preview.png` is no longer tracked; local-only tooling (`.playwright-cli/`, `release-kit/`) is now ignored. Root tracked files reduced 27 → 18.
+
 ## [2.0.2] — 2026-05-27
 
 Patch release: better local (HY-MT) translation quality and broader Linux compatibility. Thanks to community contributor [@matbgn](https://github.com/matbgn).

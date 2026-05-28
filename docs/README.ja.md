@@ -2,7 +2,7 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-動画の音声を文字起こし(SRT)し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は **ローカルモデル(HY-MT 1.8B/7B GGUF、完全オフライン)** またはオンラインエンジン(MyMemory 無料、DeepL、GPT-5-nano、Gemini)から選択できます。
+動画の音声を文字起こし(SRT)し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は **ローカルモデル(Hy-MT2 1.8B/7B GGUF、完全オフライン)** またはオンラインエンジン(MyMemory 無料、DeepL、GPT-5-nano、Gemini)から選択できます。
 
 > 重要: 本アプリは whisper.cpp で動画の音声から新規に SRT 字幕を生成します。既存の埋め込み字幕トラックや画面上の文字(OCR)を抽出するツールではありません。
 
@@ -12,7 +12,7 @@
 
 ## なぜ WhisperSubTranslate なのか
 
-字幕抽出は100%ローカル処理。動画はPCの外へ出ません。アカウントもクレジットカードも不要。精度の高いSRTをオフラインで作成し、翻訳も **ローカルモデル(HY-MT GGUF)** を選べば完全オフライン。オンラインエンジン(無料MyMemory、DeepL/OpenAI/Gemini キー)も選択可能です。
+字幕抽出は100%ローカル処理。動画はPCの外へ出ません。アカウントもクレジットカードも不要。精度の高いSRTをオフラインで作成し、翻訳も **ローカルモデル(Hy-MT2 GGUF)** を選べば完全オフライン。オンラインエンジン(無料MyMemory、DeepL/OpenAI/Gemini キー)も選択可能です。
 
 ### 価値の要点
 
@@ -31,10 +31,10 @@
 
 ### 一般ユーザー: ポータブル版で実行
 
-- Releases から最新のポータブルアーカイブをダウンロード:`WhisperSubTranslate-v2.0.2-win-x64.zip`
+- Releases から最新のポータブルアーカイブをダウンロード:`WhisperSubTranslate-v2.1.0-win-x64.zip`
 - 展開後のフォルダで `WhisperSubTranslate.exe` を実行
 
-すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション(ローカル HY-MT モデルで100%オフライン翻訳、無料MyMemory、あるいは自分のDeepL/OpenAI/Gemini APIキー)。
+すぐに使えます。抽出はPCで完全オフラインで実行されます。翻訳はオプション(ローカル Hy-MT2 モデルで100%オフライン翻訳、無料MyMemory、あるいは自分のDeepL/OpenAI/Gemini APIキー)。
 
 ### 開発者: ソースから実行
 
@@ -107,14 +107,14 @@ npm run build-win
 | パッケージング | electron-builder                                                                              |
 | ネットワーク   | axios                                                                                         |
 | 音声→テキスト  | whisper.cpp (GGMLモデル)                                                                      |
-| 翻訳(任意)     | ローカル(HY-MT 1.8B/7B GGUF、node-llama-cpp), DeepL API, OpenAI(GPT-5-nano), Gemini, MyMemory |
+| 翻訳(任意)     | ローカル(Hy-MT2 1.8B/7B GGUF、node-llama-cpp), DeepL API, OpenAI(GPT-5-nano), Gemini, MyMemory |
 
 ## 翻訳エンジン
 
 | エンジン                | コスト              | API キー | 制限 / 備考                                                                                    |
 | ----------------------- | ------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| **ローカル HY-MT 1.8B** | **無料/オフライン** | **不要** | **約 1.13GB モデル、VRAM 2GB / RAM 4GB、高速**                                                 |
-| **ローカル HY-MT 7B**   | **無料/オフライン** | **不要** | **約 4.4GB モデル、VRAM 6GB / RAM 8GB、高品質**                                                |
+| **ローカル Hy-MT2 1.8B** | **無料/オフライン** | **不要** | **約 1.13GB モデル、VRAM 2GB / RAM 4GB、高速**                                                 |
+| **ローカル Hy-MT2 7B**   | **無料/オフライン** | **不要** | **約 6.16GB モデル、VRAM 8GB / RAM 12GB、高品質**                                                |
 | MyMemory                | 無料                | 不要     | 1 IP あたり約 5万/日                                                                           |
 | DeepL                   | 月 50万無料         | 必要     | 有料プランあり                                                                                 |
 | GPT-5-nano(OpenAI)      | 有料                | 必要     | 入力 $0.05 / 出力 $0.40 per 1M トークン                                                        |
@@ -265,7 +265,7 @@ fix: localize target language note
 WhisperSubTranslate をより良くしてくれるすべての方に感謝します! 🙏
 
 <a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
 </a>
 
 ## リポジトリの活動

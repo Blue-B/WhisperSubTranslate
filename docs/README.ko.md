@@ -2,7 +2,7 @@
 
 [English](../README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 **로컬 모델(HY-MT 1.8B/7B GGUF, 오프라인)** 또는 온라인 엔진(MyMemory 무료, DeepL, GPT-5-nano/OpenAI, Gemini) 중 선택할 수 있습니다.
+로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 **로컬 모델(Hy-MT2 1.8B/7B GGUF, 오프라인)** 또는 온라인 엔진(MyMemory 무료, DeepL, GPT-5-nano/OpenAI, Gemini) 중 선택할 수 있습니다.
 
 > 중요: 이 앱은 동영상의 소리를 whisper.cpp로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
 
@@ -12,7 +12,7 @@
 
 ## 왜 WhisperSubTranslate를 써야 할까요?
 
-자막 추출은 100% 로컬에서 이루어집니다. 영상은 내 PC 밖으로 나가지 않습니다. 계정도 카드도 필요 없습니다. 정확한 SRT를 오프라인으로 만들고, 번역도 **로컬 모델(HY-MT GGUF)**을 선택하면 완전 오프라인. 온라인 엔진(MyMemory 무료, DeepL/OpenAI/Gemini 키)도 선택 가능합니다.
+자막 추출은 100% 로컬에서 이루어집니다. 영상은 내 PC 밖으로 나가지 않습니다. 계정도 카드도 필요 없습니다. 정확한 SRT를 오프라인으로 만들고, 번역도 **로컬 모델(Hy-MT2 GGUF)**을 선택하면 완전 오프라인. 온라인 엔진(MyMemory 무료, DeepL/OpenAI/Gemini 키)도 선택 가능합니다.
 
 ### 핵심 가치 한눈에
 
@@ -31,10 +31,10 @@
 
 ### 사용자: 포터블 배포판 실행
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v2.0.2-win-x64.zip`
+- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v2.1.0-win-x64.zip`
 - 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
 
-바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(로컬 HY-MT 모델로 100% 오프라인 번역 가능, 또는 무료 MyMemory/본인 DeepL·OpenAI·Gemini 키).
+바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(로컬 Hy-MT2 모델로 100% 오프라인 번역 가능, 또는 무료 MyMemory/본인 DeepL·OpenAI·Gemini 키).
 
 ### 개발자: 소스에서 실행
 
@@ -107,14 +107,14 @@ npm run build-win
 | 패키징      | electron-builder                                                                          |
 | 네트워킹    | axios                                                                                     |
 | 음성→텍스트 | whisper.cpp (GGML 모델)                                                                   |
-| 번역(선택)  | 로컬(HY-MT 1.8B/7B GGUF, node-llama-cpp), DeepL API, OpenAI(GPT-5-nano), Gemini, MyMemory |
+| 번역(선택)  | 로컬(Hy-MT2 1.8B/7B GGUF, node-llama-cpp), DeepL API, OpenAI(GPT-5-nano), Gemini, MyMemory |
 
 ## 번역 엔진
 
 | 엔진                | 비용              | 키         | 제한 / 비고                                                                                      |
 | ------------------- | ----------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| **로컬 HY-MT 1.8B** | **무료/오프라인** | **불필요** | **~1.13GB 모델, VRAM 2GB / RAM 4GB, 빠름**                                                       |
-| **로컬 HY-MT 7B**   | **무료/오프라인** | **불필요** | **~4.4GB 모델, VRAM 6GB / RAM 8GB, 고품질**                                                      |
+| **로컬 Hy-MT2 1.8B** | **무료/오프라인** | **불필요** | **~1.13GB 모델, VRAM 2GB / RAM 4GB, 빠름**                                                       |
+| **로컬 Hy-MT2 7B**   | **무료/오프라인** | **불필요** | **~6.16GB 모델, VRAM 8GB / RAM 12GB, 고품질**                                                      |
 | MyMemory            | 무료              | 불필요     | IP당 일 약 5만자                                                                                 |
 | DeepL               | 월 50만자 무료    | 필요       | 유료 플랜 제공                                                                                   |
 | GPT-5-nano(OpenAI)  | 유료              | 필요       | 입력 $0.05 / 출력 $0.40 per 1M 토큰                                                              |
@@ -265,7 +265,7 @@ fix: localize target language note
 WhisperSubTranslate를 더 좋게 만들어주신 모든 분들께 감사드립니다! 🙏
 
 <a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
 </a>
 
 ## 저장소 활동

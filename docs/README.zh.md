@@ -2,7 +2,7 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文 | [Polski](./README.pl.md)
 
-将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译可选择 **本地模型（HY-MT 1.8B/7B GGUF，完全离线）** 或在线引擎（MyMemory 免费、DeepL、GPT-5-nano/OpenAI、Gemini）。
+将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译可选择 **本地模型（Hy-MT2 1.8B/7B GGUF，完全离线）** 或在线引擎（MyMemory 免费、DeepL、GPT-5-nano/OpenAI、Gemini）。
 
 > 重要：本应用使用 whisper.cpp 从视频音频新生成 SRT 字幕；不会提取已有的内嵌字幕轨道，也不会识别屏幕文字（无 OCR）。
 
@@ -12,7 +12,7 @@
 
 ## 为什么选择 WhisperSubTranslate
 
-字幕提取100%本地处理，视频不会离开你的电脑。无需注册账户，无需信用卡。离线生成高质量 SRT；翻译也可选择 **本地模型（HY-MT GGUF）** 实现100%离线，或使用在线引擎（免费 MyMemory、自己的 DeepL/OpenAI/Gemini 密钥）。
+字幕提取100%本地处理，视频不会离开你的电脑。无需注册账户，无需信用卡。离线生成高质量 SRT；翻译也可选择 **本地模型（Hy-MT2 GGUF）** 实现100%离线，或使用在线引擎（免费 MyMemory、自己的 DeepL/OpenAI/Gemini 密钥）。
 
 ### 价值一览
 
@@ -31,10 +31,10 @@
 
 ### 用户：运行便携版
 
-- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v2.0.2-win-x64.zip`
+- 从 Releases 下载最新便携版压缩包：`WhisperSubTranslate-v2.1.0-win-x64.zip`
 - 解压后运行 `WhisperSubTranslate.exe`
 
-即可使用。提取在本机完全离线运行。翻译是可选的（本地 HY-MT 模型可实现100%离线翻译，或使用免费 MyMemory 以及自己的 DeepL/OpenAI/Gemini API 密钥）。
+即可使用。提取在本机完全离线运行。翻译是可选的（本地 Hy-MT2 模型可实现100%离线翻译，或使用免费 MyMemory 以及自己的 DeepL/OpenAI/Gemini API 密钥）。
 
 ### 开发者：从源码运行
 
@@ -107,14 +107,14 @@ npm run build-win
 | 打包         | electron-builder                                                                              |
 | 网络         | axios                                                                                         |
 | 语音→文本    | whisper.cpp (GGML 模型)                                                                       |
-| 翻译（可选） | 本地（HY-MT 1.8B/7B GGUF，node-llama-cpp）、DeepL API、OpenAI（GPT-5-nano）、Gemini、MyMemory |
+| 翻译（可选） | 本地（Hy-MT2 1.8B/7B GGUF，node-llama-cpp）、DeepL API、OpenAI（GPT-5-nano）、Gemini、MyMemory |
 
 ## 翻译引擎
 
 | 引擎                 | 费用           | 密钥       | 限制 / 说明                                                                                       |
 | -------------------- | -------------- | ---------- | ------------------------------------------------------------------------------------------------- |
-| **本地 HY-MT 1.8B**  | **免费/离线**  | **不需要** | **约 1.13GB 模型，VRAM 2GB / RAM 4GB，快速**                                                      |
-| **本地 HY-MT 7B**    | **免费/离线**  | **不需要** | **约 4.4GB 模型，VRAM 6GB / RAM 8GB，高质量**                                                     |
+| **本地 Hy-MT2 1.8B**  | **免费/离线**  | **不需要** | **约 1.13GB 模型，VRAM 2GB / RAM 4GB，快速**                                                      |
+| **本地 Hy-MT2 7B**    | **免费/离线**  | **不需要** | **约 6.16GB 模型，VRAM 8GB / RAM 12GB，高质量**                                                     |
 | MyMemory             | 免费           | 不需要     | 每 IP 约 5 万字/日                                                                                |
 | DeepL                | 每月 50 万免费 | 需要       | 有付费档                                                                                          |
 | GPT-5-nano（OpenAI） | 付费           | 需要       | 输入 $0.05 / 输出 $0.40 per 1M tokens                                                             |
@@ -265,7 +265,7 @@ fix: localize target language note
 感谢每一位让 WhisperSubTranslate 变得更好的人！🙏
 
 <a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate" alt="Contributors" />
+  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
 </a>
 
 ## 仓库活动
