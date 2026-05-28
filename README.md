@@ -272,9 +272,8 @@ If this project saves you time or helps you publish better subtitles, supporting
 
 Thanks to everyone who helps make WhisperSubTranslate better! 🙏
 
-<a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
-</a>
+<a href="https://github.com/Blue-B"><img src="https://github.com/Blue-B.png?size=80" width="80" alt="Blue-B" title="Blue-B" /></a>
+<a href="https://github.com/matbgn"><img src="https://github.com/matbgn.png?size=80" width="80" alt="matbgn" title="matbgn" /></a>
 
 ## Repository activity
 

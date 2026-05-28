@@ -264,9 +264,8 @@ fix: localize target language note
 
 WhisperSubTranslate를 더 좋게 만들어주신 모든 분들께 감사드립니다! 🙏
 
-<a href="https://github.com/Blue-B/WhisperSubTranslate/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Blue-B/WhisperSubTranslate&v=2.1.0" alt="Contributors" />
-</a>
+<a href="https://github.com/Blue-B"><img src="https://github.com/Blue-B.png?size=80" width="80" alt="Blue-B" title="Blue-B" /></a>
+<a href="https://github.com/matbgn"><img src="https://github.com/matbgn.png?size=80" width="80" alt="matbgn" title="matbgn" /></a>
 
 ## 저장소 활동
 
