@@ -32,7 +32,7 @@
       "preload.js",
       "index.html",
       "styles.css",
-      "icon.png",
+      "build/icon.png",
       "assets/**",
       "locales/**",
       "renderer.js",
@@ -64,7 +64,7 @@
       "target": [
         "dir"
       ],
-      "icon": "icon.png",
+      "icon": "build/icon.png",
       "extraResources": [
         {
           "from": "whisper-cpp",
@@ -80,7 +80,7 @@
       "target": [
         "dir"
       ],
-      "icon": "icon.png",
+      "icon": "build/icon.png",
       "extraResources": [
         {
           "from": "whisper-cpp",
@@ -97,7 +97,7 @@
       "target": [
         "dir"
       ],
-      "icon": "icon.png",
+      "icon": "build/icon.png",
       "extraResources": [
         {
           "from": "whisper-cpp",

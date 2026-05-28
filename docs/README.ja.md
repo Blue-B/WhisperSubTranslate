@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-[English](./README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md) | [Polski](./README.pl.md)
+[English](../README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
 動画の音声を文字起こし(SRT)し、希望の言語に翻訳する Windows デスクトップアプリ。抽出は whisper.cpp で高速かつ安定して処理され、翻訳は **ローカルモデル(HY-MT 1.8B/7B GGUF、完全オフライン)** またはオンラインエンジン(MyMemory 無料、DeepL、GPT-5-nano、Gemini)から選択できます。
 
@@ -8,7 +8,7 @@
 
 ## プレビュー
 
-![メイン UI](assets/hero/hero.png)
+![メイン UI](../assets/hero/hero.png)
 
 ## なぜ WhisperSubTranslate なのか
 
@@ -274,7 +274,7 @@ WhisperSubTranslate をより良くしてくれるすべての方に感謝しま
 
 ## 翻訳
 
-WhisperSubTranslate の翻訳にご参加ください！翻訳文字列は [`locales/*.json`](locales/) にあり、[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) で管理されています。[翻訳ガイド](TRANSLATION.md) を参照してください。
+WhisperSubTranslate の翻訳にご参加ください！翻訳文字列は [`locales/*.json`](../locales/) にあり、[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) で管理されています。[翻訳ガイド](TRANSLATION.md) を参照してください。
 
 <a href="https://hosted.weblate.org/engage/whispersubtranslate/">
   <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="翻訳ステータス" />

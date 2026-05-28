@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-[English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文 | [Polski](./README.pl.md)
+[English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文 | [Polski](./README.pl.md)
 
 将视频音频转成 SRT 字幕，并翻译到目标语言的 Windows 桌面应用。提取使用 whisper.cpp 快速稳定处理，翻译可选择 **本地模型（HY-MT 1.8B/7B GGUF，完全离线）** 或在线引擎（MyMemory 免费、DeepL、GPT-5-nano/OpenAI、Gemini）。
 
@@ -8,7 +8,7 @@
 
 ## 预览
 
-![主界面](assets/hero/hero.png)
+![主界面](../assets/hero/hero.png)
 
 ## 为什么选择 WhisperSubTranslate
 
@@ -274,7 +274,7 @@ fix: localize target language note
 
 ## 翻译
 
-欢迎参与 WhisperSubTranslate 的翻译！可翻译字符串位于 [`locales/*.json`](locales/)，由 [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) 管理。请参阅 [翻译指南](TRANSLATION.md)。
+欢迎参与 WhisperSubTranslate 的翻译！可翻译字符串位于 [`locales/*.json`](../locales/)，由 [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) 管理。请参阅 [翻译指南](TRANSLATION.md)。
 
 <a href="https://hosted.weblate.org/engage/whispersubtranslate/">
   <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="翻译状态" />

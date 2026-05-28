@@ -507,7 +507,7 @@ function createWindow() {
       webSecurity: true,
       devTools: !app.isPackaged,
     },
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
     show: false, // 준비 완료 전 깜빡임 방지
   });
@@ -2358,7 +2358,7 @@ ipcMain.handle('get-audio-data', async (event, filename) => {
   }
 });
 
-// ─── Local HY-MT Translation IPC ───────────────────────────────────────────
+// ─── Local Hy-MT2 Translation IPC ───────────────────────────────────────────
 const localTranslator = require('./local-translator');
 let _localDownloadAbort = null;
 

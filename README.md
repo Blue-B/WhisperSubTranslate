@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-English | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
+English | [한국어](./docs/README.ko.md) | [日本語](./docs/README.ja.md) | [中文](./docs/README.zh.md) | [Polski](./docs/README.pl.md)
 
 A local-first desktop workflow for turning videos into multilingual subtitles. Drop in a video, generate SRT with whisper.cpp, then translate it with free, paid, or upcoming local translation engines.
 
@@ -193,7 +193,7 @@ Single-trunk: `main` is the only long-lived branch. The maintainer commits direc
 
 ## Contributing
 
-> **Want to add a new language?** See the [Translation Guide](TRANSLATION.md).
+> **Want to add a new language?** See the [Translation Guide](docs/TRANSLATION.md).
 
 ### 1) Branching & naming
 
@@ -282,7 +282,7 @@ Thanks to everyone who helps make WhisperSubTranslate better! 🙏
 
 ## Translations
 
-Help translate WhisperSubTranslate into your language! Translatable strings live in [`locales/*.json`](locales/) and are managed on [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). See the [Translation Guide](TRANSLATION.md).
+Help translate WhisperSubTranslate into your language! Translatable strings live in [`locales/*.json`](locales/) and are managed on [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). See the [Translation Guide](docs/TRANSLATION.md).
 
 <a href="https://hosted.weblate.org/engage/whispersubtranslate/">
   <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Translation status" />

@@ -74,3 +74,10 @@ titlebar.png
 .pi-lens/
 .context-mode/
 .ctx-mode/
+
+# Generated e2e screenshot (scripts/e2e-log-visual.js)
+log-preview.png
+
+# Local-only dev/release tooling (not for GitHub)
+.playwright-cli/
+release-kit/

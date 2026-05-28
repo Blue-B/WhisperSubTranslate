@@ -1,6 +1,6 @@
 # WhisperSubTranslate
 
-[English](./README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | Polski
+[English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | Polski
 
 Szybka, lokalna aplikacja desktopowa do konwersji wideo na napisy (SRT) i tłumaczenia ich na wybrany język. Wykorzystuje whisper.cpp do ekstrakcji oraz opcjonalne silniki online do tłumaczenia.
 
@@ -8,7 +8,7 @@ Szybka, lokalna aplikacja desktopowa do konwersji wideo na napisy (SRT) i tłuma
 
 ## Podgląd
 
-![Główny interfejs WhisperSubTranslate](assets/hero/hero.png)
+![Główny interfejs WhisperSubTranslate](../assets/hero/hero.png)
 
 ## Dlaczego WhisperSubTranslate
 
@@ -272,7 +272,7 @@ Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate! 🙏
 
 ## Tłumaczenia
 
-Pomóż przetłumaczyć WhisperSubTranslate na swój język! Teksty do tłumaczenia znajdują się w [`locales/*.json`](locales/) i są zarządzane w [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
+Pomóż przetłumaczyć WhisperSubTranslate na swój język! Teksty do tłumaczenia znajdują się w [`locales/*.json`](../locales/) i są zarządzane w [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
 
 <a href="https://hosted.weblate.org/engage/whispersubtranslate/">
   <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Stan tłumaczenia" />
