@@ -4,7 +4,7 @@
  *
  * Resolution order:
  *   1. release-notes/v<version>.md  (hand-authored, multilingual; used verbatim)
- *   2. CHANGELOG.md "## [<version>]" section  (English fallback, auto-wrapped)
+ *   2. docs/CHANGELOG.md "## [<version>]" section  (English fallback, auto-wrapped)
  *
  * Usage:
  *   node scripts/release-notes.js v2.0.1     # or: 2.0.1
@@ -35,9 +35,9 @@ if (fs.existsSync(notesFile)) {
   body = fs.readFileSync(notesFile, 'utf8').trim();
   console.error(`[release-notes] using hand-authored notes: release-notes/${vtag}.md`);
 } else {
-  const changelogPath = path.join(root, 'CHANGELOG.md');
+  const changelogPath = path.join(root, 'docs/CHANGELOG.md');
   if (!fs.existsSync(changelogPath)) {
-    console.error('[release-notes] CHANGELOG.md not found and no release-notes file present.');
+    console.error('[release-notes] docs/CHANGELOG.md not found and no release-notes file present.');
     process.exit(2);
   }
   const lines = fs.readFileSync(changelogPath, 'utf8').split('\n');
@@ -45,7 +45,7 @@ if (fs.existsSync(notesFile)) {
   const startRe = new RegExp('^##\\s*\\[' + version.replace(/\./g, '\\.') + '\\]');
   const start = lines.findIndex((l) => startRe.test(l));
   if (start === -1) {
-    console.error(`[release-notes] No CHANGELOG.md section for [${version}].`);
+    console.error(`[release-notes] No docs/CHANGELOG.md section for [${version}].`);
     process.exit(3);
   }
   let end = lines.findIndex((l, i) => i > start && /^##\s*\[/.test(l));
@@ -64,7 +64,7 @@ if (fs.existsSync(notesFile)) {
     '',
     `**Download (Windows portable):** \`${assetName}\` — unzip and run \`WhisperSubTranslate.exe\`.`,
   ].join('\n');
-  console.error(`[release-notes] built from CHANGELOG.md section [${version}]`);
+  console.error(`[release-notes] built from docs/CHANGELOG.md section [${version}]`);
 }
 
 const out = path.join(root, 'RELEASE_BODY.md');
