@@ -893,7 +893,7 @@ async function continueProcessing() {
           translationInfo = 'Gemini 3 Flash';
           break;
         case 'local':
-          translationInfo = 'HY-MT Local';
+          translationInfo = 'Hy-MT2 Local';
           break;
         default:
           translationInfo = methodAtStart;
@@ -1077,7 +1077,7 @@ async function continueProcessing() {
               translationInfo = 'Gemini 3 Flash';
               break;
             case 'local':
-              translationInfo = 'HY-MT Local';
+              translationInfo = 'Hy-MT2 Local';
               break;
             default:
               translationInfo = translationMethod;
@@ -2668,7 +2668,7 @@ function initTranslationSelect() {
     }
     // Per-method unsupported target languages
     // DeepL: 페르시아어 미지원
-    // Local (HY-MT 1.5 기반): 헝가리어 미지원 → 드롭다운에서 아예 숨김 + 클라우드 엔진으로 아내
+    // Local (Hy-MT2 기반): 헝가리어 미지원 → 드롭다운에서 아예 숨김 + 클라우드 엔진으로 아내
     const unsupportedByMethod = {
       deepl: ['fa'],
       local: ['hu'],
@@ -2891,7 +2891,7 @@ function initSettingsAutoSave() {
 /* ============================================================
    Custom dropdown — replaces native <select> in setting cards
    ============================================================ */
-// ── Local HY-MT Model UI ────────────────────────────────────────────────────
+// ── Local Hy-MT2 Model UI ────────────────────────────────────────────────────
 let _localDownloading = false;
 let _localModelList = null; // 캐시
 
@@ -2917,9 +2917,9 @@ async function rebuildLocalModelSelect() {
     const installed = meta.installed ? ' ✓' : '';
     const sizeGb = (meta.sizeBytes / 1024 / 1024 / 1024).toFixed(1);
     if (opt.value === '1.8b') {
-      opt.textContent = (d.localModel18bLabel || 'HY-MT 1.8B · Fast') + ` (${sizeGb} GB${installed})`;
+      opt.textContent = (d.localModel18bLabel || 'Hy-MT2 1.8B · Fast') + ` (${sizeGb} GB${installed})`;
     } else if (opt.value === '7b') {
-      opt.textContent = (d.localModel7bLabel || 'HY-MT 7B · High quality') + ` (${sizeGb} GB${installed})`;
+      opt.textContent = (d.localModel7bLabel || 'Hy-MT2 7B · High quality') + ` (${sizeGb} GB${installed})`;
     }
   });
 }
@@ -2960,7 +2960,7 @@ async function updateLocalModelStatus() {
   const trSel = document.getElementById('translationSelect');
   if (grp) grp.style.display = trSel?.value === 'local' ? 'block' : 'none';
 
-  // Translation method가 local이 아니면 상태 바를 덮어쓰지 않음 (Gemini/DeepL 등 선택 시 HY-MT가 잘못 리턴하는 버그 방지)
+  // Translation method가 local이 아니면 상태 바를 덮어쓰지 않음 (Gemini/DeepL 등 선택 시 Hy-MT2가 잘못 리턴하는 버그 방지)
   if (trSel?.value !== 'local') return;
 
   const info = await window.electronAPI.localModelStatus(modelId);
@@ -2968,16 +2968,16 @@ async function updateLocalModelStatus() {
   const sizeText = info.sizeMB ? ` (${(info.sizeMB / 1024).toFixed(1)} GB)` : '';
 
   if (info.installed) {
-    statusEl.innerHTML = `<span style="color:var(--accent)">${d.localModelInstalledHtml || '&#10003; HY-MT model installed'}${sizeText}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--accent)">${d.localModelInstalledHtml || '&#10003; Hy-MT2 model installed'}${sizeText}</span>`;
   } else if (_localDownloading) {
     statusEl.innerHTML = `
-      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${d.localModelDownloadingHtml || 'Downloading HY-MT Q4...'} <span id="localDlPercent">0%</span></div>
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${d.localModelDownloadingHtml || 'Downloading Hy-MT2 Q4...'} <span id="localDlPercent">0%</span></div>
       <div style="height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;width:100%">
         <div id="localDlBar" style="height:100%;width:0%;background:var(--accent);transition:width 0.3s;"></div>
       </div>
     `;
   } else {
-    statusEl.innerHTML = `<span style="color:var(--text-muted);font-size:11px">${d.localModelMissingHtml || '⚠ HY-MT model not installed — auto-downloads on start'}${sizeText}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--text-muted);font-size:11px">${d.localModelMissingHtml || '⚠ Hy-MT2 model not installed — auto-downloads on start'}${sizeText}</span>`;
   }
 }
 
@@ -2994,7 +2994,7 @@ if (window.electronAPI?.onLocalModelProgress) {
     let pct = document.getElementById('localDlPercent');
     if (!bar || !pct) {
       statusEl.innerHTML = `
-        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${I18N[currentUiLang].localModelDownloadingHtml || 'Downloading HY-MT Q4...'} <span id="localDlPercent">${percent}%</span></div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">${I18N[currentUiLang].localModelDownloadingHtml || 'Downloading Hy-MT2 Q4...'} <span id="localDlPercent">${percent}%</span></div>
         <div style="height:4px;background:var(--bg-tertiary);border-radius:2px;overflow:hidden;width:100%">
           <div id="localDlBar" style="height:100%;width:${percent}%;background:var(--accent);transition:width 0.3s;"></div>
         </div>
@@ -4272,7 +4272,7 @@ function _wireModelProgress() {
       _updateModelCardProgress(`whisper-${modelName}`, percent);
     });
   }
-  // HY-MT (local translator) downloads. Map filename → card id.
+  // Hy-MT2 (local translator) downloads. Map filename → card id.
   if (window.electronAPI?.onLocalModelProgress) {
     window.electronAPI.onLocalModelProgress((progress) => {
       if (!progress) return;
@@ -4331,12 +4331,12 @@ async function renderModels() {
   const grid = document.getElementById('modelsGrid');
   if (!grid) return;
 
-  // Models metadata: 2 translation (HY-MT) + 6 ASR (Whisper) = 8 total
+  // Models metadata: 2 translation (Hy-MT2) + 6 ASR (Whisper) = 8 total
   const models = [
     {
       id: 'hy-mt-1.8b',
       whisperKey: null,
-      name: 'HY-MT 1.5 · 1.8B',
+      name: 'Hy-MT2 · 1.8B',
       desc: 'Fast lightweight local translator.',
       size: '1.13 GB',
       vram: '~2.5 GB',
@@ -4347,10 +4347,10 @@ async function renderModels() {
     {
       id: 'hy-mt-7b',
       whisperKey: null,
-      name: 'HY-MT 1.5 · 7B',
+      name: 'Hy-MT2 · 7B',
       desc: 'High-quality local translator.',
-      size: '4.58 GB',
-      vram: '~6 GB',
+      size: '6.16 GB',
+      vram: '~8 GB',
       speedKey: 'medium',
       category: 'translation',
       tag: 'MT',

@@ -162,7 +162,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return file.name; // 최소한 파일명은 반환
   },
 
-  // Local HY-MT model
+  // Local Hy-MT2 model
   localModelList: () => ipcRenderer.invoke('local-model-list'),
   localModelStatus: (modelId) => ipcRenderer.invoke('local-model-status', modelId),
   localModelDownload: (modelId) => ipcRenderer.invoke('local-model-download', modelId),

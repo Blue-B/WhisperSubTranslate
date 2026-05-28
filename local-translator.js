@@ -1,6 +1,6 @@
 /**
  * local-translator.js
- * HY-MT1.5 GGUF local translation engine (1.8B / 7B 듀얼 지원)
+ * Hy-MT2 GGUF local translation engine (1.8B / 7B 듀얼 지원)
  * Runs in Electron main process via dynamic import (ESM)
  */
 
@@ -14,10 +14,10 @@ const https = require('https');
 const MODELS = {
   '1.8b': {
     id: '1.8b',
-    repo: 'tencent/HY-MT1.5-1.8B-GGUF',
-    file: 'HY-MT1.5-1.8B-Q4_K_M.gguf',
-    sizeBytes: 1_130_000_000, // ~1.13GB
-    displayName: 'HY-MT 1.8B Q4',
+    repo: 'tencent/Hy-MT2-1.8B-GGUF',
+    file: 'Hy-MT2-1.8B-Q4_K_M.gguf',
+    sizeBytes: 1_133_080_448, // ~1.13GB
+    displayName: 'Hy-MT2 1.8B Q4',
     requirements: {
       vram: '2GB',
       ram: '4GB',
@@ -27,14 +27,14 @@ const MODELS = {
   },
   '7b': {
     id: '7b',
-    repo: 'tencent/HY-MT1.5-7B-GGUF',
-    file: 'HY-MT1.5-7B-Q4_K_M.gguf',
-    sizeBytes: 4_580_000_000, // ~4.58GB
-    displayName: 'HY-MT 7B Q4',
+    repo: 'tencent/Hy-MT2-7B-GGUF',
+    file: 'HY-MT2-7B-Q6_K.gguf',
+    sizeBytes: 6_164_482_720, // ~6.16GB (Q6_K — higher quality tier)
+    displayName: 'Hy-MT2 7B Q6',
     requirements: {
-      vram: '6GB',
-      ram: '10GB',
-      diskGB: 4.6,
+      vram: '8GB',
+      ram: '12GB',
+      diskGB: 6.2,
       speed: '느림 (고품질)',
     },
   },
@@ -46,23 +46,56 @@ function getModelUrl(modelId) {
   return `https://huggingface.co/${m.repo}/resolve/main/${m.file}`;
 }
 
-// Language name map for prompt
+// Language name map for prompt — Hy-MT2 officially supports 33+ languages.
+// Use FULL language names in the prompt (per Tencent Hy-MT2 model card).
 const LANG_NAMES = {
-  ko: 'Korean', en: 'English', ja: 'Japanese', zh: 'Chinese',
-  fr: 'French', de: 'German', es: 'Spanish', it: 'Italian',
-  pt: 'Portuguese', ru: 'Russian', ar: 'Arabic', pl: 'Polish',
-  nl: 'Dutch', tr: 'Turkish', vi: 'Vietnamese', th: 'Thai',
-  id: 'Indonesian', ms: 'Malay', hi: 'Hindi', bn: 'Bengali',
-  uk: 'Ukrainian', he: 'Hebrew', ta: 'Tamil', te: 'Telugu',
+  ko: 'Korean',
+  en: 'English',
+  ja: 'Japanese',
+  zh: 'Chinese',
+  'zh-Hant': 'Traditional Chinese',
+  yue: 'Cantonese',
+  fr: 'French',
+  de: 'German',
+  es: 'Spanish',
+  it: 'Italian',
+  pt: 'Portuguese',
+  ru: 'Russian',
+  ar: 'Arabic',
+  pl: 'Polish',
+  nl: 'Dutch',
+  tr: 'Turkish',
+  vi: 'Vietnamese',
+  th: 'Thai',
+  id: 'Indonesian',
+  ms: 'Malay',
+  tl: 'Filipino',
+  hi: 'Hindi',
+  bn: 'Bengali',
+  uk: 'Ukrainian',
+  he: 'Hebrew',
+  ta: 'Tamil',
+  te: 'Telugu',
+  cs: 'Czech',
+  km: 'Khmer',
+  my: 'Burmese',
+  fa: 'Persian',
+  gu: 'Gujarati',
+  ur: 'Urdu',
+  mr: 'Marathi',
+  bo: 'Tibetan',
+  kk: 'Kazakh',
+  mn: 'Mongolian',
+  ug: 'Uyghur',
 };
 
 let _llama = null;
 let _model = null;
 let _context = null;
 let _session = null;
-let _currentGpuMode = null;     // 'auto' | 'cpu'
-let _currentModelId = null;     // '1.8b' | '7b'
-let _downloadPromises = {};     // modelId → Promise
+let _currentGpuMode = null; // 'auto' | 'cpu'
+let _currentModelId = null; // '1.8b' | '7b'
+let _downloadPromises = {}; // modelId → Promise
 let _loadPromise = null;
 let _translateMutex = Promise.resolve();
 let _onDownloadProgress = null;
@@ -84,11 +117,54 @@ function isModelInstalled(modelId = DEFAULT_MODEL_ID) {
   try {
     const stat = fs.statSync(getModelPath(modelId));
     return stat.size > m.sizeBytes * 0.95;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
+}
+
+// Legacy model cleanup: remove obsolete *.gguf the app downloaded previously
+// (e.g. HY-MT1.5 files orphaned after the Hy-MT2 upgrade). Only touches our own
+// model files (hy-mt*/hunyuan*) that are NOT in the current catalog. Runs once.
+let _legacyCleanupDone = false;
+function cleanupLegacyModels() {
+  const keep = new Set(Object.values(MODELS).map((m) => m.file));
+  const removed = [];
+  let dir;
+  let files;
+  try {
+    dir = getModelsDir();
+    files = fs.readdirSync(dir);
+  } catch {
+    return removed;
+  }
+  for (const f of files) {
+    if (!f.endsWith('.gguf')) continue; // skip .tmp partials & non-models
+    if (keep.has(f)) continue; // keep current catalog models
+    if (!/^(hy-mt|hunyuan)/i.test(f)) continue; // only our own model files
+    try {
+      fs.unlinkSync(path.join(dir, f));
+      removed.push(f);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (removed.length)
+    console.log('[Local] \ub808\uac70\uc2dc \ubaa8\ub378 \ud30c\uc77c \uc815\ub9ac:', removed.join(', '));
+  return removed;
+}
+function _maybeCleanupLegacy() {
+  if (_legacyCleanupDone) return;
+  _legacyCleanupDone = true;
+  try {
+    cleanupLegacyModels();
+  } catch {
+    /* ignore */
+  }
 }
 
 function listModels() {
-  return Object.values(MODELS).map(m => ({
+  _maybeCleanupLegacy();
+  return Object.values(MODELS).map((m) => ({
     id: m.id,
     displayName: m.displayName,
     sizeBytes: m.sizeBytes,
@@ -98,7 +174,9 @@ function listModels() {
   }));
 }
 
-function setDownloadProgressHandler(cb) { _onDownloadProgress = cb; }
+function setDownloadProgressHandler(cb) {
+  _onDownloadProgress = cb;
+}
 
 /**
  * Download model with progress callback.
@@ -109,14 +187,24 @@ async function downloadModel(onProgress, signal, modelId = DEFAULT_MODEL_ID) {
     if (onProgress) {
       const prev = _onDownloadProgress;
       _onDownloadProgress = (p) => {
-        try { onProgress(p); } catch (_e) { /* ignore */ }
-        if (prev) try { prev(p); } catch (_e) { /* ignore */ }
+        try {
+          onProgress(p);
+        } catch (_e) {
+          /* ignore */
+        }
+        if (prev)
+          try {
+            prev(p);
+          } catch (_e) {
+            /* ignore */
+          }
       };
     }
     return _downloadPromises[modelId];
   }
-  _downloadPromises[modelId] = _downloadModelImpl(onProgress, signal, modelId)
-    .finally(() => { delete _downloadPromises[modelId]; });
+  _downloadPromises[modelId] = _downloadModelImpl(onProgress, signal, modelId).finally(() => {
+    delete _downloadPromises[modelId];
+  });
   return _downloadPromises[modelId];
 }
 
@@ -126,7 +214,7 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
   const dir = getModelsDir();
   fs.mkdirSync(dir, { recursive: true });
   const dest = getModelPath(modelId);
-  const tmp  = dest + '.tmp';
+  const tmp = dest + '.tmp';
 
   return new Promise((resolve, reject) => {
     const doRequest = (url, redirects = 0) => {
@@ -146,12 +234,18 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
         const out = fs.createWriteStream(tmp);
 
         if (signal) {
-          signal.addEventListener('abort', () => {
-            req.destroy();
-            out.destroy();
-            try { fs.unlinkSync(tmp); } catch {}
-            reject(new Error('Download cancelled'));
-          }, { once: true });
+          signal.addEventListener(
+            'abort',
+            () => {
+              req.destroy();
+              out.destroy();
+              try {
+                fs.unlinkSync(tmp);
+              } catch {}
+              reject(new Error('Download cancelled'));
+            },
+            { once: true }
+          );
         }
 
         res.on('data', (chunk) => {
@@ -160,9 +254,14 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
             res.pause();
             out.once('drain', () => res.resume());
           }
-          const p = { modelId, percent: Math.round(downloaded / total * 100), downloaded, total };
+          const p = { modelId, percent: Math.round((downloaded / total) * 100), downloaded, total };
           if (onProgress) onProgress(p);
-          if (_onDownloadProgress) try { _onDownloadProgress(p); } catch (_e) { /* ignore */ }
+          if (_onDownloadProgress)
+            try {
+              _onDownloadProgress(p);
+            } catch (_e) {
+              /* ignore */
+            }
         });
 
         res.on('end', () => {
@@ -172,7 +271,10 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
           });
         });
 
-        res.on('error', (e) => { out.destroy(); reject(e); });
+        res.on('error', (e) => {
+          out.destroy();
+          reject(e);
+        });
       });
 
       req.on('error', (e) => {
@@ -185,7 +287,9 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
 }
 
 function deleteModel(modelId = DEFAULT_MODEL_ID) {
-  try { fs.unlinkSync(getModelPath(modelId)); } catch {}
+  try {
+    fs.unlinkSync(getModelPath(modelId));
+  } catch {}
 }
 
 /**
@@ -204,8 +308,12 @@ async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID) {
     _model = await _llama.loadModel({ modelPath: getModelPath(modelId) });
     _currentGpuMode = desiredMode;
     _currentModelId = modelId;
-    console.log(`[Local] 모델 로드 완료 (id=${modelId}, device=${desiredMode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`);
-  })().finally(() => { _loadPromise = null; });
+    console.log(
+      `[Local] 모델 로드 완료 (id=${modelId}, device=${desiredMode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`
+    );
+  })().finally(() => {
+    _loadPromise = null;
+  });
   return _loadPromise;
 }
 
@@ -217,9 +325,9 @@ async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID) {
  * @param {string} modelId - '1.8b' | '7b'
  */
 async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAULT_MODEL_ID) {
-  const release = await new Promise(resolve => {
+  const release = await new Promise((resolve) => {
     const prev = _translateMutex;
-    _translateMutex = new Promise(r => prev.then(() => resolve(r)));
+    _translateMutex = new Promise((r) => prev.then(() => resolve(r)));
   });
   try {
     return await _translateLocalImpl(text, targetLang, device, modelId);
@@ -229,11 +337,18 @@ async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAU
 }
 
 async function _translateLocalImpl(text, targetLang, device, modelId) {
+  _maybeCleanupLegacy();
   if (!isModelInstalled(modelId)) {
     console.log(`[Local] 모델 미설치 감지 (${modelId}) → 자동 다운로드 시작...`);
-    await downloadModel((p) => {
-      console.log(`[Local] 다운로드 ${p.percent}% (${Math.round(p.downloaded/1024/1024)}MB / ${Math.round(p.total/1024/1024)}MB)`);
-    }, null, modelId);
+    await downloadModel(
+      (p) => {
+        console.log(
+          `[Local] 다운로드 ${p.percent}% (${Math.round(p.downloaded / 1024 / 1024)}MB / ${Math.round(p.total / 1024 / 1024)}MB)`
+        );
+      },
+      null,
+      modelId
+    );
   }
 
   await loadModel(device, modelId);
@@ -251,7 +366,7 @@ async function _translateLocalImpl(text, targetLang, device, modelId) {
   _session.resetChatHistory();
 
   const targetName = LANG_NAMES[targetLang] || targetLang;
-  const prompt = `Translate the following segment into ${targetName}, without additional explanation.\n\n${text}`;
+  const prompt = `Translate the following text into ${targetName}. Note that you should only output the translated result without any additional explanation:\n\n${text}`;
 
   try {
     const response = await _session.prompt(prompt, {
@@ -259,26 +374,48 @@ async function _translateLocalImpl(text, targetLang, device, modelId) {
       topK: 20,
       topP: 0.6,
       repeatPenalty: { penalty: 1.05 },
-      maxTokens: 256, // App-side safety cap (not a Tencent recommendation)
+      maxTokens: 1024, // App-side safety cap (not a Tencent recommendation)
     });
     return response.trim();
   } catch (e) {
-    try { _session = null; _context && await _context.dispose(); _context = null; } catch (_e) { /* ignore */ }
+    try {
+      _session = null;
+      _context && (await _context.dispose());
+      _context = null;
+    } catch (_e) {
+      /* ignore */
+    }
     throw e;
   }
 }
 
 async function unloadModel() {
-  const release = await new Promise(resolve => {
+  const release = await new Promise((resolve) => {
     const prev = _translateMutex;
-    _translateMutex = new Promise(r => prev.then(() => resolve(r)));
+    _translateMutex = new Promise((r) => prev.then(() => resolve(r)));
   });
   try {
-    try { if (_context) await _context.dispose(); } catch { /* ignore */ }
-    try { if (_model) await _model.dispose(); } catch { /* ignore */ }
-    try { if (_llama) await _llama.dispose(); } catch { /* ignore */ }
-    _session = null; _context = null; _model = null; _llama = null;
-    _currentGpuMode = null; _currentModelId = null;
+    try {
+      if (_context) await _context.dispose();
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (_model) await _model.dispose();
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (_llama) await _llama.dispose();
+    } catch {
+      /* ignore */
+    }
+    _session = null;
+    _context = null;
+    _model = null;
+    _llama = null;
+    _currentGpuMode = null;
+    _currentModelId = null;
   } finally {
     release();
   }
@@ -297,6 +434,7 @@ module.exports = {
   translateLocal,
   unloadModel,
   setDownloadProgressHandler,
+  cleanupLegacyModels,
   // Backwards compat
   MODEL_FILE: MODELS[DEFAULT_MODEL_ID].file,
   MODEL_SIZE_BYTES: MODELS[DEFAULT_MODEL_ID].sizeBytes,
