@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
@@ -27,6 +27,7 @@
   "build": {
     "appId": "com.whispersubtranslate.app",
     "productName": "WhisperSubTranslate",
+    "afterPack": "scripts/afterPack.js",
     "directories": {
       "output": "dist2"
     },

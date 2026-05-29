@@ -2,6 +2,14 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.1] — 2026-05-29
+
+Patch release: fixes local GPU/CUDA translation silently falling back to CPU because the bundled `node-llama-cpp` CUDA backend shipped without its CUDA runtime DLLs.
+
+### Fixed
+
+- **CUDA local translation** — `scripts/postinstall.js` installs the cross-platform `node-llama-cpp` binaries with `--ignore-scripts`, so `@node-llama-cpp/win-x64-cuda-ext` never downloaded its CUDA runtime DLLs (`cudart64_12` / `cublas64_12` / `cublasLt64_12`). The packaged `ggml-cuda.dll` could not resolve its imports at runtime and CUDA acceleration silently fell back to Vulkan/CPU, even when the user selected GPU (CUDA). A new electron-builder `afterPack` hook (`scripts/afterPack.js`) copies the CUDA 12 runtime DLLs already bundled with whisper-cpp next to `ggml-cuda.dll` in the packaged app so the CUDA backend can initialize. Windows-only, idempotent, never fails the build.
+
 ## [2.1.0] — 2026-05-28
 
 Minor release: upgrades the local translation engine to **Tencent Hy-MT2** (Apache-2.0) and tidies the repository layout.
