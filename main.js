@@ -1123,6 +1123,35 @@ function convertToWav(inputPath) {
       return;
     }
 
+    // 입력 미디어 경로 자체도 비ASCII면 ffmpeg에 바로 넘기지 않고
+    // safe temp에 하드링크해서 전달한다 (hardlink 실패 시 copyFile fallback).
+    // 한글/일본어/중국어 Windows 계정에서 ffmpeg argv 인코딩 이슈 회피.
+    let ffmpegInputPath = inputPath;
+    let stagedInputPath = null;
+    if (!isAsciiPath(inputPath)) {
+      const safeTempDir = getSafeTempDir();
+      const ext = path.extname(inputPath) || '.bin';
+      const staged = path.join(safeTempDir, `input_${Date.now()}${ext}`);
+      let staged_ok = false;
+      try {
+        fs.linkSync(inputPath, staged); // 동일 볼륨 NTFS면 즉시, 용량 추가 없음
+        staged_ok = true;
+        console.log(`[Audio] Unicode input hardlinked: ${staged}`);
+      } catch (_linkErr) {
+        try {
+          fs.copyFileSync(inputPath, staged); // 크로스볼륨 fallback
+          staged_ok = true;
+          console.log(`[Audio] Unicode input copied (cross-volume fallback): ${staged}`);
+        } catch (copyErr) {
+          console.warn(`[Audio] Unicode input staging failed (${copyErr.message}), passing original path`);
+        }
+      }
+      if (staged_ok) {
+        ffmpegInputPath = staged;
+        stagedInputPath = staged;
+      }
+    }
+
     console.log(`[Audio] Converting to WAV: ${path.basename(inputPath)}`);
     mainWindow.webContents.send('output-update', `Converting audio to WAV format...\n`);
 
@@ -1146,10 +1175,21 @@ function convertToWav(inputPath) {
       }
     }
 
+    // staged 입력 정리 헬퍼 (성공/실패/중지 경로 모두에서 호출)
+    const cleanupStagedInput = () => {
+      if (stagedInputPath && fs.existsSync(stagedInputPath)) {
+        try {
+          fs.unlinkSync(stagedInputPath);
+        } catch (_e) {
+          /* ignore */
+        }
+      }
+    };
+
     const ffmpegArgs = [
       '-y', // 덮어쓰기
       '-i',
-      inputPath, // 입력 파일
+      ffmpegInputPath, // 입력 파일 (ASCII 보장)
       '-ar',
       '16000', // 16kHz (Whisper 요구사항)
       '-ac',
@@ -1181,6 +1221,9 @@ function convertToWav(inputPath) {
 
     ffmpegProcess.on('close', (code) => {
       currentProcess = null;
+      // ffmpeg 종료 시점에서는 입력 파일이 더 이상 필요 없으므로
+      // 하드링크/채 복사본이 있으면 정리.
+      cleanupStagedInput();
       if (isUserStopped) {
         // 임시 WAV 정리
         if (usingSafeTemp && fs.existsSync(wavPath)) {
@@ -1206,6 +1249,7 @@ function convertToWav(inputPath) {
     });
 
     ffmpegProcess.on('error', (err) => {
+      cleanupStagedInput();
       if (err.code === 'ENOENT') {
         reject(
           new Error(
@@ -1225,9 +1269,22 @@ function convertToWav(inputPath) {
 }
 
 // ===== GGML Model Path Helper (GGML 모델 경로 헬퍼) =====
-// 쓰기 권한 있는 userData/_models로 고정 (Program Files 권한 문제 회피)
+// 쓰기 권한 있는 userData/_models로 고정 (Program Files 권한 문제 회피).
+// 단, 사용자 계정이 한글/일본어/중국어 등 비ASCII면 userData 경로에도
+// 유니코드가 섯여 있어 whisper-cli에 -m으로 전달될 때 경로가 깨진다.
+// 이 경우 ASCII 경로 (C:\Users\Public\WhisperSubTranslate\_models)로 폴백한다. (issue #22)
 function getGgmlModelsDir() {
-  return path.join(app.getPath('userData'), '_models');
+  const primary = path.join(app.getPath('userData'), '_models');
+  if (process.platform !== 'win32' || isAsciiPath(primary)) {
+    return primary;
+  }
+  const fallback = path.join('C:', 'Users', 'Public', 'WhisperSubTranslate', '_models');
+  try {
+    if (!fs.existsSync(fallback)) fs.mkdirSync(fallback, { recursive: true });
+  } catch (_e) {
+    return primary;
+  }
+  return fallback;
 }
 
 function getGgmlModelPath(model) {
@@ -1325,8 +1382,22 @@ function extractSingleFile(filePath, model, language, device) {
       const whisperDir = path.join(basePath, 'whisper-cpp');
       const cpuDir = path.join(whisperDir, 'cpu');
       const cpuExePath = path.join(cpuDir, WHISPER_CLI_NAME);
-      // CPU 모드일 때 CPU 전용 바이너리 우선 사용 (CUDA DLL 의존성 없음)
-      const useCpuBuild = chosenDevice !== 'cuda' && fs.existsSync(cpuExePath);
+      // CPU 모드일 때 CPU 전용 바이너리 우선 사용 (CUDA DLL 의존성 없음).
+      // 단, whisper-cli.exe만 있고 의존 DLL(whisper.dll, ggml*.dll)이 빠진
+      // 깨진 설치(issue #26)에서는 spawn이 ENOENT로 실패하므로, Windows에서는
+      // 의존 DLL 존재 여부도 확인해 폴백 처리한다.
+      let cpuBuildUsable = chosenDevice !== 'cuda' && fs.existsSync(cpuExePath);
+      if (cpuBuildUsable && process.platform === 'win32') {
+        const cpuRuntimeProbe = path.join(cpuDir, 'whisper.dll');
+        if (!fs.existsSync(cpuRuntimeProbe)) {
+          console.warn(
+            '[Whisper] cpu/whisper-cli.exe found but cpu/whisper.dll is missing - ' +
+              'CPU build is incomplete, falling back to top-level binary.'
+          );
+          cpuBuildUsable = false;
+        }
+      }
+      const useCpuBuild = cpuBuildUsable;
       const exePath = useCpuBuild ? cpuExePath : path.join(whisperDir, WHISPER_CLI_NAME);
       const exeCwd = useCpuBuild ? cpuDir : whisperDir;
       console.log(
@@ -1675,11 +1746,18 @@ function extractSingleFile(filePath, model, language, device) {
 
         // ENOENT/EACCES 에러 = whisper-cli 파일 없음 또는 실행 권한 없음
         if (err.code === 'ENOENT' || err.code === 'EACCES') {
+          // On Windows, ENOENT from spawn() can also mean a dependent DLL
+          // failed to load (whisper.dll / ggml*.dll missing) — the binary is
+          // present but its runtime libs are not. Hint users about this case.
+          const isWin = process.platform === 'win32';
           const errDetail =
             err.code === 'EACCES'
               ? `[ERROR] ${WHISPER_CLI_NAME} permission denied! (EACCES)\n` +
-                (process.platform !== 'win32' ? `Try: chmod +x "${exePath}"\n\n` : '\n')
-              : `[ERROR] ${WHISPER_CLI_NAME} not found!\n\n`;
+                (!isWin ? `Try: chmod +x "${exePath}"\n\n` : '\n')
+              : `[ERROR] ${WHISPER_CLI_NAME} could not be launched!\n` +
+                (isWin
+                  ? `(Either the file is missing, or a dependent DLL such as whisper.dll / ggml*.dll could not be loaded from the same folder.)\n\n`
+                  : `\n`);
 
           const missingFileError = new Error(
             errDetail +

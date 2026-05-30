@@ -27,46 +27,48 @@ const MAX_REDIRECTS = 5;
 async function getLatestRelease() {
   return new Promise((resolve, reject) => {
     const options = {
-      headers: { 'User-Agent': 'WhisperSubTranslate-Installer' }
+      headers: { 'User-Agent': 'WhisperSubTranslate-Installer' },
     };
 
-    https.get(GITHUB_API, options, (res) => {
-      // Validate response status
-      if (res.statusCode !== 200) {
-        reject(new Error(`GitHub API returned ${res.statusCode}: ${res.statusMessage}`));
-        return;
-      }
-
-      let data = '';
-      let size = 0;
-
-      res.on('data', chunk => {
-        size += chunk.length;
-        if (size > MAX_RESPONSE_SIZE) {
-          res.destroy();
-          reject(new Error('Response too large'));
+    https
+      .get(GITHUB_API, options, (res) => {
+        // Validate response status
+        if (res.statusCode !== 200) {
+          reject(new Error(`GitHub API returned ${res.statusCode}: ${res.statusMessage}`));
           return;
         }
-        data += chunk;
-      });
 
-      res.on('end', () => {
-        if (data.length === 0) {
-          reject(new Error('Empty response from GitHub API'));
-          return;
-        }
-        try {
-          const parsed = JSON.parse(data);
-          if (!parsed.assets || !Array.isArray(parsed.assets)) {
-            reject(new Error('Invalid release data: missing assets'));
+        let data = '';
+        let size = 0;
+
+        res.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > MAX_RESPONSE_SIZE) {
+            res.destroy();
+            reject(new Error('Response too large'));
             return;
           }
-          resolve(parsed);
-        } catch (e) {
-          reject(new Error('Invalid JSON response: ' + e.message));
-        }
-      });
-    }).on('error', reject);
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          if (data.length === 0) {
+            reject(new Error('Empty response from GitHub API'));
+            return;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (!parsed.assets || !Array.isArray(parsed.assets)) {
+              reject(new Error('Invalid release data: missing assets'));
+              return;
+            }
+            resolve(parsed);
+          } catch (e) {
+            reject(new Error('Invalid JSON response: ' + e.message));
+          }
+        });
+      })
+      .on('error', reject);
   });
 }
 
@@ -93,62 +95,63 @@ async function downloadFile(url, destPath) {
         return;
       }
 
-      https.get(currentUrl, { headers: { 'User-Agent': 'WhisperSubTranslate-Installer' } }, (res) => {
-        // Handle redirect
-        if (res.statusCode === 302 || res.statusCode === 301) {
-          redirectCount++;
-          const location = res.headers.location;
-          if (!location) {
-            reject(new Error('Redirect without location header'));
+      https
+        .get(currentUrl, { headers: { 'User-Agent': 'WhisperSubTranslate-Installer' } }, (res) => {
+          // Handle redirect
+          if (res.statusCode === 302 || res.statusCode === 301) {
+            redirectCount++;
+            const location = res.headers.location;
+            if (!location) {
+              reject(new Error('Redirect without location header'));
+              return;
+            }
+            request(location);
             return;
           }
-          request(location);
-          return;
-        }
 
-        // Validate response
-        if (res.statusCode !== 200) {
-          fs.unlink(destPath, () => {});
-          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
-          return;
-        }
+          // Validate response
+          if (res.statusCode !== 200) {
+            fs.unlink(destPath, () => {});
+            reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+            return;
+          }
 
-        const totalSize = parseInt(res.headers['content-length'], 10) || 0;
-        let downloadedSize = 0;
-        let lastPercent = 0;
+          const totalSize = parseInt(res.headers['content-length'], 10) || 0;
+          let downloadedSize = 0;
+          let lastPercent = 0;
 
-        res.on('data', (chunk) => {
-          downloadedSize += chunk.length;
-          if (totalSize > 0) {
-            const percent = Math.floor((downloadedSize / totalSize) * 100);
-            if (percent >= lastPercent + 10) {
-              process.stdout.write(`\r  Downloading: ${percent}%`);
-              lastPercent = percent;
+          res.on('data', (chunk) => {
+            downloadedSize += chunk.length;
+            if (totalSize > 0) {
+              const percent = Math.floor((downloadedSize / totalSize) * 100);
+              if (percent >= lastPercent + 10) {
+                process.stdout.write(`\r  Downloading: ${percent}%`);
+                lastPercent = percent;
+              }
             }
-          }
-        });
+          });
 
-        res.pipe(file);
+          res.pipe(file);
 
-        file.on('finish', () => {
-          file.close();
-          if (totalSize > 0) {
-            console.log('\r  Downloading: 100%');
-          } else {
-            console.log('\r  Download complete');
-          }
-          resolve();
-        });
+          file.on('finish', () => {
+            file.close();
+            if (totalSize > 0) {
+              console.log('\r  Downloading: 100%');
+            } else {
+              console.log('\r  Download complete');
+            }
+            resolve();
+          });
 
-        file.on('error', (err) => {
+          file.on('error', (err) => {
+            fs.unlink(destPath, () => {});
+            reject(err);
+          });
+        })
+        .on('error', (err) => {
           fs.unlink(destPath, () => {});
           reject(err);
         });
-
-      }).on('error', (err) => {
-        fs.unlink(destPath, () => {});
-        reject(err);
-      });
     };
 
     request(url);
@@ -170,7 +173,7 @@ async function extractZip(archivePath, destDir) {
     const psCommand = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
     execSync(`powershell -Command "${psCommand}"`, {
       stdio: 'inherit',
-      windowsHide: true
+      windowsHide: true,
     });
   } else {
     // Linux/Mac: use unzip
@@ -251,7 +254,7 @@ async function buildWhisperFromSource(withCuda) {
     console.log('\n  [Build] Cloning whisper.cpp from GitHub...');
     execSync(`git clone --depth 1 https://github.com/ggml-org/whisper.cpp "${buildTempDir}"`, {
       stdio: 'inherit',
-      timeout: 120000
+      timeout: 120000,
     });
 
     let cmakeArgs = withCuda ? '-DGGML_CUDA=ON' : '';
@@ -267,8 +270,10 @@ async function buildWhisperFromSource(withCuda) {
             rpathCandidates.push(`/usr/local/${dir}/lib64`);
           }
         }
-      } catch (_e) { /* ignore */ }
-      const existingRpaths = rpathCandidates.filter(p => fs.existsSync(p));
+      } catch (_e) {
+        /* ignore */
+      }
+      const existingRpaths = rpathCandidates.filter((p) => fs.existsSync(p));
       if (existingRpaths.length > 0) {
         const rpathStr = existingRpaths.join(':');
         cmakeArgs += ` -DCMAKE_BUILD_RPATH="${rpathStr}" -DCMAKE_INSTALL_RPATH="${rpathStr}" -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON`;
@@ -280,7 +285,7 @@ async function buildWhisperFromSource(withCuda) {
     execSync(`cmake -B build ${cmakeArgs}`, {
       cwd: buildTempDir,
       stdio: 'inherit',
-      timeout: 60000
+      timeout: 60000,
     });
 
     console.log('  [Build] Compiling... (this may take a few minutes)');
@@ -288,7 +293,7 @@ async function buildWhisperFromSource(withCuda) {
     execSync(`cmake --build build --config Release -j${Math.max(1, cores - 1)}`, {
       cwd: buildTempDir,
       stdio: 'inherit',
-      timeout: 600000
+      timeout: 600000,
     });
 
     // Find the built binary
@@ -300,7 +305,10 @@ async function buildWhisperFromSource(withCuda) {
 
     let builtBinary = null;
     for (const p of possiblePaths) {
-      if (fs.existsSync(p)) { builtBinary = p; break; }
+      if (fs.existsSync(p)) {
+        builtBinary = p;
+        break;
+      }
     }
 
     if (!builtBinary) {
@@ -319,8 +327,8 @@ async function buildWhisperFromSource(withCuda) {
     if (process.platform !== 'win32') {
       const buildDir = path.join(buildTempDir, 'build');
       const soDirs = [
-        path.join(buildDir, 'src'),                    // libwhisper.so
-        path.join(buildDir, 'ggml', 'src'),            // libggml*.so
+        path.join(buildDir, 'src'), // libwhisper.so
+        path.join(buildDir, 'ggml', 'src'), // libggml*.so
         path.join(buildDir, 'ggml', 'src', 'ggml-cuda'), // libggml-cuda.so
       ];
       let soCount = 0;
@@ -328,8 +336,8 @@ async function buildWhisperFromSource(withCuda) {
         if (!fs.existsSync(dir)) continue;
         const files = fs.readdirSync(dir);
         for (const file of files) {
-          const isSharedLib = file.endsWith('.so') || file.includes('.so.') ||
-                             file.endsWith('.dylib') || file.includes('.dylib.');
+          const isSharedLib =
+            file.endsWith('.so') || file.includes('.so.') || file.endsWith('.dylib') || file.includes('.dylib.');
           if (!isSharedLib) continue;
           const src = path.join(dir, file);
           const dest = path.join(WHISPER_CPP_DIR, file);
@@ -337,13 +345,19 @@ async function buildWhisperFromSource(withCuda) {
             const stat = fs.lstatSync(src);
             if (stat.isSymbolicLink()) {
               const linkTarget = fs.readlinkSync(src);
-              try { fs.unlinkSync(dest); } catch (_e) { /* ignore */ }
+              try {
+                fs.unlinkSync(dest);
+              } catch (_e) {
+                /* ignore */
+              }
               fs.symlinkSync(linkTarget, dest);
             } else {
               fs.copyFileSync(src, dest);
             }
             soCount++;
-          } catch (_e) { /* ignore individual file errors */ }
+          } catch (_e) {
+            /* ignore individual file errors */
+          }
         }
       }
       if (soCount > 0) {
@@ -353,13 +367,16 @@ async function buildWhisperFromSource(withCuda) {
 
     console.log('\n  [Build] whisper.cpp built and installed successfully!\n');
     return true;
-
   } catch (err) {
     console.log(`  [Build] Build failed: ${err.message}`);
     return false;
   } finally {
     // Cleanup build temp
-    try { fs.rmSync(buildTempDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }
+    try {
+      fs.rmSync(buildTempDir, { recursive: true, force: true });
+    } catch (_e) {
+      /* ignore */
+    }
   }
 }
 
@@ -382,10 +399,10 @@ function ensureLlamaBinaries() {
     '@node-llama-cpp/linux-arm64',
     '@node-llama-cpp/linux-armv7l',
     '@node-llama-cpp/mac-arm64-metal',
-    '@node-llama-cpp/mac-x64'
+    '@node-llama-cpp/mac-x64',
   ];
   const root = path.join(__dirname, '..');
-  const missing = required.filter(pkg => {
+  const missing = required.filter((pkg) => {
     return !fs.existsSync(path.join(root, 'node_modules', pkg, 'package.json'));
   });
   if (missing.length === 0) {
@@ -397,7 +414,9 @@ function ensureLlamaBinaries() {
   try {
     const main = require(path.join(root, 'node_modules', 'node-llama-cpp', 'package.json'));
     version = main.version || version;
-  } catch (_e) { /* ignore */ }
+  } catch (_e) {
+    /* ignore */
+  }
   console.log(`\n  [llama] Installing ${missing.length} cross-platform binary package(s)...`);
   // npm honors os/cpu fields in package.json and skips non-matching optionalDependencies
   // even with --force. Pass --os= and --cpu= per package so mac-arm64-metal/mac-x64/etc.
@@ -433,7 +452,11 @@ function ensureLlamaBinaries() {
  */
 async function main() {
   // Ensure node-llama-cpp binaries for all platforms
-  try { ensureLlamaBinaries(); } catch (e) { console.log('  [llama] Skipped:', e.message); }
+  try {
+    ensureLlamaBinaries();
+  } catch (e) {
+    console.log('  [llama] Skipped:', e.message);
+  }
 
   console.log('\n[postinstall] Checking whisper-cpp...\n');
 
@@ -456,19 +479,14 @@ async function main() {
 
     if (process.platform === 'win32') {
       // Windows: Priority CUDA 12 > CUDA 11 > CPU
-      asset = release.assets.find(a =>
-        a.name.includes('cublas') &&
-        a.name.includes('12') &&
-        a.name.endsWith('.zip') &&
-        a.name.includes('x64')
+      asset = release.assets.find(
+        (a) => a.name.includes('cublas') && a.name.includes('12') && a.name.endsWith('.zip') && a.name.includes('x64')
       );
 
       if (!asset) {
         console.log('  [INFO] CUDA 12 not found, trying CUDA 11...');
-        asset = release.assets.find(a =>
-          a.name.includes('cublas') &&
-          a.name.endsWith('.zip') &&
-          a.name.includes('x64')
+        asset = release.assets.find(
+          (a) => a.name.includes('cublas') && a.name.endsWith('.zip') && a.name.includes('x64')
         );
       }
 
@@ -476,11 +494,9 @@ async function main() {
         isCudaBuild = true;
       } else {
         console.log('  [INFO] CUDA version not found, using CPU version...');
-        asset = release.assets.find(a =>
-          a.name.includes('bin') &&
-          a.name.endsWith('.zip') &&
-          !a.name.includes('cublas') &&
-          a.name.includes('x64')
+        asset = release.assets.find(
+          (a) =>
+            a.name.includes('bin') && a.name.endsWith('.zip') && !a.name.includes('cublas') && a.name.includes('x64')
         );
       }
 
@@ -489,9 +505,12 @@ async function main() {
       }
     } else if (process.platform === 'darwin') {
       // macOS: look for macOS/Darwin binary
-      asset = release.assets.find(a =>
-        (a.name.toLowerCase().includes('darwin') || a.name.toLowerCase().includes('macos') || a.name.toLowerCase().includes('apple')) &&
-        a.name.endsWith('.zip')
+      asset = release.assets.find(
+        (a) =>
+          (a.name.toLowerCase().includes('darwin') ||
+            a.name.toLowerCase().includes('macos') ||
+            a.name.toLowerCase().includes('apple')) &&
+          a.name.endsWith('.zip')
       );
 
       if (!asset) {
@@ -505,17 +524,17 @@ async function main() {
       }
     } else {
       // Linux: look for Linux binary
-      asset = release.assets.find(a =>
-        a.name.toLowerCase().includes('linux') &&
-        a.name.includes('x64') &&
-        (a.name.endsWith('.zip') || a.name.endsWith('.tar.gz'))
+      asset = release.assets.find(
+        (a) =>
+          a.name.toLowerCase().includes('linux') &&
+          a.name.includes('x64') &&
+          (a.name.endsWith('.zip') || a.name.endsWith('.tar.gz'))
       );
 
       // Also try CUDA builds for Linux
       if (!asset) {
-        asset = release.assets.find(a =>
-          a.name.toLowerCase().includes('linux') &&
-          (a.name.endsWith('.zip') || a.name.endsWith('.tar.gz'))
+        asset = release.assets.find(
+          (a) => a.name.toLowerCase().includes('linux') && (a.name.endsWith('.zip') || a.name.endsWith('.tar.gz'))
         );
       }
 
@@ -568,10 +587,9 @@ async function main() {
 
     // Some releases have files in whisper-* or bin/ subfolder
     const extractedItems = fs.readdirSync(WHISPER_CPP_DIR);
-    const innerDir = extractedItems.find(item => {
+    const innerDir = extractedItems.find((item) => {
       const itemPath = path.join(WHISPER_CPP_DIR, item);
-      return fs.statSync(itemPath).isDirectory() &&
-             (item.includes('whisper') || item === 'bin');
+      return fs.statSync(itemPath).isDirectory() && (item.includes('whisper') || item === 'bin');
     });
 
     if (innerDir) {
@@ -589,7 +607,11 @@ async function main() {
     // 8. Verify installation and set executable permission
     if (fs.existsSync(WHISPER_CLI)) {
       if (process.platform !== 'win32') {
-        try { fs.chmodSync(WHISPER_CLI, 0o755); } catch (_e) { /* ignore */ }
+        try {
+          fs.chmodSync(WHISPER_CLI, 0o755);
+        } catch (_e) {
+          /* ignore */
+        }
       }
       console.log('\n  whisper-cpp installed successfully!\n');
     } else {
@@ -599,11 +621,8 @@ async function main() {
 
     // 9. Download CPU fallback build (when main build is CUDA, Windows only)
     if (process.platform === 'win32' && isCudaBuild && !fs.existsSync(CPU_CLI)) {
-      const cpuAsset = release.assets.find(a =>
-        a.name.includes('bin') &&
-        a.name.endsWith('.zip') &&
-        !a.name.includes('cublas') &&
-        a.name.includes('x64')
+      const cpuAsset = release.assets.find(
+        (a) => a.name.includes('bin') && a.name.endsWith('.zip') && !a.name.includes('cublas') && a.name.includes('x64')
       );
 
       if (cpuAsset && cpuAsset.browser_download_url && cpuAsset.browser_download_url.startsWith('https://')) {
@@ -638,26 +657,72 @@ async function main() {
             if (!fs.existsSync(CPU_DIR)) {
               fs.mkdirSync(CPU_DIR, { recursive: true });
             }
-            fs.copyFileSync(cpuExe, CPU_CLI);
-            console.log('  CPU fallback build installed at whisper-cpp/cpu/\n');
+            // Copy whisper-cli.exe AND every runtime DLL sitting next to it.
+            // Without the dependent DLLs (whisper.dll, ggml*.dll, ...), Windows
+            // fails to load the binary and Node spawn() surfaces it as ENOENT,
+            // which historically looked like "whisper-cli not found" to users
+            // (see issue #26).
+            const cpuSrcDir = path.dirname(cpuExe);
+            const runtimePattern = /\.(dll|so|so\.\d+|dylib)$/i;
+            let copiedDll = 0;
+            for (const entry of fs.readdirSync(cpuSrcDir)) {
+              const src = path.join(cpuSrcDir, entry);
+              try {
+                if (!fs.statSync(src).isFile()) continue;
+              } catch (_e) {
+                continue;
+              }
+              // Always carry the CLI binary; otherwise only ship runtime libs.
+              if (entry !== CLI_NAME && !runtimePattern.test(entry)) continue;
+              const dest = path.join(CPU_DIR, entry);
+              try {
+                fs.copyFileSync(src, dest);
+                if (entry !== CLI_NAME) copiedDll++;
+              } catch (copyErr) {
+                console.log(`  [WARN] Failed to copy ${entry}: ${copyErr.message}`);
+              }
+            }
+            if (process.platform !== 'win32') {
+              try {
+                fs.chmodSync(CPU_CLI, 0o755);
+              } catch (_e) {
+                /* ignore */
+              }
+            }
+            console.log(`  CPU fallback build installed at whisper-cpp/cpu/ (cli + ${copiedDll} runtime libs)\n`);
           } else {
             console.log(`  [WARN] ${CLI_NAME} not found in CPU build zip\n`);
           }
 
           // Cleanup
-          try { fs.unlinkSync(cpuZipPath); } catch (_e) { /* ignore */ }
-          try { fs.rmSync(cpuTempDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }
+          try {
+            fs.unlinkSync(cpuZipPath);
+          } catch (_e) {
+            /* ignore */
+          }
+          try {
+            fs.rmSync(cpuTempDir, { recursive: true, force: true });
+          } catch (_e) {
+            /* ignore */
+          }
         } catch (cpuErr) {
           console.log(`  [WARN] CPU fallback download failed: ${cpuErr.message}`);
           console.log('  GPU-only build will be used. If you encounter CUDA errors,');
           console.log('  download whisper-bin-x64.zip manually and extract to whisper-cpp/cpu/\n');
           // Cleanup on error
-          try { fs.unlinkSync(cpuZipPath); } catch (_e) { /* ignore */ }
-          try { fs.rmSync(cpuTempDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }
+          try {
+            fs.unlinkSync(cpuZipPath);
+          } catch (_e) {
+            /* ignore */
+          }
+          try {
+            fs.rmSync(cpuTempDir, { recursive: true, force: true });
+          } catch (_e) {
+            /* ignore */
+          }
         }
       }
     }
-
   } catch (error) {
     console.error('\n  [ERROR] Failed to download whisper-cpp:', error.message);
     console.log('  Please download manually from: https://github.com/ggml-org/whisper.cpp/releases\n');

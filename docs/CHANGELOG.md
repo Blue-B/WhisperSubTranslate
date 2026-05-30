@@ -2,6 +2,19 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.2] — 2026-05-30
+
+Patch release: fixes two long-standing Windows portable issues — the CPU whisper.cpp build failing to launch on GPU-less machines (issue #26), and Korean/Japanese/Chinese Windows account names breaking subtitle extraction (issue #22).
+
+### Fixed
+
+- **CPU whisper.cpp build missing runtime DLLs (issue #26)** — the CPU fallback in `scripts/postinstall.js` only copied `whisper-cli.exe` into `whisper-cpp/cpu/`, leaving its dependent runtime libraries (`whisper.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-cpu.dll`) behind. On a CPU-only Windows machine, Windows could not resolve those imports and Node `spawn()` surfaced the dependent-DLL failure as `ENOENT`, which the app then reported as "whisper-cli not found" even though the file was sitting right there in `resources/whisper-cpp/cpu/`. The postinstall script now copies the CLI binary AND every `.dll` next to it from the upstream `whisper-bin-x64.zip` into `whisper-cpp/cpu/`, so the portable build's CPU fallback actually launches on GPU-less machines.
+- **Defensive runtime check** — `main.js` now verifies that `cpu/whisper.dll` is present before electing the CPU build at runtime; broken installs (where DLLs were never extracted) auto-fall back to the top-level binary instead of failing with a misleading "not found" message.
+- **Clearer launch-failure message** — on Windows, the `ENOENT` error from `spawn()` now mentions that the failure can also mean a dependent DLL such as `whisper.dll` / `ggml*.dll` could not be loaded from the same folder, not only that the binary itself is missing.
+- **Non-ASCII Windows account names breaking extraction (issue #22)** — Korean/Japanese/Chinese Windows user names produce non-ASCII paths in `%APPDATA%\whispersubtranslate\_models\...` (the GGML model location passed to whisper-cli via `-m`) and in user file paths handed to ffmpeg. whisper-cli and ffmpeg on Windows did not always survive the argv code-page round-trip, which surfaced as misleading errors like "GPU memory shortage or driver issue". Two new safeguards close the gap so non-Latin Windows accounts work without a separate English profile:
+  - `getGgmlModelsDir()` now detects when the resolved userData path contains non-ASCII characters on Windows and falls back to `C:\Users\Public\WhisperSubTranslate\_models`, an ASCII path every user account can write to. All downloads, lookups, and the `-m` argument to whisper-cli automatically use the safe location.
+  - `convertToWav()` now stages a non-ASCII input media file into the ASCII safe-temp directory before invoking ffmpeg — via `fs.linkSync` (instant, no extra disk on the same NTFS volume) with a `fs.copyFileSync` fallback for cross-volume cases. The hardlink/copy is cleaned up on every exit path (success, failure, user-stop).
+
 ## [2.2.1] — 2026-05-29
 
 Patch release: fixes local GPU/CUDA translation silently falling back to CPU because the bundled `node-llama-cpp` CUDA backend shipped without its CUDA runtime DLLs.
