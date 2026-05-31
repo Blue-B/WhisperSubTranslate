@@ -267,7 +267,7 @@ Jeśli ten projekt oszczędza Twój czas lub pomaga publikować lepsze napisy, w
 - Jednorazowi sponsorzy są wymienieni w README i notatkach wydania (możliwość rezygnacji).
 - Miesięczni sponsorzy ($3/mies. przez GitHub Sponsors, automatyczne rozliczanie) otrzymują również priorytetową obsługę zgłoszeń "Sponsor Request" (best-effort).
 
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/Jednorazowo_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/Jednorazowo_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h) [![PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ZEWFKDX595ESJ)
 
 ## Podziękowania
 
