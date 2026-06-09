@@ -352,6 +352,15 @@
             <button id="openFolderBtn" class="btn-sm" data-i18n-title="openFolderBtnTitle" title="출력 폴더 열기">
               출력 폴더
             </button>
+            <button
+              id="clearCompletedBtn"
+              class="btn-sm"
+              data-i18n="clearCompletedBtn"
+              data-i18n-title="clearCompletedBtnTitle"
+              title="완료 항목 제거"
+            >
+              완료 제거
+            </button>
             <button id="clearQueueBtn" class="btn-sm" data-i18n-title="clearQueueBtnTitle" title="대기열 삭제">
               대기열 삭제
             </button>
@@ -587,6 +596,60 @@
             <p id="historyHint" class="settings-hint">
               꺼면 이후 처리 파일이 기록되지 않아요. 기존 히스토리는 보존되며 '전체 지우기' 로 안전하게 삭제할 수
               있어요.
+            </p>
+          </div>
+
+          <!-- Output Cleanup Section -->
+          <div class="settings-section">
+            <h4 id="cleanupSectionTitle" class="settings-section-title" data-i18n="cleanupSectionTitle">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="width: 16px; height: 16px"
+              >
+                <path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2" />
+              </svg>
+              출력 정리
+            </h4>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="reduceRepetitionCheckbox" checked />
+                <span class="toggle-slider"></span>
+                <span id="reduceRepetitionLabel" class="toggle-text" data-i18n="reduceRepetitionLabel"
+                  >반복·환각 자막 억제 (권장)</span
+                >
+              </label>
+            </div>
+            <p id="reduceRepetitionDesc" class="settings-hint cleanup-desc" data-i18n="reduceRepetitionDesc">
+              무음·음악·효과음 구간에서 같은 줄이 계속 반복되거나 없는 말이 지어나는 현상을 막아요. 말소리
+              구간만 골라 처리합니다. 대부분의 영상에 켜두는 걸 권장해요.
+            </p>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="removeSpeakerTagsCheckbox" />
+                <span class="toggle-slider"></span>
+                <span id="removeSpeakerTagsLabel" class="toggle-text" data-i18n="removeSpeakerTagsLabel"
+                  >화자 변경 표시(&gt;&gt;) 제거</span
+                >
+              </label>
+            </div>
+            <p id="removeSpeakerTagsDesc" class="settings-hint cleanup-desc" data-i18n="removeSpeakerTagsDesc">
+              화자가 바뀔 때 줄 앞에 붙는 '&gt;&gt;' 기호를 지웁니다. 대사 내용은 그대로 유지돼요.
+            </p>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="removeSDHCheckbox" />
+                <span class="toggle-slider"></span>
+                <span id="removeSDHLabel" class="toggle-text" data-i18n="removeSDHLabel"
+                  >청각장애인용(SDH) 태그 제거</span
+                >
+              </label>
+            </div>
+            <p id="removeSDHDesc" class="settings-hint cleanup-desc" data-i18n="removeSDHDesc">
+              [music]·(applause)·♪ 처럼 소리를 설명하는 자막을 삭제해요. 줄 전체가 소리 설명일 때만 지우고,
+              대사 중간에 들어간 괄호는 건드리지 않아요.
             </p>
           </div>
 

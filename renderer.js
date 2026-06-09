@@ -675,6 +675,36 @@ function clearQueue() {
   }
 }
 
+// 완료된(completed) 항목만 큐에서 일괄 제거. 진행 중/대기 중 항목은 보존.
+function clearCompletedFromQueue() {
+  const completed = fileQueue.filter((file) => file.status === 'completed');
+  if (completed.length === 0) {
+    addOutput(`${I18N[currentUiLang].noCompletedToClear}\n`);
+    return;
+  }
+
+  // 현재 처리 인덱스가 제거되는 항목들 뒤로 밀리지 않도록 보정
+  let removedBefore = 0;
+  fileQueue.forEach((file, idx) => {
+    if (file.status === 'completed' && idx < currentProcessingIndex) removedBefore++;
+  });
+  currentProcessingIndex -= removedBefore;
+
+  fileQueue = fileQueue.filter((file) => file.status !== 'completed');
+  updateQueueDisplay();
+  updateUIMode(); // SRT/동영상 모드 전환
+  addOutput(`${I18N[currentUiLang].completedFilesRemoved(completed.length)}\n`);
+}
+
+// 출력 정리(Output cleanup) 설정값을 읽어 extract IPC로 전달.
+// 사운드 설정과 동일하게 localStorage에 영구 저장된다. 기본값: 모두 꺼짐.
+function getCleanupOptions() {
+  return {
+    removeSpeakerTags: localStorage.getItem('removeSpeakerTags') === 'true',
+    removeSDH: localStorage.getItem('removeSDH') === 'true',
+  };
+}
+
 function stopProcessing() {
   if (isProcessing || translationSessionActive) {
     shouldStop = true;
@@ -997,6 +1027,9 @@ async function continueProcessing() {
       model: model,
       language: language,
       device: device,
+      cleanup: getCleanupOptions(),
+      // 메이저장 안 key면 기본 ON (whisper 반복/환각 억제)
+      reduceRepetition: localStorage.getItem('reduceRepetition') !== 'false',
     });
 
     // 추출 단계 종료 → 의사 진행률 중지하고 현재 진행률 고정
@@ -1394,6 +1427,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 대기열 관리 버튼들
   document.getElementById('stopBtn').onclick = stopProcessing;
   document.getElementById('clearQueueBtn').onclick = clearQueue;
+  const clearCompletedBtn = document.getElementById('clearCompletedBtn');
+  if (clearCompletedBtn) clearCompletedBtn.onclick = clearCompletedFromQueue;
   document.getElementById('openFolderBtn').onclick = openOutputFolder;
 
   // Event delegation for queue list — replaces all inline onclick handlers
@@ -3410,6 +3445,26 @@ function initSettingsModal() {
     }, 1500);
   });
 
+  // 출력 정리(Output cleanup) 토글 — localStorage에 즉시 영구 저장
+  const removeSpeakerTagsCheckbox = document.getElementById('removeSpeakerTagsCheckbox');
+  if (removeSpeakerTagsCheckbox) {
+    removeSpeakerTagsCheckbox.addEventListener('change', () => {
+      localStorage.setItem('removeSpeakerTags', removeSpeakerTagsCheckbox.checked.toString());
+    });
+  }
+  const removeSDHCheckbox = document.getElementById('removeSDHCheckbox');
+  if (removeSDHCheckbox) {
+    removeSDHCheckbox.addEventListener('change', () => {
+      localStorage.setItem('removeSDH', removeSDHCheckbox.checked.toString());
+    });
+  }
+  const reduceRepetitionCheckbox = document.getElementById('reduceRepetitionCheckbox');
+  if (reduceRepetitionCheckbox) {
+    reduceRepetitionCheckbox.addEventListener('change', () => {
+      localStorage.setItem('reduceRepetition', reduceRepetitionCheckbox.checked.toString());
+    });
+  }
+
   function updateVolumeRowState() {
     if (soundMuted) {
       soundVolumeRow.classList.add('disabled');
@@ -3432,6 +3487,16 @@ function showSettingsModal() {
     if (soundEnabledCheckbox) soundEnabledCheckbox.checked = !soundMuted;
     if (soundVolumeSlider) soundVolumeSlider.value = Math.round(soundVolume * 100);
     if (soundVolumeValue) soundVolumeValue.textContent = `${Math.round(soundVolume * 100)}%`;
+
+    // 출력 정리 토글 현재값 반영
+    const removeSpeakerTagsCheckbox = document.getElementById('removeSpeakerTagsCheckbox');
+    if (removeSpeakerTagsCheckbox)
+      removeSpeakerTagsCheckbox.checked = localStorage.getItem('removeSpeakerTags') === 'true';
+    const removeSDHCheckbox = document.getElementById('removeSDHCheckbox');
+    if (removeSDHCheckbox) removeSDHCheckbox.checked = localStorage.getItem('removeSDH') === 'true';
+    const reduceRepetitionCheckbox = document.getElementById('reduceRepetitionCheckbox');
+    if (reduceRepetitionCheckbox)
+      reduceRepetitionCheckbox.checked = localStorage.getItem('reduceRepetition') !== 'false';
     if (soundVolumeRow) {
       if (soundMuted) {
         soundVolumeRow.classList.add('disabled');
@@ -4134,6 +4199,17 @@ function saveHistoryList(list) {
   } catch (_e) {}
 }
 
+// 히스토리 항목 개별 삭제 (ts 기준). 기록 항목만 지우고 원본 파일은 건드리지 않는다.
+function deleteHistoryItem(ts) {
+  if (ts == null) return;
+  const key = String(ts);
+  const list = (_historyCache || []).filter((x) => String(x.ts) !== key);
+  saveHistoryList(list);
+  const q = document.getElementById('historySearch')?.value || '';
+  renderHistory(q);
+}
+window.deleteHistoryItem = deleteHistoryItem;
+
 function saveFileToHistory(file, errorMsg) {
   if (!file || !file.path) return;
   if (file._historySaved) return;
@@ -4223,6 +4299,7 @@ function renderHistory(filter) {
       <span class="history-item-actions">
         <button class="history-item-btn" data-hist-open="${_esc(it.path || '')}">${d.histOpen || 'Open'}</button>
         <button class="history-item-btn" data-hist-folder="${_esc(it.path || '')}">${d.histFolder || 'Folder'}</button>
+        <button class="history-item-btn history-item-btn-del" data-hist-del="${_esc(String(it.ts))}" title="${d.histDelete || 'Delete'}">${d.histDelete || 'Delete'}</button>
       </span>
     </div>
   `
@@ -4253,6 +4330,10 @@ function renderHistory(filter) {
         } catch (_e) {}
       }
     });
+  });
+  //  - data-hist-del → 해당 기록 항목만 삭제 (실제 파일은 건드리지 않음)
+  listEl.querySelectorAll('[data-hist-del]').forEach((btn) => {
+    btn.addEventListener('click', () => deleteHistoryItem(btn.getAttribute('data-hist-del')));
   });
 }
 window.renderHistory = renderHistory;

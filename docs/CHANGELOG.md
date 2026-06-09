@@ -2,6 +2,28 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] — 2026-06-09
+
+Feature release: stops Whisper's repeated/hallucinated subtitles on silent and music sections (the most common quality complaint), adds opt-in subtitle cleanup, and improves queue/history management. Closes #27.
+
+### Added
+
+- **Repetition & hallucination suppression (on by default)** — videos with long non-speech stretches (music, silence, ambient/sound-effect parts) made Whisper loop the previous line over and over, or invent unrelated text. A new "Output cleanup → Suppress repeated/hallucinated lines" toggle runs the transcription through Silero **VAD (Voice Activity Detection)**, so only actual speech segments are transcribed. On a real test clip this took a 39-line repeated block (`1840年アヘン戦争` over and over) down to 5 clean dialogue lines. The Silero VAD model is downloaded automatically by `postinstall.js` (~0.9 MB); if it is missing, extraction still works and simply skips VAD. Whisper is additionally run with `--max-context 0` and `--suppress-nst` to break repetition loops.
+- **Remove speaker-change markers (`>>`)** — optional toggle that strips the leading `>>` / `>>>` markers Whisper adds when it thinks the speaker changed. Dialogue text is preserved. (issue #27)
+- **Remove SDH (deaf/hard-of-hearing) tags** — optional toggle that deletes sound-description lines such as `[music]`, `(applause)`, `♪`. Conservative by design: a cue is removed only when the **entire** line is a sound description, so parentheses inside real dialogue (e.g. `(sighs) I can't believe it`) are kept. Off by default. (issue #27)
+- **"Clear completed" queue button** — removes only finished items from the processing queue, leaving in-progress and pending items untouched. (issue #27)
+- **Per-item history deletion** — each history row now has a Delete button that removes just that entry (the log record only — the actual subtitle/video files are never touched), alongside the existing "Clear all".
+
+### Fixed
+
+- **Renderer crash hardening** — the app could close silently if the renderer hit an unhandled error right after transcription. `main.js` now logs `render-process-gone` / `child-process-gone` to `errors.log` and auto-reloads the renderer, with a backoff (stops after 3 reloads in 30s and shows a dialog) so a persistently crashing renderer can't loop forever.
+
+### Internal
+
+- New `srt-cleanup.js` — a pure (no Electron/fs) module for the speaker-tag and SDH cleanup, unit-tested via `scripts/smoke-test.js`.
+- `package.json` `build.files` now includes `srt-cleanup.js` (a missing-from-package bug caught during build verification that would have crashed the packaged app on startup).
+- Subtitle cleanup is applied to the extracted `.srt` before the translation stage reads it, so tags never reach the translator.
+
 ## [2.2.2] — 2026-05-30
 
 Patch release: fixes two long-standing Windows portable issues — the CPU whisper.cpp build failing to launch on GPU-less machines (issue #26), and Korean/Japanese/Chinese Windows account names breaking subtitle extraction (issue #22).

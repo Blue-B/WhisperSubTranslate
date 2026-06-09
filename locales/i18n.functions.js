@@ -6,6 +6,7 @@ module.exports = {
   ko: {
     removedFromQueue: (name) => `대기열에서 제거됨: ${name}`,
     pendingFilesRemoved: (n) => `대기 중인 ${n}개 파일이 삭제되었습니다.`,
+    completedFilesRemoved: (n) => `완료된 ${n}개 항목을 큐에서 제거했어요.`,
     unsupportedFormat: (name) => `지원되지 않는 파일 형식: ${name}`,
     processingFile: (idx, total, name) => `[${idx}/${total}] 처리 중: ${name}`,
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 자막 추출 완료: ${name}`,
@@ -35,6 +36,7 @@ module.exports = {
   en: {
     removedFromQueue: (name) => `Removed from queue: ${name}`,
     pendingFilesRemoved: (n) => `${n} pending file(s) removed.`,
+    completedFilesRemoved: (n) => `${n} completed item(s) removed from the queue.`,
     unsupportedFormat: (name) => `Unsupported file format: ${name}`,
     processingFile: (idx, total, name) => `[${idx}/${total}] Processing: ${name}`,
     extractionComplete: (idx, total, name) => `[${idx}/${total}] Extraction complete: ${name}`,
@@ -64,6 +66,7 @@ module.exports = {
   ja: {
     removedFromQueue: (name) => `キューから削除: ${name}`,
     pendingFilesRemoved: (n) => `待機中の${n}件のファイルを削除しました。`,
+    completedFilesRemoved: (n) => `完了した${n}件をキューから削除しました。`,
     unsupportedFormat: (name) => `未対応のファイル形式: ${name}`,
     processingFile: (idx, total, name) => `[${idx}/${total}] 処理中: ${name}`,
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 抽出完了: ${name}`,
@@ -93,6 +96,7 @@ module.exports = {
   zh: {
     removedFromQueue: (name) => `已从队列中删除: ${name}`,
     pendingFilesRemoved: (n) => `已删除${n}个等待中的文件。`,
+    completedFilesRemoved: (n) => `已从队列中删除${n}个已完成项。`,
     unsupportedFormat: (name) => `不支持的文件格式: ${name}`,
     processingFile: (idx, total, name) => `[${idx}/${total}] 处理中: ${name}`,
     extractionComplete: (idx, total, name) => `[${idx}/${total}] 提取完成: ${name}`,
@@ -122,6 +126,7 @@ module.exports = {
   pl: {
     removedFromQueue: (name) => `Usunięto z kolejki: ${name}`,
     pendingFilesRemoved: (n) => `Usunięto ${n} oczekujących plików.`,
+    completedFilesRemoved: (n) => `Usunięto ${n} ukończonych elementów z kolejki.`,
     unsupportedFormat: (name) => `Nieobsługiwany format pliku: ${name}`,
     processingFile: (idx, total, name) => `[${idx}/${total}] Przetwarzanie: ${name}`,
     extractionComplete: (idx, total, name) => `[${idx}/${total}] Ekstrakcja zakończona: ${name}`,

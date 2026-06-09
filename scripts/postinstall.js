@@ -20,6 +20,13 @@ const GITHUB_API = 'https://api.github.com/repos/ggml-org/whisper.cpp/releases/l
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit for API response
 const MAX_REDIRECTS = 5;
 
+// Silero VAD model (ggml) — lets whisper process only speech segments, which
+// removes the repeated/hallucinated lines whisper emits on silent/music parts
+// (the #1 quality complaint). ~0.9 MB. Optional: extraction still works without it.
+const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
+const VAD_MODEL_PATH = path.join(WHISPER_CPP_DIR, VAD_MODEL_NAME);
+const VAD_MODEL_URL = 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin';
+
 /**
  * Fetch latest release info from GitHub API
  * @returns {Promise<Object>} Release data
@@ -727,6 +734,35 @@ async function main() {
     console.error('\n  [ERROR] Failed to download whisper-cpp:', error.message);
     console.log('  Please download manually from: https://github.com/ggml-org/whisper.cpp/releases\n');
     // Exit 0 so npm install doesn't fail
+  }
+
+  // Silero VAD model (separate from the whisper-cli release). Optional — a
+  // failure here must NOT break the install; extraction degrades gracefully.
+  await downloadVadModel();
+}
+
+/**
+ * Download the Silero VAD ggml model into whisper-cpp/ if missing.
+ * Graceful: any failure just logs a warning (VAD is then skipped at runtime).
+ */
+async function downloadVadModel() {
+  try {
+    if (fs.existsSync(VAD_MODEL_PATH) && fs.statSync(VAD_MODEL_PATH).size > 100 * 1024) {
+      return; // already present
+    }
+    if (!fs.existsSync(WHISPER_CPP_DIR)) {
+      fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
+    }
+    console.log(`\n  Downloading Silero VAD model (${VAD_MODEL_NAME}, ~0.9 MB)...`);
+    await downloadFile(VAD_MODEL_URL, VAD_MODEL_PATH);
+    if (fs.existsSync(VAD_MODEL_PATH) && fs.statSync(VAD_MODEL_PATH).size > 100 * 1024) {
+      console.log('  VAD model installed (speech-only processing enabled).\n');
+    } else {
+      console.log('  [WARN] VAD model download looked incomplete; VAD will be skipped at runtime.\n');
+    }
+  } catch (err) {
+    console.log(`  [WARN] Could not download VAD model: ${err.message}`);
+    console.log('  Subtitle extraction still works; repetition suppression will be reduced.\n');
   }
 }
 

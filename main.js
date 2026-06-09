@@ -18,6 +18,7 @@ const { spawn, execSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
+const { applySrtCleanup } = require('./srt-cleanup');
 const errLogger = require('./lib/error-logger');
 const { Menu } = require('electron');
 try {
@@ -108,11 +109,19 @@ function cancelActiveDownloads() {
 // ===== Device auto-selection helper (장치 자동 선택 헬퍼) =====
 // Platform-specific whisper-cli binary name
 const WHISPER_CLI_NAME = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli';
+// Silero VAD ggml model (provisioned by postinstall.js into whisper-cpp/).
+// VAD lets whisper process only speech segments → removes the repeated/hallucinated
+// lines it otherwise emits on silent/music parts (the JAV/music repetition problem).
+const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 
 // CUDA 12 requires compute capability >= 5.0 (Maxwell+)
 const CUDA12_MIN_COMPUTE = 5.0;
 let _gpuInfoCache = null;
 let _gpuWarningShown = false;
+// 반복/환각 억제(-mc 0) 적용 여부. extract-subtitles IPC에서 매 추출 전 설정됨.
+// 기본 true: 반복 도배(JAV/음악/무음 구간) 피해가 큰 쪽을 기본값으로. 일반 연속발화 일관성이
+// 더 중요한 사용자는 설정에서 끕 수 있다.
+let reduceRepetition = true;
 
 function getGpuInfo() {
   if (_gpuInfoCache !== null) return _gpuInfoCache;
@@ -493,6 +502,9 @@ function compareVersions(v1, v2) {
 }
 
 // App Initialization
+// 렌더러 크래시 자동복구 백오프용 타임스탬프 기록 (무한 reload 루프 방지)
+let rendererReloadTimes = [];
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280, // 더 넓게 (900→1280) - 2열 레이아웃에 적합
@@ -648,6 +660,45 @@ function createWindow() {
     });
   } catch (_) {}
 
+  // 렌더러가 죽으면(예: 추출 직후 후처리 중 미처리 예외) 창이 조용히 닫히는 대신
+  // 원인을 errors.log에 남기고 렌더러를 자동 복구한다. (정상 종료/사용자 닫기는 제외)
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    const reason = details?.reason || 'unknown';
+    console.error('[render-process-gone]', JSON.stringify(details));
+    try {
+      errLogger.logError('main:render-process-gone', reason, details);
+    } catch (_) {}
+    // clean-exit(정상 종료) 는 복구 대상 아님
+    if (reason === 'clean-exit' || reason === 'killed') return;
+
+    // 고아 whisper-cli 자식 프로세스가 남아 돌지 않도록 정리
+    try {
+      if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
+    } catch (_) {}
+
+    // 결정론적 크래시(불량 preload/렌더러 init 예외 등)에서 reload→크래시 무한루프 방지:
+    // 최근 30초 내 reload가 3회 이상이면 자동 복구를 멈추고 안내 다이얼로그를 띄운다.
+    const now = Date.now();
+    rendererReloadTimes = rendererReloadTimes.filter((t) => now - t < 30000);
+    rendererReloadTimes.push(now);
+    if (rendererReloadTimes.length > 3) {
+      try {
+        dialog.showErrorBox(
+          'WhisperSubTranslate',
+          'The app window crashed repeatedly and auto-recovery was stopped.\n' +
+            `Reason: ${reason}\n\n` +
+            'Please restart the app. Details were written to errors.log.'
+        );
+      } catch (_) {}
+      return;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        mainWindow.webContents.reload();
+      } catch (_) {}
+    }
+  });
+
   mainWindow.on('closed', () => {
     forceMemoryCleanup('cuda');
     mainWindow = null;
@@ -686,6 +737,16 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// GPU/유틸리티 자식 프로세스가 죽으면 로그만 남긴다(앜 수 없이 창이 닫힐 때 진단용).
+app.on('child-process-gone', (_event, details) => {
+  if (details?.reason && details.reason !== 'clean-exit') {
+    console.error('[child-process-gone]', JSON.stringify(details));
+    try {
+      errLogger.logError('main:child-process-gone', `${details.type}:${details.reason}`, details);
+    } catch (_) {}
   }
 });
 
@@ -1021,7 +1082,17 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
     const outputBase = path.join(safeTempDir, tempBaseName);
     const srtPath = outputBase + '.srt';
 
-    const args = ['-m', modelPath, '-f', segmentPath, '-osrt', '-of', outputBase, ...getWhisperCppSettings(device)];
+    const args = [
+      '-m',
+      modelPath,
+      '-f',
+      segmentPath,
+      '-osrt',
+      '-of',
+      outputBase,
+      ...getWhisperCppSettings(device),
+      ...getWhisperVadArgs(),
+    ];
 
     if (language && language !== 'auto') {
       args.push('-l', language);
@@ -1322,7 +1393,18 @@ function getWhisperCppSettings(device) {
     '5', // beam size
     '-bo',
     '5', // best of
+    // -sns: 비음성(non-speech) 토큰 억제. 음악/효과음 구간에서 영어 가사 등을
+    //       환각으로 토해내는 현상을 줄임. 컨텍스트 일관성 손해가 없어 상시 적용.
+    '-sns',
   ];
+
+  // ── 반복/환각 억제 (토글, 기본 ON) ──
+  // -mc 0: 직전 텍스트 컨텍스트를 다음 세그먼트로 끌고 가지 않음. whisper.cpp 기본값
+  // (-1=전체 유지)이 무음·음악 구간의 반복 루프 주원인이라 0으로 끊는다.
+  // (openai-whisper의 condition_on_previous_text=False 와 동일) 귫c면 whisper 기본(-1) 사용.
+  if (reduceRepetition) {
+    baseSettings.push('-mc', '0');
+  }
 
   if (device === 'cuda') {
     console.log('[Performance] GPU settings applied');
@@ -1342,6 +1424,25 @@ function getWhisperCppSettings(device) {
       '-ng', // no GPU
     ];
   }
+}
+
+// ===== VAD (Voice Activity Detection) =====
+// reduceRepetition 토글이 켜져 있고 silero 모델이 존재하면, 말소리 구간만 처리하도록
+// --vad 인자를 돌려준다. 이것이 무음/음악 구간의 반복·환각을 원천 차단하는 핵심이다.
+// 모델이 없으면(설치 전/다운로드 실패) 빈 배열 → 추출은 그대로 동작(우아한 degrade).
+// -vt 0.3: 임계값(낮을수록 더 많은 소리를 음성으로 인정). 실측상 0.3이 진짜 대사는
+//          보존하면서 환각 구간은 제거하는 균형점. -vsd 200: 200ms 이상 무음에서 분할.
+//          -vp 100: 분할 경계에 100ms 패딩(단어 끝 잘림 방지).
+function getWhisperVadArgs() {
+  if (!reduceRepetition) return [];
+  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  const vadModel = path.join(basePath, 'whisper-cpp', VAD_MODEL_NAME);
+  if (!fs.existsSync(vadModel)) {
+    console.log('[VAD] silero model not found, skipping VAD:', vadModel);
+    return [];
+  }
+  console.log('[VAD] enabled (speech-only processing):', vadModel);
+  return ['--vad', '--vad-model', vadModel, '-vt', '0.3', '-vsd', '200', '-vp', '100'];
 }
 
 // Single File Subtitle Extraction (Promise-based) - whisper.cpp 버전
@@ -1573,6 +1674,7 @@ function extractSingleFile(filePath, model, language, device) {
         '-of',
         outputBase, // 출력 파일 기본 이름 (확장자 제외)
         ...getWhisperCppSettings(chosenDevice),
+        ...getWhisperVadArgs(),
       ];
 
       // 언어 설정 (whisper.cpp는 'auto' 지원!)
@@ -1801,7 +1903,10 @@ function extractSingleFile(filePath, model, language, device) {
 }
 
 // IPC Handler for processing one or more files sequentially
-ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, language, device }) => {
+ipcMain.handle('extract-subtitles', async (event, payload) => {
+  const { filePaths, filePath, model, language, device, cleanup } = payload;
+  // 반복 억제 토글을 whisper 설정에 반영 (undefined=구판 호환을 위해 기본 ON)
+  reduceRepetition = payload.reduceRepetition !== false;
   // This now correctly handles both a single `filePath` and an array `filePaths`
   const filesToProcess = filePaths || (filePath ? [filePath] : []);
 
@@ -1822,6 +1927,33 @@ ipcMain.handle('extract-subtitles', async (event, { filePaths, filePath, model, 
 
     try {
       const srtPath = await extractSingleFile(currentFile, model, language, device);
+
+      // 출력 정리(Output cleanup): 화자 표시(>>) / SDH 태그 제거 (옵트인)
+      // 번역 단계는 이 .srt 파일을 다시 읽으므로, 여기서 미리 정리하면
+      // [music] 같은 태그가 번역되거나 >> 가 남는 것을 방지한다.
+      if (cleanup && (cleanup.removeSpeakerTags || cleanup.removeSDH)) {
+        try {
+          const raw = fs.readFileSync(srtPath, 'utf-8');
+          const cleaned = applySrtCleanup(raw, cleanup);
+          // 안전장치: 정리 결과가 통째로 비었는데(예: 전부 SDH) 원본엔 내용이 있으면
+          // 빈 파일로 덮어쓰지 않고 원본 유지(다음 번역 단계가 빈 SRT를 읽는 것 방지).
+          if (cleaned.trim() === '' && raw.trim() !== '') {
+            event.sender.send('output-update', `Output cleanup skipped (would remove all lines).\n`);
+          } else if (cleaned !== raw) {
+            fs.writeFileSync(srtPath, cleaned, 'utf-8');
+            const applied = [
+              cleanup.removeSpeakerTags ? 'speaker tags' : null,
+              cleanup.removeSDH ? 'SDH tags' : null,
+            ]
+              .filter(Boolean)
+              .join(', ');
+            event.sender.send('output-update', `Output cleanup applied (${applied}).\n`);
+          }
+        } catch (cleanErr) {
+          console.warn('[Cleanup] SRT cleanup failed:', cleanErr.message);
+        }
+      }
+
       successCount++;
       successDetails.push({ source: currentFile, srtPath });
       event.sender.send(

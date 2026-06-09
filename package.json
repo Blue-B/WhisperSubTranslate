@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
@@ -40,6 +40,7 @@
       "assets/**",
       "locales/**",
       "renderer.js",
+      "srt-cleanup.js",
       "translator-enhanced.js",
       "lib/**",
       "local-translator.js",

@@ -416,6 +416,12 @@ body::after {
   line-height: 1.5;
 }
 
+/* Per-toggle description under each "Output cleanup" switch — extra bottom gap
+   so each hint visually groups with the toggle above it, not the one below. */
+.cleanup-desc {
+  margin: 4px 0 14px 0;
+}
+
 .sound-volume-row {
   display: flex;
   align-items: center;
@@ -820,6 +826,13 @@ body::after {
   background: var(--text-primary);
   border-color: var(--text-primary);
   color: var(--accent-contrast);
+}
+
+/* Per-row history delete — distinct red hover (removes the log entry only). */
+.history-item-btn-del:hover {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
 }
 
 /* Models grid — now a stack of category sections */
