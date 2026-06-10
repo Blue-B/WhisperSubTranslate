@@ -2,6 +2,20 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] — 2026-06-10
+
+Reliability release: the local Hy-MT2 engine no longer silently saves untranslated text (reported on Reddit: a Japanese video "translated" to English produced a Japanese SRT), failed queue items can retry themselves on long unattended runs, and the Gemini API key no longer travels in request URLs.
+
+### Added
+
+- **Auto-retry failed items (opt-in)** — new "Processing → Auto-retry failed items" toggle in Settings. When the queue finishes, failed files are automatically re-queued for up to 2 attempts each, so a transient extraction/translation failure no longer stalls a long unattended batch; attempt counters reset on every manual start, and manually stopped items are never auto-retried. Requested in a community comment. Localized in all 5 UI languages.
+- **Target language in the start log** — the translation start line now reads "Starting translation (Hy-MT2 Local → English)..." instead of naming only the engine, so a wrong target (e.g. the Korean default) is visible immediately rather than after the whole job finishes.
+
+### Fixed
+
+- **Local Hy-MT2 returning untranslated text (echo)** — the local model occasionally echoes the source line unchanged, and the app saved that echo as the "translation" (the Reddit JA→EN report). The local engine now uses the official Hunyuan-MT prompt templates verbatim (English template for non-Chinese targets, Chinese template for zh/zh-Hant/yue), samples deterministically first (temperature 0) and retries once at the official 0.7, and a CJK-ratio heuristic (`looksUntranslated`, guarded against false positives on symbol-only cues and CJK targets) verifies the output. If both passes still echo, the line is handed to the existing MyMemory → ChatGPT fallback chain instead of being written out untranslated. Verified against the real 1.8B GGUF (8/8 tricky JA→EN cues, JA→KO unaffected); the 7B model shares the same code path.
+- **Gemini API key in request URLs** — the key was sent as a `?key=` query parameter in three call sites, where proxies and request logs could record it. It now travels in the `x-goog-api-key` header; behavior is unchanged.
+
 ## [2.3.0] — 2026-06-09
 
 Feature release: stops Whisper's repeated/hallucinated subtitles on silent and music sections (the most common quality complaint), adds opt-in subtitle cleanup, and improves queue/history management. Closes #27.
