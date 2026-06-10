@@ -931,9 +931,10 @@ async function continueProcessing() {
           translationInfo = methodAtStart;
       }
 
-      addOutput(`${I18N[currentUiLang].translationStarting2(translationInfo)}\n`);
-
       const targetLang = document.getElementById('targetLanguageSelect')?.value || 'ko';
+      // 시작 로그에 타깃 언어 표시 — 기본값(한국어)을 모르고 돌렸다가 끝나고 알아차리는 일 방지
+      const targetLangName = (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[targetLang] || targetLang;
+      addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangName}`)}\n`);
 
       const translationResult = await window.electronAPI.translateSubtitle({
         filePath: file.path,
@@ -1118,9 +1119,9 @@ async function continueProcessing() {
               translationInfo = translationMethod;
           }
 
-          addOutput(`${I18N[currentUiLang].translationStarting2(translationInfo)}\n`);
-
           const targetLang = document.getElementById('targetLanguageSelect')?.value || 'ko';
+          const targetLangName = (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[targetLang] || targetLang;
+          addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangName}`)}\n`);
           const srtPathFromResult =
             (typeof result?.srtFile === 'string' && result.srtFile) ||
             (Array.isArray(result?.results) && result.results.length > 0 ? result.results[0]?.srtPath : null);
