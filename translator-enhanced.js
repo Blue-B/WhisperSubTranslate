@@ -812,8 +812,9 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       const startTime = Date.now();
 
       // Gemini API 호출 (REST API) - system instruction 분리
+      // API 키는 URL 쿼리 대신 헤더로 전달 — 프록시/로그에 키가 남지 않도록
       const response = await axios.post(
-        `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
+        this.geminiApiEndpoint,
         {
           system_instruction: {
             parts: [
@@ -871,6 +872,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
         {
           headers: {
             'Content-Type': 'application/json',
+            'x-goog-api-key': this.apiKeys.gemini,
           },
           timeout: 30000,
         }
@@ -1184,7 +1186,7 @@ ${lines}`;
 
     if (method === 'gemini') {
       const response = await axios.post(
-        `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini}`,
+        this.geminiApiEndpoint,
         {
           system_instruction: {
             parts: [
@@ -1200,7 +1202,7 @@ ${lines}`;
           },
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKeys.gemini },
           timeout: 45000,
         }
       );
@@ -1680,13 +1682,13 @@ ${lines}`;
     if (this.apiKeys.gemini && this.apiKeys.gemini.trim()) {
       try {
         await axios.post(
-          `${this.geminiApiEndpoint}?key=${this.apiKeys.gemini.trim()}`,
+          this.geminiApiEndpoint,
           {
             contents: [{ parts: [{ text: 'hi' }] }],
             generationConfig: { maxOutputTokens: 5 },
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKeys.gemini.trim() },
             timeout: 10000,
           }
         );
