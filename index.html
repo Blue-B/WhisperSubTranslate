@@ -653,6 +653,36 @@
             </p>
           </div>
 
+          <!-- Processing Section -->
+          <div class="settings-section">
+            <h4 id="processingSectionTitle" class="settings-section-title" data-i18n="processingSectionTitle">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="width: 16px; height: 16px"
+              >
+                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              작업 처리
+            </h4>
+            <div class="sound-settings-row">
+              <label class="toggle-label">
+                <input type="checkbox" id="autoRetryCheckbox" />
+                <span class="toggle-slider"></span>
+                <span id="autoRetryLabel" class="toggle-text" data-i18n="autoRetryLabel"
+                  >실패 항목 자동 재시도</span
+                >
+              </label>
+            </div>
+            <p id="autoRetryDesc" class="settings-hint cleanup-desc" data-i18n="autoRetryDesc">
+              큐 처리가 끝난 뒤 실패한 파일을 자동으로 다시 시도해요(최대 2회). 긴 작업을 켜두고 자리를
+              비울 때 유용해요.
+            </p>
+          </div>
+
           <!-- API Keys Section -->
           <div class="settings-section">
             <h4 id="apiSectionTitle" class="settings-section-title">

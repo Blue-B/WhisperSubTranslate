@@ -24,6 +24,8 @@ const MIN_QUEUE_UPDATE_INTERVAL = 200; // 최소 200ms 간격으로 UI 업데이
 // Sound settings (알림음 설정)
 let soundVolume = parseFloat(localStorage.getItem('soundVolume') ?? '0.6');
 let soundMuted = localStorage.getItem('soundMuted') === 'true';
+// 실패 항목 자동 재시도 상한 — 무한루프 방지 (파일당 autoRetryCount로 추적)
+const AUTO_RETRY_MAX = 2;
 
 // Toast notification (토스트 알림)
 function showToast(message, options = {}) {
@@ -1242,6 +1244,24 @@ async function continueProcessing() {
     addOutput(`${I18N[currentUiLang].processingNext(remainingFiles)}\n\n`);
     await continueProcessing(); // 재귀 호출로 다음 파일 처리
   } else {
+    // 실패 항목 자동 재시도(옵션): 큐가 끝난 시점에 error 항목을 상한 회수까지 다시 태운다.
+    // 사용자가 직접 중지한 경우(shouldStop/stopped)는 건드리지 않는다.
+    if (!shouldStop && localStorage.getItem('autoRetryFailed') === 'true') {
+      const retryables = fileQueue.filter(
+        (f) => f.status === 'error' && (f.autoRetryCount || 0) < AUTO_RETRY_MAX
+      );
+      if (retryables.length > 0) {
+        retryables.forEach((f) => {
+          f.autoRetryCount = (f.autoRetryCount || 0) + 1;
+          f.status = 'pending';
+          f.progress = 0;
+        });
+        addOutput(`${I18N[currentUiLang].autoRetryingFailed(retryables.length)}\n\n`);
+        updateQueueDisplay();
+        await continueProcessing();
+        return;
+      }
+    }
     // 모든 파일 처리 완료
     isProcessing = false;
     shouldStop = false;
@@ -1395,6 +1415,10 @@ document.addEventListener('DOMContentLoaded', () => {
     _maxTranslatedCurrent = 0;
     translationSessionActive = false;
     currentProcessingIndex = -1;
+    // 새 런 시작 시 자동 재시도 카운트 리셋 — 이전 런에서 소진한 기회가 이월되지 않게
+    fileQueue.forEach((f) => {
+      f.autoRetryCount = 0;
+    });
     updateQueueDisplay();
 
     const model = document.getElementById('modelSelect').value;
@@ -3464,6 +3488,12 @@ function initSettingsModal() {
       localStorage.setItem('reduceRepetition', reduceRepetitionCheckbox.checked.toString());
     });
   }
+  const autoRetryCheckbox = document.getElementById('autoRetryCheckbox');
+  if (autoRetryCheckbox) {
+    autoRetryCheckbox.addEventListener('change', () => {
+      localStorage.setItem('autoRetryFailed', autoRetryCheckbox.checked.toString());
+    });
+  }
 
   function updateVolumeRowState() {
     if (soundMuted) {
@@ -3497,6 +3527,8 @@ function showSettingsModal() {
     const reduceRepetitionCheckbox = document.getElementById('reduceRepetitionCheckbox');
     if (reduceRepetitionCheckbox)
       reduceRepetitionCheckbox.checked = localStorage.getItem('reduceRepetition') !== 'false';
+    const autoRetryCheckbox = document.getElementById('autoRetryCheckbox');
+    if (autoRetryCheckbox) autoRetryCheckbox.checked = localStorage.getItem('autoRetryFailed') === 'true';
     if (soundVolumeRow) {
       if (soundMuted) {
         soundVolumeRow.classList.add('disabled');
