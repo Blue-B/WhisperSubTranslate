@@ -89,6 +89,37 @@ const LANG_NAMES = {
   ug: 'Uyghur',
 };
 
+// 공식 ZH<=>XX 프롬프트용 중국어 표기 (Hy-MT2 model card)
+const ZH_TARGET_NAMES = { zh: '中文', 'zh-Hant': '繁體中文', yue: '粤语' };
+
+// Hy-MT2 공식 프롬프트 템플릿(model card 그대로).
+// 타깃이 중국어 계열이면 중국어 템플릿, 그 외엔 영어 템플릿.
+function buildTranslationPrompt(text, targetLang) {
+  const zhName = ZH_TARGET_NAMES[targetLang];
+  if (zhName) return `把下面的文本翻译成${zhName}，不要额外解释。\n\n${text}`;
+  const targetName = LANG_NAMES[targetLang] || targetLang;
+  return `Translate the following segment into ${targetName}, without additional explanation.\n\n${text}`;
+}
+
+// 번역 실패(echo) 감지: 비 CJK 타깃인데 출력이 여전히 CJK 위주면 원문 통과로 판정.
+// 소스에 CJK가 거의 없으면(기호·숫자·라틴 자막) 판정하지 않는다 — 오탐 방지.
+function looksUntranslated(output, source, targetLang) {
+  const out = (output || '').trim();
+  if (!out) return true;
+  const src = (source || '').trim();
+  const srcCjk = (src.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
+  if (srcCjk < 2) return false;
+  if (targetLang === 'ja' || targetLang === 'zh' || targetLang === 'zh-Hant' || targetLang === 'yue') {
+    return false; // CJK 타깃은 문자 기반 판정 불가
+  }
+  const compact = out.replace(/\s/g, '');
+  if (!compact) return true;
+  const kanaHan = (out.match(/[\u3040-\u30ff\u3400-\u9fff]/g) || []).length;
+  const hangul = (out.match(/[\uac00-\ud7af]/g) || []).length;
+  if (targetLang === 'ko') return kanaHan / compact.length > 0.5;
+  return (kanaHan + hangul) / compact.length > 0.5;
+}
+
 let _llama = null;
 let _model = null;
 let _context = null;
@@ -365,18 +396,25 @@ async function _translateLocalImpl(text, targetLang, device, modelId) {
   }
   _session.resetChatHistory();
 
-  const targetName = LANG_NAMES[targetLang] || targetLang;
-  const prompt = `Translate the following text into ${targetName}. Note that you should only output the translated result without any additional explanation:\n\n${text}`;
+  const prompt = buildTranslationPrompt(text, targetLang);
+  const samplingBase = {
+    topK: 20,
+    topP: 0.6,
+    repeatPenalty: { penalty: 1.05 },
+    maxTokens: 1024, // App-side safety cap (not a Tencent recommendation)
+  };
 
+  let response;
   try {
-    const response = await _session.prompt(prompt, {
-      temperature: 0.7,
-      topK: 20,
-      topP: 0.6,
-      repeatPenalty: { penalty: 1.05 },
-      maxTokens: 1024, // App-side safety cap (not a Tencent recommendation)
-    });
-    return response.trim();
+    // 1차: 결정적 샘플링(temp 0) — 자막 번역은 무작위성이 echo(원문 그대로 출력) 사고를 키운다
+    response = (await _session.prompt(prompt, { ...samplingBase, temperature: 0 })).trim();
+
+    // echo 감지 시 공식 권장 샘플링(temp 0.7)으로 1회 재시도
+    if (looksUntranslated(response, text, targetLang)) {
+      console.warn(`[Local] 번역 결과가 원문 그대로임 → 재시도: "${text.substring(0, 40)}"`);
+      _session.resetChatHistory();
+      response = (await _session.prompt(prompt, { ...samplingBase, temperature: 0.7 })).trim();
+    }
   } catch (e) {
     try {
       _session = null;
@@ -387,6 +425,13 @@ async function _translateLocalImpl(text, targetLang, device, modelId) {
     }
     throw e;
   }
+
+  if (looksUntranslated(response, text, targetLang)) {
+    // 조용히 원문을 저장하지 않는다 — 상위(translateBatch)가 다른 엔진으로 폴백한다.
+    // 세션은 정상이므로 dispose하지 않는다.
+    throw new Error(`LOCAL_UNTRANSLATED: model returned untranslated text for "${text.substring(0, 40)}"`);
+  }
+  return response;
 }
 
 async function unloadModel() {
@@ -432,6 +477,8 @@ module.exports = {
   deleteModel,
   loadModel,
   translateLocal,
+  buildTranslationPrompt,
+  looksUntranslated,
   unloadModel,
   setDownloadProgressHandler,
   cleanupLegacyModels,
