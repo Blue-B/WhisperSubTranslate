@@ -2525,12 +2525,16 @@ ipcMain.handle('validate-api-keys', async (event, tempKeys) => {
 // 자막 번역
 ipcMain.handle(
   'translate-subtitle',
-  async (event, { filePath, method, targetLang, sourceLang, device, localModelId }) => {
+  async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId }) => {
     try {
       const fileName = path.basename(filePath, path.extname(filePath));
       const fileDir = path.dirname(filePath);
-      const safeTarget = targetLang && typeof targetLang === 'string' && targetLang.trim() ? targetLang.trim() : 'ko';
-      const outputPath = path.join(fileDir, `${fileName}_${safeTarget}.srt`);
+      // 다국어 지원: targetLangs 배열 우선, 없으면 단일 targetLang (구판 호환). 중복/빈값 제거.
+      let langs = (Array.isArray(targetLangs) && targetLangs.length ? targetLangs : [targetLang])
+        .map((l) => (typeof l === 'string' && l.trim() ? l.trim() : ''))
+        .filter(Boolean);
+      langs = [...new Set(langs)];
+      if (!langs.length) langs = ['ko'];
 
       // 파일별 캐시 격리 활성화
       translator.setCurrentFile(filePath);
@@ -2540,33 +2544,48 @@ ipcMain.handle(
 
       event.sender.send('translation-progress', { stage: 'starting' });
 
-      const result = await translator.translateSRTFile(
-        filePath,
-        outputPath,
-        method,
-        safeTarget,
-        // 진행률 콜백: translator-enhanced가 제공하는 정보를 가공하여 렌더러로 중계
-        (prog) => {
-          try {
-            const percent = prog && prog.total ? Math.round((prog.current / prog.total) * 100) : undefined;
-            event.sender.send('translation-progress', {
-              stage: prog?.stage || 'translating',
-              current: prog?.current,
-              total: prog?.total,
-              progress: percent,
-              currentText: prog?.text,
-            });
-          } catch (_) {
-            /* noop */
-          }
-        },
-        sourceLang
-      );
+      const outputPaths = [];
+      for (let li = 0; li < langs.length; li++) {
+        const safeTarget = langs[li];
+        const outputPath = path.join(fileDir, `${fileName}_${safeTarget}.srt`);
+        const result = await translator.translateSRTFile(
+          filePath,
+          outputPath,
+          method,
+          safeTarget,
+          // 진행률 콜백: 여러 언어 전체 기준으로 환산 ((현재언어순번 + 언어내진행)/전체언어)
+          (prog) => {
+            try {
+              const within = prog && prog.total ? prog.current / prog.total : 0;
+              const overall = Math.round(((li + within) / langs.length) * 100);
+              event.sender.send('translation-progress', {
+                stage: prog?.stage || 'translating',
+                current: prog?.current,
+                total: prog?.total,
+                progress: overall,
+                currentText: prog?.text,
+                lang: safeTarget,
+                langIndex: li + 1,
+                langTotal: langs.length,
+              });
+            } catch (_) {
+              /* noop */
+            }
+          },
+          sourceLang
+        );
+        outputPaths.push(result);
+      }
 
-      // 번역 직후에는 파일 정리/메모리 정리 등 후처리가 남아있으므로, 최종 완료와 구분하는 메시지와 진행률(99%)을 전송
-      event.sender.send('translation-progress', { stage: 'completed', progress: 99, outputPath: result });
+      // 모든 언어 완료 후 단 한 번만 completed 전송(이벤트 중복 방지)
+      event.sender.send('translation-progress', {
+        stage: 'completed',
+        progress: 99,
+        outputPath: outputPaths[0],
+        outputPaths,
+      });
 
-      return { success: true, outputPath: result };
+      return { success: true, outputPath: outputPaths[0], outputPaths };
     } catch (error) {
       if (error.message && error.message.includes('ABORTED')) {
         event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user' });

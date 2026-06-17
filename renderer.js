@@ -16,6 +16,7 @@ let _currentPhase = null;
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 let _stoppedAt = 0; // timestamp when stopProcessing() was called
 let _maxTranslatedCurrent = 0; // monotonic counter for parallel translation progress display
+let _curLangIndex = 0; // 다국어 번역 시 현재 언어 순번(변경되면 X/total 카운터 리셋)
 
 // UI 업데이트 디바운스 (UI freeze 방지)
 let updateQueueDisplayTimer = null;
@@ -938,15 +939,17 @@ async function continueProcessing() {
           translationInfo = methodAtStart;
       }
 
-      const targetLang = document.getElementById('targetLanguageSelect')?.value || 'ko';
-      // 시작 로그에 타깃 언어 표시 — 기본값(한국어)을 모르고 돌렸다가 끝나고 알아차리는 일 방지
-      const targetLangName = (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[targetLang] || targetLang;
-      addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangName}`)}\n`);
+      const targetLangs = getSelectedTargetLangs();
+      // 시작 로그에 타깃 언어 표시 — 기본값(한국어)을 모르고 돌렸다가 끝나고 알아차리는 일 방지. 다중 선택 시 쉼표로 나열.
+      const targetLangNames = targetLangs
+        .map((lc) => (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[lc] || lc)
+        .join(', ');
+      addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangNames}`)}\n`);
 
       const translationResult = await window.electronAPI.translateSubtitle({
         filePath: file.path,
         method: methodAtStart,
-        targetLang: targetLang,
+        targetLangs: targetLangs,
         device: document.getElementById('deviceSelect')?.value || 'auto',
         localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
       });
@@ -1129,9 +1132,11 @@ async function continueProcessing() {
               translationInfo = translationMethod;
           }
 
-          const targetLang = document.getElementById('targetLanguageSelect')?.value || 'ko';
-          const targetLangName = (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[targetLang] || targetLang;
-          addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangName}`)}\n`);
+          const targetLangs = getSelectedTargetLangs();
+          const targetLangNames = targetLangs
+            .map((lc) => (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[lc] || lc)
+            .join(', ');
+          addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangNames}`)}\n`);
           const srtPathFromResult =
             (typeof result?.srtFile === 'string' && result.srtFile) ||
             (Array.isArray(result?.results) && result.results.length > 0 ? result.results[0]?.srtPath : null);
@@ -1142,7 +1147,7 @@ async function continueProcessing() {
           const translationResult = await window.electronAPI.translateSubtitle({
             filePath: srtPathFromResult,
             method: translationMethod,
-            targetLang: targetLang,
+            targetLangs: targetLangs,
             device: document.getElementById('deviceSelect')?.value || 'auto',
             localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
           });
@@ -1151,7 +1156,7 @@ async function continueProcessing() {
           // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
 
           if (translationResult.success) {
-            addOutput(`${I18N[currentUiLang].translationDone(fileName, targetLang)}\n`);
+            addOutput(`${I18N[currentUiLang].translationDone(fileName, targetLangs.join(', '))}\n`);
             // 히스토리 조기 저장 (completed 이벤트 눌지거나 누락되는 경우 대비 안전망)
             file.status = 'completed';
             file.progress = 100;
@@ -1943,14 +1948,47 @@ function getModelDisplayName(lang, id) {
 }
 
 function rebuildTargetLanguageNames(lang) {
-  const sel = document.getElementById('targetLanguageSelect');
-  if (!sel) return;
+  const list = document.getElementById('targetLanguageList');
+  if (!list) return;
   const map = LANG_NAMES_I18N[lang] || LANG_NAMES_I18N.ko;
-  Array.from(sel.options).forEach((o) => {
-    if (o.value && map[o.value]) {
-      // 예: 한국어 (ko)
-      o.textContent = `${map[o.value]} (${o.value})`;
-    }
+  list.querySelectorAll('.lang-check').forEach((lab) => {
+    const cb = lab.querySelector('input');
+    const span = lab.querySelector('span');
+    if (cb && span && map[cb.value]) span.textContent = `${map[cb.value]} (${cb.value})`;
+  });
+}
+
+// 선택된 번역 대상 언어 목록(체크되고 비활성화 아닌 것). 하나도 없으면 기본 ['ko'].
+function getSelectedTargetLangs() {
+  const list = document.getElementById('targetLanguageList');
+  if (!list) return ['ko'];
+  const checked = Array.from(list.querySelectorAll('input[type="checkbox"]'))
+    .filter((c) => c.checked && !c.disabled)
+    .map((c) => c.value);
+  return checked.length ? checked : ['ko'];
+}
+
+// 체크박스 선택을 localStorage에 저장/복원
+function saveTargetLangs() {
+  try {
+    localStorage.setItem('targetLangs', JSON.stringify(getSelectedTargetLangs()));
+  } catch (_e) {
+    /* ignore */
+  }
+}
+function restoreTargetLangs() {
+  const list = document.getElementById('targetLanguageList');
+  if (!list) return;
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem('targetLangs') || 'null');
+  } catch (_e) {
+    saved = null;
+  }
+  if (!Array.isArray(saved) || !saved.length) return;
+  const set = new Set(saved);
+  list.querySelectorAll('input[type="checkbox"]').forEach((c) => {
+    c.checked = set.has(c.value);
   });
 }
 
@@ -2513,6 +2551,11 @@ if (window?.electronAPI) {
         msg = I18N[currentUiLang].translationStarting;
         _maxTranslatedCurrent = 0; // 세션 시작 시 리셋
       } else if (data?.stage === 'translating') {
+        // 다국어: 언어가 바뀌면 X/total 카운터 리셋
+        if (typeof data?.langIndex === 'number' && data.langIndex !== _curLangIndex) {
+          _curLangIndex = data.langIndex;
+          _maxTranslatedCurrent = 0;
+        }
         if (data?.current && data?.total) {
           // 병렬 배치로 current 값이 올라갔다 내려갔다 하지 않도록 단조 증가
           _maxTranslatedCurrent = Math.max(_maxTranslatedCurrent, data.current);
@@ -2524,6 +2567,10 @@ if (window?.electronAPI) {
           }
         } else {
           msg = I18N[currentUiLang].translationTranslating;
+        }
+        // 다국어 동시 번역 시 현재 언어 표시: (2/3 ja)
+        if (data?.langTotal > 1 && data?.lang) {
+          msg = `(${data.langIndex}/${data.langTotal} ${data.lang}) ${msg}`;
         }
       } else if (data?.stage === 'completed') {
         msg = I18N[currentUiLang].translationCompleted;
@@ -2715,7 +2762,7 @@ function initTranslationSelect() {
   const translationSelect = document.getElementById('translationSelect');
   const targetLanguageGroup = document.getElementById('targetLanguageGroup');
   const translationStatus = document.getElementById('translationStatus');
-  const targetLanguageSelect = document.getElementById('targetLanguageSelect');
+  const targetLanguageList = document.getElementById('targetLanguageList');
   if (!translationSelect || !targetLanguageGroup) return;
   const update = () => {
     const method = translationSelect.value;
@@ -2749,18 +2796,16 @@ function initTranslationSelect() {
       deepl: ['fa'],
       local: ['hu'],
     };
-    if (targetLanguageSelect) {
+    if (targetLanguageList) {
       const unsupported = new Set(unsupportedByMethod[method] || []);
-      Array.from(targetLanguageSelect.options).forEach((opt) => {
-        const isUnsupported = unsupported.has(opt.value);
-        opt.disabled = isUnsupported;
-        // Stronger UX: completely hide unsupported options from the dropdown
-        opt.hidden = isUnsupported;
-        opt.style.display = isUnsupported ? 'none' : '';
+      targetLanguageList.querySelectorAll('.lang-check').forEach((lab) => {
+        const cb = lab.querySelector('input');
+        if (!cb) return;
+        const isUnsupported = unsupported.has(cb.value);
+        cb.disabled = isUnsupported;
+        lab.style.display = isUnsupported ? 'none' : '';
+        if (isUnsupported) cb.checked = false; // 미지원 언어는 자동 선택 해제
       });
-      if (unsupported.has(targetLanguageSelect.value)) {
-        targetLanguageSelect.value = 'en';
-      }
       const note = document.getElementById('targetLangNote');
       if (note) {
         const messages = {
@@ -2787,11 +2832,11 @@ function initTranslationSelect() {
           },
         };
         const localized = messages[currentUiLang] || messages.en;
-        const currentTarget = targetLanguageSelect ? targetLanguageSelect.value : '';
-        if (method === 'local' && currentTarget === 'hu') {
+        // 다국어 체크박스 모드: 해당 엔진이 미지원 언어(숨김)를 가질 때 안내를 표시.
+        if (method === 'local') {
           note.textContent = localized.local;
           note.dataset.methodOverride = '1';
-        } else if (method === 'deepl' && currentTarget === 'fa') {
+        } else if (method === 'deepl') {
           note.textContent = localized.deepl;
           note.dataset.methodOverride = '1';
         } else {
@@ -2828,8 +2873,12 @@ function initTranslationSelect() {
       }
     });
   }
-  if (targetLanguageSelect) {
-    targetLanguageSelect.addEventListener('change', () => update());
+  // 다국어 체크박스: 저장된 선택 복원 + 변경 시 저장
+  restoreTargetLangs();
+  if (targetLanguageList) {
+    targetLanguageList.addEventListener('change', () => {
+      saveTargetLangs();
+    });
   }
   update();
 }

@@ -3330,3 +3330,37 @@ body.has-update-banner {
 body.has-update-banner .main-container {
   height: calc(100vh - 88px);
 }
+
+/* 번역 대상 언어 다중 선택 체크박스 목록 */
+.lang-checkbox-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  margin-top: 4px;
+}
+.lang-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 6px;
+  user-select: none;
+}
+.lang-check:hover {
+  background: var(--surface-1, rgba(255, 255, 255, 0.04));
+}
+.lang-check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.lang-check span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

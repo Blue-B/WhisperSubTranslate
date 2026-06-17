@@ -287,24 +287,24 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span id="labelTargetLanguage">번역 대상 언어</span>
+              <span id="labelTargetLanguage">번역 대상 언어 (복수 선택 가능)</span>
             </label>
-            <select id="targetLanguageSelect" class="setting-select">
-              <option value="ko" selected>한국어</option>
-              <option value="en">영어</option>
-              <option value="ja">일본어</option>
-              <option value="zh">중국어</option>
-              <option value="es">스페인어</option>
-              <option value="fr">프랑스어</option>
-              <option value="de">독일어</option>
-              <option value="it">이탈리아어</option>
-              <option value="pt">포르투갈어</option>
-              <option value="ru">러시아어</option>
-              <option value="hu">헝가리어</option>
-              <option value="ar">아랍어</option>
-              <option value="pl">폴란드어</option>
-              <option value="fa">페르시아어</option>
-            </select>
+            <div id="targetLanguageList" class="lang-checkbox-list">
+              <label class="lang-check"><input type="checkbox" value="ko" checked /><span>한국어 (ko)</span></label>
+              <label class="lang-check"><input type="checkbox" value="en" /><span>영어 (en)</span></label>
+              <label class="lang-check"><input type="checkbox" value="ja" /><span>일본어 (ja)</span></label>
+              <label class="lang-check"><input type="checkbox" value="zh" /><span>중국어 (zh)</span></label>
+              <label class="lang-check"><input type="checkbox" value="es" /><span>스페인어 (es)</span></label>
+              <label class="lang-check"><input type="checkbox" value="fr" /><span>프랑스어 (fr)</span></label>
+              <label class="lang-check"><input type="checkbox" value="de" /><span>독일어 (de)</span></label>
+              <label class="lang-check"><input type="checkbox" value="it" /><span>이탈리아어 (it)</span></label>
+              <label class="lang-check"><input type="checkbox" value="pt" /><span>포르투갈어 (pt)</span></label>
+              <label class="lang-check"><input type="checkbox" value="ru" /><span>러시아어 (ru)</span></label>
+              <label class="lang-check"><input type="checkbox" value="hu" /><span>헝가리어 (hu)</span></label>
+              <label class="lang-check"><input type="checkbox" value="ar" /><span>아랍어 (ar)</span></label>
+              <label class="lang-check"><input type="checkbox" value="pl" /><span>폴란드어 (pl)</span></label>
+              <label class="lang-check"><input type="checkbox" value="fa" /><span>페르시아어 (fa)</span></label>
+            </div>
             <div id="targetLangNote" class="setting-hint"></div>
           </div>
         </div>
