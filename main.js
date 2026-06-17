@@ -1079,7 +1079,7 @@ function parseSrtEntries(srtContent) {
 }
 
 // 단일 세그먼트 처리 (분할 처리용)
-function processSegment(segmentPath, modelPath, device, language, whisperDir, exePath) {
+function processSegment(segmentPath, modelPath, device, language, whisperDir, exePath, onProgress) {
   return new Promise((resolve, reject) => {
     const safeTempDir = getSafeTempDir();
     const tempBaseName = `segment_out_${Date.now()}`;
@@ -1128,10 +1128,14 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
 
     proc.stderr.on('data', (data) => {
       const output = data.toString('utf8');
-      if (output.includes('error') || output.includes('Error')) {
-        mainWindow.webContents.send('output-update', '[ERROR] ' + output);
+      const pct = parseWhisperProgress(output);
+      if (pct != null && typeof onProgress === 'function') onProgress(pct);
+      const cleaned = stripProgressLines(output);
+      if (!cleaned.trim()) return; // 진행률 라인만 있던 청크는 로그에 미표시
+      if (cleaned.includes('error') || cleaned.includes('Error')) {
+        mainWindow.webContents.send('output-update', '[ERROR] ' + cleaned);
       } else {
-        mainWindow.webContents.send('output-update', output);
+        mainWindow.webContents.send('output-update', cleaned);
       }
     });
 
@@ -1397,6 +1401,8 @@ function getWhisperCppSettings(device) {
     // -sns: 비음성(non-speech) 토큰 억제. 음악/효과음 구간에서 영어 가사 등을
     //       환각으로 토해내는 현상을 줄임. 컨텍스트 일관성 손해가 없어 상시 적용.
     '-sns',
+    // -pp: 실시간 진행률(progress = N%)을 stderr로 출력. 가짜 50% 대신 실제 진행률 표시용.
+    '-pp',
   ];
 
   // ── 세그먼트 분할 정책 ──
@@ -1434,6 +1440,30 @@ function getWhisperCppSettings(device) {
       '-ng', // no GPU
     ];
   }
+}
+
+// whisper -pp stderr 청크에서 진행률(0~100) 추출. 없으면 null.
+function parseWhisperProgress(text) {
+  const m = /progress\s*=\s*(\d+)\s*%/i.exec(text);
+  if (!m) return null;
+  return Math.max(0, Math.min(100, parseInt(m[1], 10)));
+}
+
+// 추출 전체 진행률(0~100)을 렌더러로 전송. 렌더러가 추출 구간 범위(0..max)로 매핑.
+function sendExtractionProgress(percent) {
+  try {
+    mainWindow?.webContents?.send('progress-update', {
+      stage: 'extracting',
+      percent: Math.max(0, Math.min(100, Math.round(percent))),
+    });
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
+// stderr 청크에서 진행률 라인(whisper_print_progress_callback)을 제거 → 로그 스팸 방지.
+function stripProgressLines(text) {
+  return text.replace(/.*whisper_print_progress_callback:.*\r?\n?/g, '');
 }
 
 // ===== VAD (Voice Activity Detection) =====
@@ -1593,7 +1623,16 @@ function extractSingleFile(filePath, model, language, device) {
             mainWindow.webContents.send('output-update', `\n=== Processing segment ${i + 1}/${segments.length} ===\n`);
 
             // 각 세그먼트에 대해 whisper.cpp 실행
-            const segmentSrt = await processSegment(segment.path, modelPath, chosenDevice, language, exeCwd, exePath);
+            const segmentSrt = await processSegment(
+              segment.path,
+              modelPath,
+              chosenDevice,
+              language,
+              exeCwd,
+              exePath,
+              // 세그먼트 N개 중 i번째: 전체 진행률 = (완료 세그먼트 + 현재 세그먼트 진행률)/전체
+              (segPct) => sendExtractionProgress(((i + segPct / 100) / segments.length) * 100)
+            );
             currentProcess = null;
             srtContents.push(segmentSrt);
             startTimes.push(segment.startTime);
@@ -1739,12 +1778,17 @@ function extractSingleFile(filePath, model, language, device) {
 
       currentProcess.stderr.on('data', (data) => {
         const output = data.toString('utf8');
+        // 일반 경로는 whisper -pp %가 곧 파일 전체 진행률 → 그대로 전송
+        const pct = parseWhisperProgress(output);
+        if (pct != null) sendExtractionProgress(pct);
+        const cleaned = stripProgressLines(output);
+        if (!cleaned.trim()) return; // 진행률 라인만 있던 청크는 로그에 미표시
         // whisper.cpp는 모델 로딩 정보를 stderr로 출력
-        if (output.includes('error') || output.includes('Error') || output.includes('failed')) {
-          mainWindow.webContents.send('output-update', '[ERROR] ' + output);
+        if (cleaned.includes('error') || cleaned.includes('Error') || cleaned.includes('failed')) {
+          mainWindow.webContents.send('output-update', '[ERROR] ' + cleaned);
         } else {
           // 모델 정보 등 일반 stderr 출력
-          mainWindow.webContents.send('output-update', output);
+          mainWindow.webContents.send('output-update', cleaned);
         }
       });
 

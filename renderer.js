@@ -11,6 +11,7 @@ let targetProgress = 0; // target progress (목표 진행률)
 let targetText = '';
 let progressTimer = null;
 let indeterminateTimer = null; // pseudo progress timer (의사 진행률 타이머)
+let _extractionMaxProgress = 95; // 현재 파일 추출 단계가 차지하는 진행률 상한(번역 있으면 50)
 let _currentPhase = null;
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 let _stoppedAt = 0; // timestamp when stopProcessing() was called
@@ -1022,6 +1023,8 @@ async function continueProcessing() {
     // 번역 포함 시 추출 0-50%, 번역 50-100% / 추출만 시 0-95%
     const hasTranslation = methodAtStart && methodAtStart !== 'none';
     const extractionMaxProgress = hasTranslation ? 50 : 95;
+    _extractionMaxProgress = extractionMaxProgress;
+    // 실제 진행률(whisper -pp)이 오기 전까지는 의사 진행률로 시작 → 첫 실제 값에서 전환
     startIndeterminate(extractionMaxProgress, 'extract');
 
     console.log('[continueProcessing] extractSubtitles call started');
@@ -2645,12 +2648,17 @@ if (window?.electronAPI) {
       }
     });
   }
-  // progress-update는 더 이상 main.js에서 보내지 않음 (의사 진행률만 사용)
-  // 호환성을 위해 핸들러는 유지하되, 실제로 호출되지 않음
+  // 추출 실시간 진행률(whisper -pp). main.js가 stderr의 progress=N%를 파싱해 0~100으로 보냄.
+  // 첫 실제 값이 오면 의사 진행률(startIndeterminate)을 멈추고 실제 값으로 전환.
   const origOnProgress = window.electronAPI.onProgressUpdate;
   if (typeof origOnProgress === 'function') {
-    window.electronAPI.onProgressUpdate((_data) => {
-      // 사용하지 않음 - 의사 진행률(startIndeterminate)만 사용
+    window.electronAPI.onProgressUpdate((data) => {
+      if (!data || data.stage !== 'extracting' || typeof data.percent !== 'number') return;
+      stopIndeterminate(); // 가짜 진행률 중지, 이제 실제 값이 주도
+      const mapped = (data.percent / 100) * _extractionMaxProgress;
+      const d = I18N[currentUiLang];
+      const label = d.progressExtracting + ' ' + Math.round(data.percent) + '%';
+      setProgressTarget(mapped, label);
     });
   }
 }
