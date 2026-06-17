@@ -3,6 +3,7 @@ const deepl = require('deepl-node');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { wrapCuesForDisplay } = require('./srt-cleanup');
 const MyMemoryTranslator = require('./myMemoryTranslator');
 const localTranslator = require('./local-translator');
 
@@ -1467,7 +1468,9 @@ ${lines}`;
         sourceLang
       );
 
-      fs.writeFileSync(outputPath, translatedContent, 'utf8');
+      // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 다시 줄바꿈.
+      const displayContent = wrapCuesForDisplay(translatedContent);
+      fs.writeFileSync(outputPath, displayContent, 'utf8');
       return outputPath;
     } catch (error) {
       this.logError('SRT file translation failed', error);
@@ -1572,8 +1575,9 @@ ${lines}`;
         translatedLines.push(subtitleText);
         console.log('[Non-Dialogue] Skipping translation:', subtitleText.substring(0, 30) + '...');
       } else {
-        // 번역 대상에 추가
-        textsToTranslate.push(subtitleText);
+        // 번역 대상에 추가. 화면 줄바꿈(한 큐 안 여러 줄)은 하나의 발화이므로
+        // 공백으로 합쳐 완결 문장으로 번역기에 전달(파편 번역 방지). 출력은 다시 줄바꿈됨.
+        textsToTranslate.push(subtitleText.replace(/\s*\n\s*/g, ' '));
         textIndices.push(translatedLines.length);
         translatedLines.push(null); // 나중에 채울 자리 예약
       }

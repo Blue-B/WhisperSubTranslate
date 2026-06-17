@@ -18,7 +18,7 @@ const { spawn, execSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
-const { applySrtCleanup } = require('./srt-cleanup');
+const { applySrtCleanup, wrapCuesForDisplay } = require('./srt-cleanup');
 const errLogger = require('./lib/error-logger');
 const { Menu } = require('electron');
 try {
@@ -122,6 +122,10 @@ let _gpuWarningShown = false;
 // 기본 true: 반복 도배(JAV/음악/무음 구간) 피해가 큰 쪽을 기본값으로. 일반 연속발화 일관성이
 // 더 중요한 사용자는 설정에서 끕 수 있다.
 let reduceRepetition = true;
+// 자연 문장 단위 전사 (기본 ON). ON이면 whisper에 -ml/-sow(강제 50자 분할)를 주지 않아
+// 절·문장 단위 세그먼트가 나온다 → 코드스위칭 영어 단어 보존 + 번역기가 완결 문장을 받아
+// 번역 품질이 크게 오름. 화면 줄길이는 출력 후 wrapCuesForDisplay로 처리. OFF면 구판 동작.
+let naturalSegmentation = true;
 
 function getGpuInfo() {
   if (_gpuInfoCache !== null) return _gpuInfoCache;
@@ -1386,9 +1390,6 @@ function getWhisperCppSettings(device) {
 
   // whisper.cpp 공통 설정: 밀리초 타임스탬프를 위한 핵심 옵션
   const baseSettings = [
-    '-ml',
-    '50', // max segment length (밀리초 타임스탬프 핵심!)
-    '-sow', // split on word (단어 단위 분할)
     '-bs',
     '5', // beam size
     '-bo',
@@ -1397,6 +1398,15 @@ function getWhisperCppSettings(device) {
     //       환각으로 토해내는 현상을 줄임. 컨텍스트 일관성 손해가 없어 상시 적용.
     '-sns',
   ];
+
+  // ── 세그먼트 분할 정책 ──
+  // naturalSegmentation OFF(구판)일 때만 -ml 50 -sow로 50자 단위 강제 분할.
+  // (참고: -ml은 세그먼트 최대 길이일 뿐 타임스탬프 정밀도와 무관하다. whisper.cpp는
+  //  -ml 유무와 상관없이 ms 타임스탬프를 출력한다. 짧은 강제 분할은 코드스위칭 영어
+  //  단어를 깨뜨리고 문장을 토막내 번역 품질을 떨어뜨리므로 기본 OFF.)
+  if (!naturalSegmentation) {
+    baseSettings.unshift('-ml', '50', '-sow');
+  }
 
   // ── 반복/환각 억제 (토글, 기본 ON) ──
   // -mc 0: 직전 텍스트 컨텍스트를 다음 세그먼트로 끌고 가지 않음. whisper.cpp 기본값
@@ -1907,6 +1917,8 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
   const { filePaths, filePath, model, language, device, cleanup } = payload;
   // 반복 억제 토글을 whisper 설정에 반영 (undefined=구판 호환을 위해 기본 ON)
   reduceRepetition = payload.reduceRepetition !== false;
+  // 자연 문장 단위 전사 토글 (undefined=구판 호환 위해 기본 ON, 번역 품질 향상)
+  naturalSegmentation = payload.naturalSegmentation !== false;
   // This now correctly handles both a single `filePath` and an array `filePaths`
   const filesToProcess = filePaths || (filePath ? [filePath] : []);
 
@@ -1952,6 +1964,17 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
         } catch (cleanErr) {
           console.warn('[Cleanup] SRT cleanup failed:', cleanErr.message);
         }
+      }
+
+      // 화면 표시용 줄바꿈: 자연 문장 단위 전사는 긴 줄을 만들 수 있으므로, 큐(타임스탬프)
+      // 구조는 그대로 둔 채 텍스트만 가독성 있게 여러 줄로 감싼다. 큐 단위(완결 문장)는
+      // 유지되므로 다음 번역 단계가 문장을 그대로 읽어 번역 품질에 영향 없다.
+      try {
+        const rawForWrap = fs.readFileSync(srtPath, 'utf-8');
+        const wrapped = wrapCuesForDisplay(rawForWrap);
+        if (wrapped && wrapped !== rawForWrap) fs.writeFileSync(srtPath, wrapped, 'utf-8');
+      } catch (wrapErr) {
+        console.warn('[Wrap] display wrap failed:', wrapErr.message);
       }
 
       successCount++;

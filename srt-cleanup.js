@@ -111,4 +111,84 @@ function applySrtCleanup(srtText, opts = {}) {
   return rebuilt ? rebuilt + '\n' : '';
 }
 
-module.exports = { applySrtCleanup, isSdhOnlyText };
+// ── Display line wrapping ─────────────────────────────────────────────────
+// naturalSegmentation 전사는 절·문장 단위의 긴 세그먼트를 만든다(번역 품질↑).
+// 단점은 화면에 한 줄이 너무 길게 나오는 것. wrapCuesForDisplay는 큐(번호+
+// 타임스탬프) 구조와 텍스트 내용은 그대로 두고, 각 큐의 텍스트만 가독성 있는
+// 길이로 여러 줄로 감싼다. 텍스트를 삭제하지 않으며, SRT 파싱 실패 시 원본을
+// 그대로 반환한다(파일 파괴 방지). 번역 단계는 큐 단위(완결 문장)를 읽으므로
+// 이 줄바꿈이 번역 품질에 영향을 주지 않는다.
+function wrapTextToLines(text, maxLen) {
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  if (!t) return [];
+  if (t.length <= maxLen) return [t];
+
+  const lines = [];
+  if (/\s/.test(t)) {
+    // 단어 경계 기준 줄바꿈 (라틴/혼합 텍스트)
+    let cur = '';
+    for (const word of t.split(' ')) {
+      if (cur === '') {
+        cur = word;
+      } else if ((cur + ' ' + word).length <= maxLen) {
+        cur += ' ' + word;
+      } else {
+        lines.push(cur);
+        cur = word;
+      }
+      // maxLen보다 긴 단일 단어(URL 등)는 강제 분할
+      while (cur.length > maxLen) {
+        lines.push(cur.slice(0, maxLen));
+        cur = cur.slice(maxLen);
+      }
+    }
+    if (cur) lines.push(cur);
+  } else {
+    // 공백 없는 텍스트(CJK 등)는 글자 수로 강제 분할
+    for (let k = 0; k < t.length; k += maxLen) lines.push(t.slice(k, k + maxLen));
+  }
+  return lines;
+}
+
+/**
+ * @param {string} srtText  raw SRT file content
+ * @param {{maxLineLen?: number}} [opts]  maxLineLen 기본 42자(자막 표준)
+ * @returns {string} 줄바꿈이 적용된 SRT (파싱 실패 시 원본)
+ */
+function wrapCuesForDisplay(srtText, opts = {}) {
+  const maxLineLen = opts.maxLineLen || 42;
+  if (typeof srtText !== 'string' || !srtText.trim()) return srtText;
+
+  const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = normalized.split(/\n[ \t]*\n/);
+
+  const out = [];
+  let sawAnyCue = false;
+
+  for (const rawBlock of blocks) {
+    if (!rawBlock.trim()) continue;
+    const lines = rawBlock.split('\n');
+    const tsIdx = lines.findIndex((l) => l.includes('-->'));
+    if (tsIdx === -1) {
+      out.push(rawBlock); // 큐가 아니면 그대로 보존
+      continue;
+    }
+    sawAnyCue = true;
+    const head = lines.slice(0, tsIdx + 1); // 번호 + 타임스탬프 줄
+    const joined = lines
+      .slice(tsIdx + 1)
+      .join(' ')
+      .trim();
+    if (!joined) {
+      out.push(head.join('\n'));
+      continue;
+    }
+    out.push(head.concat(wrapTextToLines(joined, maxLineLen)).join('\n'));
+  }
+
+  // 단 하나의 큐도 파싱 못 했으면 절대 원본을 망가뜨리지 않는다.
+  if (!sawAnyCue) return srtText;
+  return out.join('\n\n') + '\n';
+}
+
+module.exports = { applySrtCleanup, isSdhOnlyText, wrapCuesForDisplay, wrapTextToLines };
