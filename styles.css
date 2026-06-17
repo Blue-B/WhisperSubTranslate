@@ -3331,26 +3331,60 @@ body.has-update-banner .main-container {
   height: calc(100vh - 88px);
 }
 
-/* 번역 대상 언어 다중 선택 체크박스 목록 */
-.lang-checkbox-list {
+/* 번역 대상 언어 다중 선택 — 접힌 드롭다운 */
+.lang-ms-trigger {
+  width: 100%;
+  padding: 0 16px 0 0;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 24 24' fill='none' stroke='%23cba6f7' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lang-ms-trigger:hover {
+  color: var(--accent);
+}
+/* 떠오르는 패널: position:fixed (카드 overflow:hidden 탈출), JS가 좌표 지정 */
+.lang-ms-panel {
+  position: fixed;
+  z-index: 3000;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
-  margin-top: 4px;
+  gap: 2px 8px;
+  padding: 8px;
+  background: var(--mantle, var(--bg-secondary, #1e1e2e));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.lang-ms-panel[hidden] {
+  display: none;
 }
 .lang-check {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 13px;
-  color: var(--text);
+  color: var(--text-primary);
   cursor: pointer;
-  padding: 3px 4px;
+  padding: 5px 7px;
   border-radius: 6px;
   user-select: none;
 }
 .lang-check:hover {
-  background: var(--surface-1, rgba(255, 255, 255, 0.04));
+  background: var(--surface-1, rgba(255, 255, 255, 0.06));
 }
 .lang-check input[type='checkbox'] {
   width: 15px;

@@ -287,9 +287,12 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
-              <span id="labelTargetLanguage">번역 대상 언어 (복수 선택 가능)</span>
+              <span id="labelTargetLanguage">번역 대상 언어</span>
             </label>
-            <div id="targetLanguageList" class="lang-checkbox-list">
+            <button type="button" id="langMsTrigger" class="lang-ms-trigger" aria-haspopup="true" aria-expanded="false">
+              <span id="langMsSummary">한국어</span>
+            </button>
+            <div id="targetLanguageList" class="lang-ms-panel" hidden>
               <label class="lang-check"><input type="checkbox" value="ko" checked /><span>한국어 (ko)</span></label>
               <label class="lang-check"><input type="checkbox" value="en" /><span>영어 (en)</span></label>
               <label class="lang-check"><input type="checkbox" value="ja" /><span>일본어 (ja)</span></label>

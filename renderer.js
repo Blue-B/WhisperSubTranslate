@@ -1956,6 +1956,7 @@ function rebuildTargetLanguageNames(lang) {
     const span = lab.querySelector('span');
     if (cb && span && map[cb.value]) span.textContent = `${map[cb.value]} (${cb.value})`;
   });
+  updateLangSummary();
 }
 
 // 선택된 번역 대상 언어 목록(체크되고 비활성화 아닌 것). 하나도 없으면 기본 ['ko'].
@@ -1985,11 +1986,89 @@ function restoreTargetLangs() {
   } catch (_e) {
     saved = null;
   }
-  if (!Array.isArray(saved) || !saved.length) return;
-  const set = new Set(saved);
-  list.querySelectorAll('input[type="checkbox"]').forEach((c) => {
-    c.checked = set.has(c.value);
+  if (Array.isArray(saved) && saved.length) {
+    const set = new Set(saved);
+    list.querySelectorAll('input[type="checkbox"]').forEach((c) => {
+      c.checked = set.has(c.value);
+    });
+  }
+  updateLangSummary();
+}
+
+// 트리거에 표시할 요약 텍스트 갱신: "한국어" 또는 "한국어 외 2개"
+function updateLangSummary() {
+  const summary = document.getElementById('langMsSummary');
+  if (!summary) return;
+  const map = LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko;
+  const langs = getSelectedTargetLangs();
+  const firstName = map[langs[0]] || langs[0];
+  if (langs.length <= 1) {
+    summary.textContent = firstName;
+  } else {
+    const d = I18N[currentUiLang] || I18N.ko;
+    summary.textContent =
+      typeof d.langMoreSummary === 'function'
+        ? d.langMoreSummary(firstName, langs.length - 1)
+        : `${firstName} +${langs.length - 1}`;
+  }
+}
+
+// 떠오르는 패널 열기/닫기 (position:fixed, 트리거 기준 좌표). 카드 overflow:hidden 탈출.
+function _positionLangPanel() {
+  const trigger = document.getElementById('langMsTrigger');
+  const panel = document.getElementById('targetLanguageList');
+  if (!trigger || !panel) return;
+  const r = trigger.getBoundingClientRect();
+  panel.style.left = r.left + 'px';
+  panel.style.top = r.bottom + 4 + 'px';
+  panel.style.minWidth = Math.max(r.width, 240) + 'px';
+  // 화면 아래로 넘치면 위로 띄움
+  const ph = panel.offsetHeight || 320;
+  if (r.bottom + 4 + ph > window.innerHeight - 8) {
+    panel.style.top = Math.max(8, r.top - 4 - ph) + 'px';
+  }
+}
+function openLangPanel() {
+  const panel = document.getElementById('targetLanguageList');
+  const trigger = document.getElementById('langMsTrigger');
+  if (!panel || !trigger) return;
+  panel.hidden = false;
+  _positionLangPanel();
+  trigger.setAttribute('aria-expanded', 'true');
+}
+function closeLangPanel() {
+  const panel = document.getElementById('targetLanguageList');
+  const trigger = document.getElementById('langMsTrigger');
+  if (panel) panel.hidden = true;
+  if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+function isLangPanelOpen() {
+  const panel = document.getElementById('targetLanguageList');
+  return panel && !panel.hidden;
+}
+// 트리거/외부클릭/ESC/스크롤 배선 (1회만)
+let _langPanelWired = false;
+function initLangMultiSelect() {
+  if (_langPanelWired) return;
+  const trigger = document.getElementById('langMsTrigger');
+  const panel = document.getElementById('targetLanguageList');
+  if (!trigger || !panel) return;
+  _langPanelWired = true;
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (isLangPanelOpen()) closeLangPanel();
+    else openLangPanel();
   });
+  panel.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => {
+    if (isLangPanelOpen()) closeLangPanel();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isLangPanelOpen()) closeLangPanel();
+  });
+  // 스크롤/리사이즈 시 위치가 어긋나므로 닫는다(가장 견고)
+  window.addEventListener('resize', () => closeLangPanel());
+  document.addEventListener('scroll', () => closeLangPanel(), true);
 }
 
 function updateProgressInitial(lang) {
@@ -2845,6 +2924,8 @@ function initTranslationSelect() {
         }
       }
     }
+    // 미지원 언어 자동 해제가 있을 수 있으므로 요약 갱신
+    updateLangSummary();
   };
   translationSelect.addEventListener('change', () => {
     update();
@@ -2873,11 +2954,13 @@ function initTranslationSelect() {
       }
     });
   }
-  // 다국어 체크박스: 저장된 선택 복원 + 변경 시 저장
+  // 다국어 체크박스: 패널 토글 배선 + 저장된 선택 복원 + 변경 시 저장·요약 갱신
+  initLangMultiSelect();
   restoreTargetLangs();
   if (targetLanguageList) {
     targetLanguageList.addEventListener('change', () => {
       saveTargetLangs();
+      updateLangSummary();
     });
   }
   update();

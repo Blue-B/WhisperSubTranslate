@@ -33,6 +33,7 @@ module.exports = {
     autoRetryingFailed: (n) => `실패한 ${n}개 파일을 자동으로 재시도합니다...`,
     runBtnCount: (n) => `${n}개 파일 처리 시작`,
     updateMessage: (version) => `v${version} 업데이트가 있습니다`,
+    langMoreSummary: (name, n) => `${name} 외 ${n}개`,
   },
   en: {
     removedFromQueue: (name) => `Removed from queue: ${name}`,
@@ -64,6 +65,7 @@ module.exports = {
     autoRetryingFailed: (n) => `Auto-retrying ${n} failed file(s)...`,
     runBtnCount: (n) => `Start processing ${n} files`,
     updateMessage: (version) => `v${version} is available`,
+    langMoreSummary: (name, n) => `${name} +${n}`,
   },
   ja: {
     removedFromQueue: (name) => `キューから削除: ${name}`,
@@ -95,6 +97,7 @@ module.exports = {
     autoRetryingFailed: (n) => `失敗した${n}件のファイルを自動再試行します...`,
     runBtnCount: (n) => `${n}件のファイルを処理開始`,
     updateMessage: (version) => `v${version} が利用可能です`,
+    langMoreSummary: (name, n) => `${name} 他${n}件`,
   },
   zh: {
     removedFromQueue: (name) => `已从队列中删除: ${name}`,
@@ -126,6 +129,7 @@ module.exports = {
     autoRetryingFailed: (n) => `正在自动重试 ${n} 个失败的文件...`,
     runBtnCount: (n) => `开始处理 ${n} 个文件`,
     updateMessage: (version) => `v${version} 已发布`,
+    langMoreSummary: (name, n) => `${name} 等${n}个`,
   },
   pl: {
     removedFromQueue: (name) => `Usunięto z kolejki: ${name}`,
@@ -157,5 +161,6 @@ module.exports = {
     autoRetryingFailed: (n) => `Automatyczne ponawianie ${n} nieudanych plików...`,
     runBtnCount: (n) => `Rozpocznij przetwarzanie ${n} plików`,
     updateMessage: (version) => `v${version} jest dostępna`,
+    langMoreSummary: (name, n) => `${name} +${n}`,
   },
 };
