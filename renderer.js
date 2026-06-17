@@ -496,7 +496,13 @@ const _LOG_CATS = [
   { id: 'add', icon: '+', re: /(추가됨|added|追加|已添加|已添加到|dodan|already in queue|이미 대기열)/i },
   { id: 'info', icon: '·', re: /.*/ },
 ];
+// whisper 전사 출력 줄 감지: " [00:00:15.320 --> 00:00:19.460]   text" 형태.
+const _TRANSCRIPT_LINE_RE = /\[\d{1,2}:\d{2}:\d{2}[.,]\d{3}\s*-->/;
 function _classifyLog(line) {
+  // 전사 줄은 상태 메시지가 아니라 자막 "내용"이다. 내용에 error/errors/fail 같은
+  // 단어가 들어있어도(예: TypeScript errors 강의) 에러 줄로 오분류하면 안 되므로
+  // 키워드 매칭을 건너뛰고 info(·)로 처리한다.
+  if (_TRANSCRIPT_LINE_RE.test(line)) return _LOG_CATS[_LOG_CATS.length - 1];
   for (const c of _LOG_CATS) if (c.re.test(line)) return c;
   return _LOG_CATS[_LOG_CATS.length - 1];
 }
