@@ -3,7 +3,7 @@ const deepl = require('deepl-node');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { wrapCuesForDisplay } = require('./srt-cleanup');
+const { splitLongCues } = require('./srt-cleanup');
 const MyMemoryTranslator = require('./myMemoryTranslator');
 const localTranslator = require('./local-translator');
 
@@ -1468,8 +1468,9 @@ ${lines}`;
         sourceLang
       );
 
-      // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 다시 줄바꿈.
-      const displayContent = wrapCuesForDisplay(translatedContent);
+      // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 처리:
+      // 6초 넘는 긴 큐는 시간 비례로 쪼개고(말한 만큼 따라가게), 각 큐는 줄바꿈.
+      const displayContent = splitLongCues(translatedContent, { maxDurationSec: 6 });
       fs.writeFileSync(outputPath, displayContent, 'utf8');
       return outputPath;
     } catch (error) {

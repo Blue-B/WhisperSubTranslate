@@ -191,4 +191,118 @@ function wrapCuesForDisplay(srtText, opts = {}) {
   return out.join('\n\n') + '\n';
 }
 
-module.exports = { applySrtCleanup, isSdhOnlyText, wrapCuesForDisplay, wrapTextToLines };
+// ── Long-cue duration splitting ──────────────────────────────────────────
+// 긴 문장(자연 문장 단위 전사)은 한 큐가 화면에 오래(8초+) 머문다. maxDurationSec를 넘기는
+// 큐는 글자량 비례로 시간을 나눠 여러 큐로 쪼개다(많이 말한 부분 = 더 긴 시간). 완벽한
+// 단어 타임스탬프는 아니지만(균일 발화속도 가정), "짧게 말하면 짧게 / 길게 말하면 길게"
+// 의 근사값으로 충분하다. 번역 출력(사용자가 보는 _ko.srt)에만 적용 — 원본은 번역기가
+// 완결 문장으로 읽어야 하므로 쪼개지 않는다.
+function _srtTimeToMs(t) {
+  const m = /(\d+):(\d+):(\d+)[,.](\d+)/.exec(t);
+  if (!m) return null;
+  return +m[1] * 3600000 + +m[2] * 60000 + +m[3] * 1000 + +m[4];
+}
+function _msToSrtTime(ms) {
+  ms = Math.max(0, Math.round(ms));
+  const h = Math.floor(ms / 3600000);
+  ms -= h * 3600000;
+  const mn = Math.floor(ms / 60000);
+  ms -= mn * 60000;
+  const s = Math.floor(ms / 1000);
+  ms -= s * 1000;
+  const p = (n, l = 2) => String(n).padStart(l, '0');
+  return `${p(h)}:${p(mn)}:${p(s)},${p(ms, 3)}`;
+}
+// 한 큐 텍스트를 n조각으로 나눔 (단어 경계 우선, 글자수 균등)
+function _splitTextParts(text, n) {
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  if (n <= 1 || !t) return t ? [t] : [];
+  const target = t.length / n;
+  const parts = [];
+  if (/\s/.test(t)) {
+    let cur = '';
+    for (const w of t.split(' ')) {
+      if (cur && cur.length + 1 + w.length > target && parts.length < n - 1) {
+        parts.push(cur);
+        cur = w;
+      } else {
+        cur = cur ? cur + ' ' + w : w;
+      }
+    }
+    if (cur) parts.push(cur);
+  } else {
+    const size = Math.ceil(t.length / n);
+    for (let i = 0; i < t.length; i += size) parts.push(t.slice(i, i + size));
+  }
+  return parts.filter(Boolean);
+}
+
+/**
+ * 긴 큐를 maxDurationSec 이하로 시간 비례 분할 + 각 큐 줄바꿈.
+ * @param {string} srtText
+ * @param {{maxDurationSec?: number, maxLineLen?: number}} [opts]
+ */
+function splitLongCues(srtText, opts = {}) {
+  const maxDurMs = (opts.maxDurationSec || 6) * 1000;
+  const maxLineLen = opts.maxLineLen || 42;
+  if (typeof srtText !== 'string' || !srtText.trim()) return srtText;
+
+  const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const blocks = normalized.split(/\n[ \t]*\n/);
+  const cues = [];
+  let sawAnyCue = false;
+
+  for (const rawBlock of blocks) {
+    if (!rawBlock.trim()) continue;
+    const lines = rawBlock.split('\n');
+    const tsIdx = lines.findIndex((l) => l.includes('-->'));
+    if (tsIdx === -1) {
+      cues.push({ raw: rawBlock });
+      continue;
+    }
+    sawAnyCue = true;
+    const tm = /(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/.exec(lines[tsIdx]);
+    const text = lines
+      .slice(tsIdx + 1)
+      .join(' ')
+      .trim();
+    const startMs = tm ? _srtTimeToMs(tm[1]) : null;
+    const endMs = tm ? _srtTimeToMs(tm[2]) : null;
+    if (startMs == null || endMs == null || !text) {
+      cues.push({ rawLine: lines[tsIdx].trim(), text });
+      continue;
+    }
+    const dur = endMs - startMs;
+    if (dur <= maxDurMs || text.length < 2) {
+      cues.push({ startMs, endMs, text });
+      continue;
+    }
+    // 분할 수: 시간 기준(약간 여유)과 텍스트 길이 기준(큐당 ≈2줄) 중 큰 쪽.
+    // 글자량 비례로 시간을 나눠서 텍스트가 많은 큐가 시간을 더 먹어도 상한을 크게 벗어나지 않게.
+    const n = Math.max(Math.ceil(dur / (maxDurMs * 0.9)), Math.ceil(text.length / (maxLineLen * 2)));
+    const parts = _splitTextParts(text, n);
+    const totalChars = parts.reduce((a, p) => a + p.length, 0) || 1;
+    let cursor = startMs;
+    parts.forEach((p, i) => {
+      const e = i === parts.length - 1 ? endMs : cursor + (p.length / totalChars) * dur;
+      cues.push({ startMs: cursor, endMs: e, text: p });
+      cursor = e;
+    });
+  }
+
+  if (!sawAnyCue) return srtText;
+
+  let idx = 0;
+  const rebuilt = cues
+    .map((c) => {
+      if (c.raw != null) return c.raw;
+      idx++;
+      const wrapped = wrapTextToLines(c.text || '', maxLineLen).join('\n');
+      const time = c.startMs != null ? `${_msToSrtTime(c.startMs)} --> ${_msToSrtTime(c.endMs)}` : c.rawLine || '';
+      return `${idx}\n${time}\n${wrapped}`;
+    })
+    .join('\n\n');
+  return rebuilt + '\n';
+}
+
+module.exports = { applySrtCleanup, isSdhOnlyText, wrapCuesForDisplay, wrapTextToLines, splitLongCues };
