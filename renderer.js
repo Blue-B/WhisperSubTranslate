@@ -1036,8 +1036,7 @@ async function continueProcessing() {
       cleanup: getCleanupOptions(),
       // 메이저장 안 key면 기본 ON (whisper 반복/환각 억제)
       reduceRepetition: localStorage.getItem('reduceRepetition') !== 'false',
-      // 자연 문장 단위 전사 (기본 ON, 번역 품질 향상)
-      naturalSegmentation: localStorage.getItem('naturalSegmentation') !== 'false',
+      // 자연 문장 단위 전사는 항상 ON (main.js 기본값). 별도 토글 없음.
     });
 
     // 추출 단계 종료 → 의사 진행률 중지하고 현재 진행률 고정
@@ -3493,13 +3492,6 @@ function initSettingsModal() {
       localStorage.setItem('removeSDH', removeSDHCheckbox.checked.toString());
     });
   }
-  const naturalSegmentationCheckbox = document.getElementById('naturalSegmentationCheckbox');
-  if (naturalSegmentationCheckbox) {
-    naturalSegmentationCheckbox.addEventListener('change', () => {
-      localStorage.setItem('naturalSegmentation', naturalSegmentationCheckbox.checked.toString());
-    });
-  }
-
   const reduceRepetitionCheckbox = document.getElementById('reduceRepetitionCheckbox');
   if (reduceRepetitionCheckbox) {
     reduceRepetitionCheckbox.addEventListener('change', () => {
@@ -3547,9 +3539,6 @@ function showSettingsModal() {
       reduceRepetitionCheckbox.checked = localStorage.getItem('reduceRepetition') !== 'false';
     const autoRetryCheckbox = document.getElementById('autoRetryCheckbox');
     if (autoRetryCheckbox) autoRetryCheckbox.checked = localStorage.getItem('autoRetryFailed') === 'true';
-    const naturalSegmentationCheckbox = document.getElementById('naturalSegmentationCheckbox');
-    if (naturalSegmentationCheckbox)
-      naturalSegmentationCheckbox.checked = localStorage.getItem('naturalSegmentation') !== 'false';
     if (soundVolumeRow) {
       if (soundMuted) {
         soundVolumeRow.classList.add('disabled');

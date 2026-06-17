@@ -122,9 +122,11 @@ let _gpuWarningShown = false;
 // 기본 true: 반복 도배(JAV/음악/무음 구간) 피해가 큰 쪽을 기본값으로. 일반 연속발화 일관성이
 // 더 중요한 사용자는 설정에서 끕 수 있다.
 let reduceRepetition = true;
-// 자연 문장 단위 전사 (기본 ON). ON이면 whisper에 -ml/-sow(강제 50자 분할)를 주지 않아
-// 절·문장 단위 세그먼트가 나온다 → 코드스위칭 영어 단어 보존 + 번역기가 완결 문장을 받아
-// 번역 품질이 크게 오름. 화면 줄길이는 출력 후 wrapCuesForDisplay로 처리. OFF면 구판 동작.
+// 자연 문장 단위 전사 — 항상 ON (UI 토글 없음). ON이면 whisper에 -ml/-sow(강제 50자
+// 분할)를 주지 않아 절·문장 단위 세그먼트가 나온다 → 코드스위칭 영어 단어 보존 +
+// 번역기가 완결 문장을 받아 번역 품질이 크게 오름. 화면 줄길이는 출력 후 wrap으로 처리.
+// 렌더러는 더 이상 이 값을 보내지 않으므로 기본값(true)이 유지된다. 아래 IPC 할당은
+// 코드 레벨 escape hatch(외부 호출자가 false를 보내면 구판 동작)로만 남겨둔다.
 let naturalSegmentation = true;
 
 function getGpuInfo() {
