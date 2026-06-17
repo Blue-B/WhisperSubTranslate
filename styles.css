@@ -3324,3 +3324,9 @@ body::after {
 body.has-update-banner {
   padding-top: 44px;
 }
+/* 업데이트 배너(44px)가 body padding-top으로 컴텐츠를 밀어내므로, 메인 그리드도
+   그만큼 줄여야 하단 액션바(자막 추출 시작 버튼)이 viewport 밖으로 잘려나가지 않는다.
+   (body overflow:hidden 이라 스크롤도 안 됨 → 항상 높이 보정 필요) */
+body.has-update-banner .main-container {
+  height: calc(100vh - 88px);
+}
