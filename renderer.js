@@ -2660,10 +2660,11 @@ if (window?.electronAPI) {
     window.electronAPI.onProgressUpdate((data) => {
       if (!data || data.stage !== 'extracting' || typeof data.percent !== 'number') return;
       stopIndeterminate(); // 가짜 진행률 중지, 이제 실제 값이 주도
+      // 표시는 전체 작업 기준 숫자 하나만: 추출은 0~max(번역 있으면 50, 없으면 95)으로 매핑.
+      // 라벨엔 단계명만(숫자 중복 제거) → "25% - 자막 추출 중..." 처럼 한 개의 진행률만 보임.
       const mapped = (data.percent / 100) * _extractionMaxProgress;
       const d = I18N[currentUiLang];
-      const label = d.progressExtracting + ' ' + Math.round(data.percent) + '%';
-      setProgressTarget(mapped, label);
+      setProgressTarget(mapped, d.progressExtracting);
     });
   }
 }
