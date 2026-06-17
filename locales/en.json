@@ -12,7 +12,7 @@
   "removeSpeakerTagsLabel": "Remove speaker-change markers (>>)",
   "removeSDHLabel": "Remove SDH (deaf/hard-of-hearing) tags",
   "reduceRepetitionLabel": "Suppress repeated/hallucinated lines (recommended)",
-  "reduceRepetitionDesc": "Stops Whisper from repeating the same line or inventing text over silent/music/sound-effect parts by transcribing speech segments only. Recommended for most videos.",
+  "reduceRepetitionDesc": "Stops Whisper from repeating the same line or inventing text over silent/music/sound-effect parts by transcribing speech segments only. Recommended for most videos. If quiet speech gets cut and subtitles go missing, turn this off or use the large-v3 model.",
   "removeSpeakerTagsDesc": "Removes the leading '>>' markers Whisper adds when the speaker changes. The dialogue text itself is kept.",
   "removeSDHDesc": "Deletes sound-description lines like [music], (applause), ♪. Only removes a cue when the whole line is a sound description — parentheses inside real dialogue are left untouched.",
   "autoRetryLabel": "Auto-retry failed items",

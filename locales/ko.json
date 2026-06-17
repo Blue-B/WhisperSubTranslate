@@ -12,7 +12,7 @@
   "removeSpeakerTagsLabel": "화자 변경 표시(>>) 제거",
   "removeSDHLabel": "청각장애인용(SDH) 태그 제거",
   "reduceRepetitionLabel": "반복·환각 자막 억제 (권장)",
-  "reduceRepetitionDesc": "무음·음악·효과음 구간에서 같은 줄이 계속 반복되거나 없는 말이 지어나는 현상을 막아요. 말소리 구간만 골라 처리합니다. 대부분의 영상에 켜두는 걸 권장해요.",
+  "reduceRepetitionDesc": "무음·음악·효과음 구간에서 같은 줄이 계속 반복되거나 없는 말이 지어나는 현상을 막아요. 말소리 구간만 골라 처리합니다. 대부분의 영상에 켜두는 걸 권장해요. 단, 목소리가 작은 구간이 잘려 자막이 빠지면 이 옵션을 끄거나 large-v3 모델을 쓰세요.",
   "removeSpeakerTagsDesc": "화자가 바뀔 때 줄 앞에 붙는 '>>' 기호를 지웁니다. 대사 내용은 그대로 유지돼요.",
   "removeSDHDesc": "[music]·(applause)·♪ 처럼 소리를 설명하는 자막을 삭제해요. 줄 전체가 소리 설명일 때만 지우고, 대사 중간에 들어간 괄호는 건드리지 않아요.",
   "autoRetryLabel": "실패 항목 자동 재시도",
