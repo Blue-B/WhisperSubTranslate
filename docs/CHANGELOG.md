@@ -2,6 +2,30 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.1] — 2026-06-21
+
+Feature + fix release on top of 2.4.0: translate to several target languages in one run, an honest real-time extraction progress bar, and always-on natural sentence segmentation for better translation quality.
+
+### Added
+
+- **Multi-language target selection** — pick several target languages at once and get one SRT per language from a single extraction pass. The single target dropdown is replaced by a compact multi-select list (collapsed so it does not shift the layout); selections persist across restarts, and the translation start log lists every selected target.
+- **Real-time extraction progress** — the progress bar now follows Whisper's own `--print-progress` (`-pp`) output instead of an indeterminate creep, and over-long cues are split so subtitle timing tracks the actual speech.
+
+### Changed
+
+- **Natural sentence-level transcription is always on** — the old 50-character forced split (`-ml 50 -sow`) that garbled code-switched English terms and chopped sentences mid-clause is gone, improving translation quality. The per-feature toggle was removed.
+- **Model picker wording** — the recommended `large-v3-turbo` now leads with its strength (fastest, good enough for most videos) and states plainly that `large-v3` is a bit more accurate, instead of tagging the recommended model with "may miss speech". Updated in all 5 UI languages.
+
+### Fixed
+
+- **Progress bar pinned at 50%** — on a slow model load the pseudo-progress reached the extraction ceiling (50% when translation follows, 95% otherwise) before the first real percentage arrived; because the bar only moves forward it stayed stuck there while only the log timeline advanced. Extraction now warms up to a low cap and then resumes from the real `-pp` percentage up to that ceiling.
+- **Transcript lines containing the word "error" are no longer flagged as errors** in the log view.
+- **Action bar stays visible when the update banner is shown.**
+
+### Internal
+
+- Removed dead references to the old single-target language `<select>`, fully replaced by the multi-target list (`getSelectedTargetLangs` / `restoreTargetLangs`, persisted via localStorage `targetLangs`).
+
 ## [2.4.0] — 2026-06-10
 
 Reliability release: the local Hy-MT2 engine no longer silently saves untranslated text (reported on Reddit: a Japanese video "translated" to English produced a Japanese SRT), failed queue items can retry themselves on long unattended runs, and the Gemini API key no longer travels in request URLs.

@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
