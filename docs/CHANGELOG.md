@@ -18,6 +18,7 @@ Feature + fix release on top of 2.4.0: translate to several target languages in 
 
 ### Fixed
 
+- **Over-long cue splitting no longer chops short words apart** — a short line stretched over a long span (e.g. a sung "감사합니다" held across ~27 s) was split purely by duration, so a CJK line with no spaces was cut character-by-character into "감사 / 합니 / 다." (and spaced text along word boundaries). Splitting now requires each piece to be at least a sensible minimum length, so genuinely long sentences are still split while short held lines stay intact.
 - **Progress bar pinned at 50%** — on a slow model load the pseudo-progress reached the extraction ceiling (50% when translation follows, 95% otherwise) before the first real percentage arrived; because the bar only moves forward it stayed stuck there while only the log timeline advanced. Extraction now warms up to a low cap and then resumes from the real `-pp` percentage up to that ceiling.
 - **Transcript lines containing the word "error" are no longer flagged as errors** in the log view.
 - **Action bar stays visible when the update banner is shown.**

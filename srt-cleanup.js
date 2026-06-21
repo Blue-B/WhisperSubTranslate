@@ -273,13 +273,20 @@ function splitLongCues(srtText, opts = {}) {
       continue;
     }
     const dur = endMs - startMs;
-    if (dur <= maxDurMs || text.length < 2) {
+    // 텍스트가 짧으면(노래·늘어진 발화로 한 마디가 긴 시간에 걸친 경우) 시간이 길어도 쪼개지 않는다.
+    // CJK는 공백이 없어 글자 수로 강제 분할되므로, 그대로 쪼개면 "감사합니다"가 "감사/합니/다."로 깨진다.
+    const MIN_PART_CHARS = 12; // 한 조각 최소 길이 — 이보다 짧게는 분할 금지(단어 토막 방지)
+    const maxPartsByText = Math.floor(text.length / MIN_PART_CHARS);
+    if (dur <= maxDurMs || maxPartsByText < 2) {
       cues.push({ startMs, endMs, text });
       continue;
     }
-    // 분할 수: 시간 기준(약간 여유)과 텍스트 길이 기준(큐당 ≈2줄) 중 큰 쪽.
-    // 글자량 비례로 시간을 나눠서 텍스트가 많은 큐가 시간을 더 먹어도 상한을 크게 벗어나지 않게.
-    const n = Math.max(Math.ceil(dur / (maxDurMs * 0.9)), Math.ceil(text.length / (maxLineLen * 2)));
+    // 분할 수: 시간 기준(약간 여유)과 텍스트 길이 기준(큐당 ≈2줄) 중 큰 쪽 —
+    // 단, 텍스트가 감당할 수 있는 조각 수(maxPartsByText)로 상한을 둔다.
+    const n = Math.min(
+      maxPartsByText,
+      Math.max(Math.ceil(dur / (maxDurMs * 0.9)), Math.ceil(text.length / (maxLineLen * 2)))
+    );
     const parts = _splitTextParts(text, n);
     const totalChars = parts.reduce((a, p) => a + p.length, 0) || 1;
     let cursor = startMs;
