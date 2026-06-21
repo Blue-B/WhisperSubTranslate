@@ -3040,14 +3040,6 @@ async function loadSavedSettings() {
       }
     }
 
-    // 번역 대상 언어 선택
-    if (keys.selectedTargetLanguage) {
-      const targetLanguageSelect = document.getElementById('targetLanguageSelect');
-      if (targetLanguageSelect) {
-        targetLanguageSelect.value = keys.selectedTargetLanguage;
-        console.log('[Settings] Restored target language:', keys.selectedTargetLanguage);
-      }
-    }
     // Sync custom dropdown display values after all native selects are set
     document.querySelectorAll('.setting-card .setting-select[data-customized]').forEach((sel) => {
       sel.dispatchEvent(new Event('change', { bubbles: false }));
@@ -3068,14 +3060,12 @@ async function autoSaveSettings() {
     const languageSelect = document.getElementById('languageSelect');
     const deviceSelect = document.getElementById('deviceSelect');
     const translationSelect = document.getElementById('translationSelect');
-    const targetLanguageSelect = document.getElementById('targetLanguageSelect');
     const uiLanguageSelect = document.getElementById('uiLanguageSelect');
 
     if (modelSelect) keys.selectedModel = modelSelect.value;
     if (languageSelect) keys.selectedLanguage = languageSelect.value;
     if (deviceSelect) keys.selectedDevice = deviceSelect.value;
     if (translationSelect) keys.selectedTranslation = translationSelect.value;
-    if (targetLanguageSelect) keys.selectedTargetLanguage = targetLanguageSelect.value;
     if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
 
     await window.electronAPI.saveApiKeys(keys);
@@ -3087,7 +3077,7 @@ async function autoSaveSettings() {
 
 // 설정 변경 이벤트 연결
 function initSettingsAutoSave() {
-  const selects = ['modelSelect', 'languageSelect', 'deviceSelect', 'translationSelect', 'targetLanguageSelect'];
+  const selects = ['modelSelect', 'languageSelect', 'deviceSelect', 'translationSelect'];
 
   selects.forEach((id) => {
     const el = document.getElementById(id);
@@ -3870,14 +3860,12 @@ async function saveApiKeys() {
   const languageSelect = document.getElementById('languageSelect');
   const deviceSelect = document.getElementById('deviceSelect');
   const translationSelect = document.getElementById('translationSelect');
-  const targetLanguageSelect = document.getElementById('targetLanguageSelect');
   const uiLanguageSelect = document.getElementById('uiLanguageSelect');
 
   if (modelSelect) keys.selectedModel = modelSelect.value;
   if (languageSelect) keys.selectedLanguage = languageSelect.value;
   if (deviceSelect) keys.selectedDevice = deviceSelect.value;
   if (translationSelect) keys.selectedTranslation = translationSelect.value;
-  if (targetLanguageSelect) keys.selectedTargetLanguage = targetLanguageSelect.value;
   if (uiLanguageSelect) keys.uiLanguage = uiLanguageSelect.value;
 
   const successMsg = {
