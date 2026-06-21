@@ -12,6 +12,7 @@ let targetText = '';
 let progressTimer = null;
 let indeterminateTimer = null; // pseudo progress timer (의사 진행률 타이머)
 let _extractionMaxProgress = 95; // 현재 파일 추출 단계가 차지하는 진행률 상한(번역 있으면 50)
+let _extractionWarmupProgress = 0; // 의사 진행률(모델 로딩 구간)이 기어갈 상한. 실제 -pp 값은 이 위에서 이어받는다.
 let _currentPhase = null;
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
 let _stoppedAt = 0; // timestamp when stopProcessing() was called
@@ -1033,8 +1034,11 @@ async function continueProcessing() {
     const hasTranslation = methodAtStart && methodAtStart !== 'none';
     const extractionMaxProgress = hasTranslation ? 50 : 95;
     _extractionMaxProgress = extractionMaxProgress;
-    // 실제 진행률(whisper -pp)이 오기 전까지는 의사 진행률로 시작 → 첫 실제 값에서 전환
-    startIndeterminate(extractionMaxProgress, 'extract');
+    // 의사 진행률은 "모델 로딩" 구간만 채우도록 낮은 상한까지만 기어가게 한다.
+    // (추출 예산 전체를 의사 진행률로 써버리면 실제 -pp 값이 이미 차버린 지점을 넘지 못해
+    //  진행바가 그 상한(예: 50%)에서 멈춰버린다. 실제 원인이었던 버그.)
+    _extractionWarmupProgress = Math.min(10, Math.round(extractionMaxProgress * 0.15));
+    startIndeterminate(_extractionWarmupProgress, 'extract');
 
     console.log('[continueProcessing] extractSubtitles call started');
     const result = await window.electronAPI.extractSubtitles({
@@ -1729,40 +1733,40 @@ function getLocalizedError(errorMessage) {
 // 모델 이름 현지화
 const MODEL_I18N = {
   ko: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU 최적, 빠름 / 일부 말 누락·오인식 가능 ⭐추천',
-    'large-v3': 'large-v3 (1550MB) — 가장 정확(누락 최소), 느림 / GPU 권장',
+    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU 가속, 가장 빠름. 대부분 영상에 충분 (정확도는 large-v3가 조금 위) ⭐추천',
+    'large-v3': 'large-v3 (1550MB) — 정확도 최우선, 느림 / GPU 권장',
     medium: 'medium (769MB) — 고사양 PC, GPU 불필요',
     small: 'small (244MB) — 중사양 PC, 속도·정확 균형',
     base: 'base (74MB) — 저사양 PC, 빠른 초안용',
     tiny: 'tiny (39MB) — 초저사양 PC용, 속도 최우선',
   },
   en: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU optimized, fastest / may miss some speech ⭐Recommended',
-    'large-v3': 'large-v3 (1550MB) — Most accurate (fewest drops), slow / GPU advised',
+    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU-accelerated, fastest. Good enough for most videos (large-v3 is a bit more accurate) ⭐Recommended',
+    'large-v3': 'large-v3 (1550MB) — Top accuracy, slow / GPU advised',
     medium: 'medium (769MB) — High-spec PC, no GPU needed',
     small: 'small (244MB) — Mid-spec PC, speed/accuracy balance',
     base: 'base (74MB) — Low-spec PC, fast draft use',
     tiny: 'tiny (39MB) — Very low-spec PC, speed priority',
   },
   ja: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU最適化、高速 / 一部の音声を取りこぼす場合あり ⭐推奨',
-    'large-v3': 'large-v3 (1550MB) — 最も正確(取りこぼし最小)、低速 / GPU推奨',
+    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU高速化で最速。ほとんどの動画に十分 (精度はlarge-v3がやや上) ⭐推奨',
+    'large-v3': 'large-v3 (1550MB) — 精度最優先、低速 / GPU推奨',
     medium: 'medium (769MB) — 高スペックPC、GPU不要',
     small: 'small (244MB) — 中スペックPC、速度・精度バランス',
     base: 'base (74MB) — 低スペックPC、高速下書き用',
     tiny: 'tiny (39MB) — 低スペックPC用、速度最優先',
   },
   zh: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU优化，最快 / 可能漏掉部分语音 ⭐推荐',
-    'large-v3': 'large-v3 (1550MB) — 最准确(漏识最少)，慢 / 建议GPU',
+    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU加速，最快。多数视频已够用 (精度略低于large-v3) ⭐推荐',
+    'large-v3': 'large-v3 (1550MB) — 精度优先，较慢 / 建议GPU',
     medium: 'medium (769MB) — 高配置PC，不需要GPU',
     small: 'small (244MB) — 中配置PC，速度与精度平衡',
     base: 'base (74MB) — 低配置PC，快速草稿用',
     tiny: 'tiny (39MB) — 超低配置PC，速度优先',
   },
   pl: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — Optymalizacja GPU, najszybszy / może pominąć część mowy ⭐Zalecany',
-    'large-v3': 'large-v3 (1550MB) — Najdokładniejszy (najmniej pominięć), wolny / zalecane GPU',
+    'large-v3-turbo': 'large-v3-turbo (809MB) — Akceleracja GPU, najszybszy. Wystarczy do większości filmów (large-v3 nieco dokładniejszy) ⭐Zalecany',
+    'large-v3': 'large-v3 (1550MB) — Najwyższa dokładność, wolny / zalecane GPU',
     medium: 'medium (769MB) — Wydajny PC, bez GPU',
     small: 'small (244MB) — Średniy PC, balans szybkości i dokładności',
     base: 'base (74MB) — Słaby PC, szybkie szkice',
@@ -2786,11 +2790,13 @@ if (window?.electronAPI) {
     window.electronAPI.onProgressUpdate((data) => {
       if (!data || data.stage !== 'extracting' || typeof data.percent !== 'number') return;
       stopIndeterminate(); // 가짜 진행률 중지, 이제 실제 값이 주도
-      // 표시는 전체 작업 기준 숫자 하나만: 추출은 0~max(번역 있으면 50, 없으면 95)으로 매핑.
+      // 표시는 전체 작업 기준 숫자 하나만: 실제 진행률 0~100을 [워밍 상한 ~ 추출 최대] 구간으로 매핑
+      // → 의사 진행률이 멈춘 지점에서 자연스럽게 이어받으며 max(=50/95)까지 채운다.
       // 라벨엔 단계명만(숫자 중복 제거) → "25% - 자막 추출 중..." 처럼 한 개의 진행률만 보임.
-      const mapped = (data.percent / 100) * _extractionMaxProgress;
+      const span = Math.max(0, _extractionMaxProgress - _extractionWarmupProgress);
+      const mapped = _extractionWarmupProgress + (data.percent / 100) * span;
       const d = I18N[currentUiLang];
-      setProgressTarget(mapped, d.progressExtracting);
+      setProgressTarget(Math.max(lastProgress, mapped), d.progressExtracting);
     });
   }
 }
@@ -4472,7 +4478,7 @@ function renderHistory(filter) {
 
   listEl.innerHTML = filtered
     .map(
-      (it, idx) => `
+      (it) => `
     <div class="history-item">
       <span class="history-item-status ${it.status === 'success' ? 'success' : 'failed'}" title="${it.status}"></span>
       <span class="history-item-name" title="${_esc(it.path || it.name)}">${_esc(it.name || '')}</span>
@@ -4773,9 +4779,6 @@ async function renderModels() {
   const sectionAsTitle = D.modelSectionAsr || 'Speech Recognition Models';
   const sectionTrHint = D.modelSectionTranslationHint || 'Text → another language';
   const sectionAsHint = D.modelSectionAsrHint || 'Audio → subtitle text';
-
-  const installedCount = installedSet.size;
-  const totalCount = models.length;
 
   grid.innerHTML = `
     <section class="model-section">
