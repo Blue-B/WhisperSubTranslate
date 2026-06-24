@@ -3,7 +3,7 @@ const deepl = require('deepl-node');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { splitLongCues } = require('./srt-cleanup');
+const { wrapCuesForDisplay } = require('./srt-cleanup');
 const MyMemoryTranslator = require('./myMemoryTranslator');
 const localTranslator = require('./local-translator');
 
@@ -1312,20 +1312,27 @@ ${lines}`;
 
           // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
           let retryResult = texts[i]; // 기본값은 원문
-          for (let retry = 1; retry <= 2; retry++) {
-            try {
-              console.log(`[Retry ${retry}/2] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
-              await new Promise((resolve) => setTimeout(resolve, retry * 1000)); // 점진적 지연
+          // 로컬(오프라인)을 고른 경우 온라인 API(mymemory/chatgpt)로 폴백하지 않는다.
+          // 사용자 의도(오프라인)와 프라이버시를 존중하고, 잘못된 API 키/할당량 에러도 안 뜨게 한다.
+          // 원문 유지 → translateSRTContent의 passthrough 안전망이 명확한 에러로 처리한다.
+          if (method === 'local') {
+            console.warn(`[Local] segment failed, keeping original (no online fallback): ${i + 1}/${texts.length}`);
+          } else {
+            for (let retry = 1; retry <= 2; retry++) {
+              try {
+                console.log(`[Retry ${retry}/2] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
+                await new Promise((resolve) => setTimeout(resolve, retry * 1000)); // 점진적 지연
 
-              // 다른 번역 서비스로 시도
-              const fallbackMethod = retry === 1 ? 'mymemory' : 'chatgpt';
-              retryResult = await this.translateAuto(texts[i], fallbackMethod, targetLang);
-              console.log(`[Retry ${retry} Success] ${i + 1}/${texts.length}: ${retryResult.substring(0, 40)}...`);
-              break; // 성공하면 재시도 중단
-            } catch (retryError) {
-              console.error(`[Retry ${retry} Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
-              if (retry === 2) {
-                console.warn(`[Give Up] ${i + 1}/${texts.length}: All retries failed - keeping original`);
+                // 다른 번역 서비스로 시도
+                const fallbackMethod = retry === 1 ? 'mymemory' : 'chatgpt';
+                retryResult = await this.translateAuto(texts[i], fallbackMethod, targetLang);
+                console.log(`[Retry ${retry} Success] ${i + 1}/${texts.length}: ${retryResult.substring(0, 40)}...`);
+                break; // 성공하면 재시도 중단
+              } catch (retryError) {
+                console.error(`[Retry ${retry} Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
+                if (retry === 2) {
+                  console.warn(`[Give Up] ${i + 1}/${texts.length}: All retries failed - keeping original`);
+                }
               }
             }
           }
@@ -1468,9 +1475,10 @@ ${lines}`;
         sourceLang
       );
 
-      // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 처리:
-      // 6초 넘는 긴 큐는 시간 비례로 쪼개고(말한 만큼 따라가게), 각 큐는 줄바꿈.
-      const displayContent = splitLongCues(translatedContent, { maxDurationSec: 6 });
+      // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 줄바꿈만 적용한다.
+      // 타임링은 추출 단계(토큰 끝시각)에서 이미 실발화에 맞춰졌으므로, 여기서 시간 비례
+      // 추측 분할(싱크 드리프트 유발)은 하지 않는다. 큐(타임스탬프) 구조는 그대로 둔다.
+      const displayContent = wrapCuesForDisplay(translatedContent);
       fs.writeFileSync(outputPath, displayContent, 'utf8');
       return outputPath;
     } catch (error) {
@@ -1608,6 +1616,24 @@ ${lines}`;
           text: textsToTranslate[k].substring(0, 50) + '...',
         });
       }
+    }
+
+    // 안전망: 로컬 모델 크래시/echo 등으로 모든(또는 대부분) 세그먼트가 원문 그대로면
+    // translateBatch가 원문을 유지하므로 '번역된 척' 하는 미번역 파일이 만들어진다.
+    // 이런 무성(silent) 실패를 성공으로 보고하지 않도록, 미번역 비율이 과도하면 에러를 던진다.
+    // (부분 실패는 통과 — 0.9 임계값은 사실상 전체 실패만 잡는다. 일·한·중처럼 스크립트가
+    //  완전히 다른 번역은 정상이면 거의 0%만 동일하므로 오탐 위험이 낮다.)
+    let unchanged = 0;
+    for (let k = 0; k < translatedTexts.length; k++) {
+      const src = (textsToTranslate[k] || '').trim();
+      const out = (translatedTexts[k] || '').trim();
+      if (src && out === src) unchanged++;
+    }
+    if (translatedTexts.length >= 5 && unchanged / translatedTexts.length >= 0.9) {
+      throw new Error(
+        `TRANSLATION_PASSTHROUGH: ${unchanged}/${translatedTexts.length} segments were left untranslated ` +
+          `(translation engine likely failed or crashed). The subtitles were NOT translated.`
+      );
     }
 
     return translatedLines.join('\n');

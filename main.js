@@ -14,11 +14,30 @@ try {
 }
 const path = require('path');
 const fs = require('fs');
-const { spawn, execSync } = require('child_process');
+const { spawn, execFile, execSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
-const { applySrtCleanup, wrapCuesForDisplay } = require('./srt-cleanup');
+const { applySrtCleanup, wrapCuesForDisplay, srtFromWhisperJson } = require('./srt-cleanup');
+
+// whisper.cpp -ojf JSON(outputBase.json)을 읽어 토큰 끝시각기반 타이트 SRT로 변환해 srtPath에 덮어쓴다.
+// VAD 되매핑으로 늘어난 세그먼트 끝을 실제 발화 끝으로 잘라 "말할 때만 자막이 뜨게" 한다.
+// JSON이 없거나 파싱 실패하면 아무것도 안 하고 -osrt 결과를 그대로 쓴다(우아한 폴백).
+function applyTokenTightTiming(outputBase, srtPath) {
+  try {
+    const jsonPath = outputBase + '.json';
+    if (!fs.existsSync(jsonPath)) return;
+    const tight = srtFromWhisperJson(fs.readFileSync(jsonPath, 'utf-8'));
+    try {
+      fs.unlinkSync(jsonPath);
+    } catch (_e) {
+      /* ignore */
+    }
+    if (tight && tight.trim()) fs.writeFileSync(srtPath, tight, 'utf-8');
+  } catch (e) {
+    console.warn('[Timing] token-tight SRT failed, using -osrt output:', e.message);
+  }
+}
 const errLogger = require('./lib/error-logger');
 const { Menu } = require('electron');
 try {
@@ -261,112 +280,6 @@ function resolveDevice(requestedDevice) {
   return req;
 }
 
-// Dynamic performance settings based on system specs (reserved for future use)
-function _getOptimalWhisperSettings(device) {
-  const totalMemory = os.totalmem() / (1024 * 1024 * 1024); // GB
-  const cpuCores = os.cpus().length;
-
-  console.log(`[System Info] RAM: ${totalMemory.toFixed(1)}GB, CPU Cores: ${cpuCores}`);
-
-  if (device === 'cuda') {
-    // GPU settings - balanced for stability and performance
-    if (totalMemory >= 16 && cpuCores >= 8) {
-      // High-end system - good performance with safety margin
-      console.log('[Performance] High-end GPU settings applied');
-      return [
-        '--compute_type',
-        'float16',
-        '--beam_size',
-        '5',
-        '--batch_size',
-        '16',
-        '--threads',
-        '4',
-        '--chunk_length',
-        '30',
-      ];
-    } else if (totalMemory >= 8) {
-      // Mid-range system - balanced settings
-      console.log('[Performance] Mid-range GPU settings applied');
-      return [
-        '--compute_type',
-        'float16',
-        '--beam_size',
-        '3',
-        '--batch_size',
-        '8',
-        '--threads',
-        '2',
-        '--chunk_length',
-        '25',
-      ];
-    } else {
-      // Low-end system with GPU - conservative but faster than CPU
-      console.log('[Performance] Low-end GPU settings applied');
-      return [
-        '--compute_type',
-        'int8',
-        '--beam_size',
-        '1',
-        '--batch_size',
-        '4',
-        '--threads',
-        '1',
-        '--chunk_length',
-        '20',
-      ];
-    }
-  } else {
-    // CPU settings - optimized for different CPU configurations
-    if (totalMemory >= 16 && cpuCores >= 8) {
-      // High-end CPU system
-      console.log('[Performance] High-end CPU settings applied');
-      return [
-        '--compute_type',
-        'int8',
-        '--beam_size',
-        '3',
-        '--batch_size',
-        '8',
-        '--threads',
-        Math.min(cpuCores - 2, 6).toString(),
-        '--chunk_length',
-        '25',
-      ];
-    } else if (totalMemory >= 8 && cpuCores >= 4) {
-      // Mid-range CPU system
-      console.log('[Performance] Mid-range CPU settings applied');
-      return [
-        '--compute_type',
-        'int8',
-        '--beam_size',
-        '2',
-        '--batch_size',
-        '4',
-        '--threads',
-        Math.min(cpuCores - 1, 4).toString(),
-        '--chunk_length',
-        '20',
-      ];
-    } else {
-      // Low-end CPU system
-      console.log('[Performance] Low-end CPU settings applied');
-      return [
-        '--compute_type',
-        'int8',
-        '--beam_size',
-        '1',
-        '--batch_size',
-        '2',
-        '--threads',
-        '1',
-        '--chunk_length',
-        '15',
-      ];
-    }
-  }
-}
-
 // Enhanced memory/GPU cleanup across files (파일 간 메모리/GPU 정리)
 function forceMemoryCleanup(device, isFileTransition = false) {
   return new Promise((resolve) => {
@@ -524,6 +437,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       webSecurity: true,
       devTools: !app.isPackaged,
+      // 긴 작업 후 완료 효과음이 자동재생 정책에 막히지 않도록 명시(commandLine 스위치 보강).
+      autoplayPolicy: 'no-user-gesture-required',
     },
     icon: path.join(__dirname, 'build', 'icon.png'),
     autoHideMenuBar: true,
@@ -1094,6 +1009,7 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       '-f',
       segmentPath,
       '-osrt',
+      '-ojf', // 토큰별 실제 시각 포함 JSON → 자막 끝을 실발화 끝으로 트림
       '-of',
       outputBase,
       ...getWhisperCppSettings(device),
@@ -1148,6 +1064,7 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       }
       if ((code === 0 || fs.existsSync(srtPath)) && fs.existsSync(srtPath)) {
         try {
+          applyTokenTightTiming(outputBase, srtPath);
           const content = fs.readFileSync(srtPath, 'utf-8');
           // 임시 SRT 파일 삭제
           try {
@@ -1463,9 +1380,362 @@ function sendExtractionProgress(percent) {
   }
 }
 
+function parseFasterWhisperProgress(text) {
+  const matches = [...text.matchAll(/(?:^|\r|\n)\s*(\d{1,3})%\s*\|/g)];
+  if (!matches.length) return null;
+  const pct = parseInt(matches[matches.length - 1][1], 10);
+  return Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : null;
+}
+
 // stderr 청크에서 진행률 라인(whisper_print_progress_callback)을 제거 → 로그 스팸 방지.
 function stripProgressLines(text) {
   return text.replace(/.*whisper_print_progress_callback:.*\r?\n?/g, '');
+}
+
+// Faster-Whisper-XXL: 일반 빌드와 달리 cuBLAS/cuDNN을 동봉해서 사용자 GPU로 바로 돈다.
+// (일반 88MB 빌드는 CUDA 라이브러리가 없어 CPU 전용이었음.) 압축은 .7z(약 1.42GB).
+const FASTER_WHISPER_ZIP_URL =
+  'https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_r245.4_windows.7z';
+const FASTER_WHISPER_EXE_NAME = 'faster-whisper-xxl.exe';
+const FASTER_WHISPER_MODEL = 'large-v2';
+// 모델 드롭다운에서 이 id를 고르면 whisper.cpp 대신 Faster-Whisper-XXL 싱크 엔진을 쓴다.
+// 정밀(float16)과 라이트(int8)는 같은 model.bin을 공유하고 실행 시 compute_type만 다르다.
+// 디스크 다운로드/삭제는 둘이 하나를 공유한다(모델 관리 카드 1개).
+const SYNC_ENGINE_MODEL_ID = 'large-v2-sync';
+const SYNC_ENGINE_LITE_MODEL_ID = 'large-v2-sync-lite';
+function isSyncEngineModel(model) {
+  return model === SYNC_ENGINE_MODEL_ID || model === SYNC_ENGINE_LITE_MODEL_ID;
+}
+
+function getFasterWhisperRootDir() {
+  return path.join(app.getPath('userData'), '_faster-whisper');
+}
+
+function getFasterWhisperEngineDir() {
+  return path.join(getFasterWhisperRootDir(), 'engine');
+}
+
+// 추출된 엔진에서 exe를 재귀로 찾는다. 폴더명이 버전마다 바뀔 수 있어(예: 'Faster-Whisper-XXL')
+// 하드코딩 대신 탐색한다. 캐시해서 매번 디스크를 훑지 않는다.
+let _cachedFwExePath = null;
+function findFasterWhisperExe(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const stack = [dir];
+  while (stack.length) {
+    const cur = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(cur, { withFileTypes: true });
+    } catch (_e) {
+      continue;
+    }
+    for (const e of entries) {
+      const full = path.join(cur, e.name);
+      if (e.isDirectory()) stack.push(full);
+      else if (e.name.toLowerCase() === FASTER_WHISPER_EXE_NAME) return full;
+    }
+  }
+  return null;
+}
+
+function getFasterWhisperExePath() {
+  if (_cachedFwExePath && fs.existsSync(_cachedFwExePath)) return _cachedFwExePath;
+  _cachedFwExePath = findFasterWhisperExe(getFasterWhisperEngineDir());
+  // 미발견 시에도 기대 경로를 돌려줘 호출부의 존재검사/에러 메시지가 일관되게 동작.
+  return _cachedFwExePath || path.join(getFasterWhisperEngineDir(), 'Faster-Whisper-XXL', FASTER_WHISPER_EXE_NAME);
+}
+
+// 번들된 7za.exe 경로 (구버전 Windows의 tar가 BCJ2 7z를 못 풀 때 폴백).
+function get7zaExePath() {
+  const rel = path.join('node_modules', '7zip-bin', 'win', 'x64', '7za.exe');
+  return app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked', rel) : path.join(__dirname, rel);
+}
+
+// .7z 추출: Windows 내장 tar.exe(libarchive, BCJ2 지원) 우선, 실패 시 번들 7za.exe 폴백.
+async function extract7z(archivePath, destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  try {
+    await execFileAsync('tar.exe', ['-xf', archivePath, '-C', destDir], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+    return;
+  } catch (tarErr) {
+    console.log('[FasterWhisper] tar.exe 7z extract failed, falling back to 7za.exe:', tarErr.message);
+  }
+  const sevenZip = get7zaExePath();
+  if (!fs.existsSync(sevenZip)) {
+    throw new Error(`7z extraction failed: neither tar.exe nor bundled 7za.exe worked (${sevenZip} missing)`);
+  }
+  await execFileAsync(sevenZip, ['x', archivePath, `-o${destDir}`, '-y'], {
+    windowsHide: true,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+}
+
+function getFasterWhisperModelsDir() {
+  return path.join(getFasterWhisperRootDir(), 'models');
+}
+
+function execFileAsync(file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, options, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+  });
+}
+
+async function downloadFileWithProgress(url, destPath, label, onPercent) {
+  if (downloadsCancelled) throw new Error('cancelled');
+  const controller = new AbortController();
+  const writer = fs.createWriteStream(destPath);
+  const tracker = { controller, writer, destPath };
+  activeDownloads.add(tracker);
+  try {
+    const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
+    const total = Number(response.headers['content-length'] || 0);
+    let received = 0;
+    let lastPct = -1;
+    let lastSentAt = 0;
+    response.data.on('data', (chunk) => {
+      received += chunk.length;
+      if (total > 0) {
+        const pct = Math.floor((received / total) * 100);
+        const now = Date.now();
+        if (pct !== lastPct && (pct === 100 || pct - lastPct >= 5 || now - lastSentAt >= 1500)) {
+          lastPct = pct;
+          lastSentAt = now;
+          try {
+            mainWindow?.webContents?.send('output-update', `${label} ${pct}%\n`);
+          } catch (_e) {}
+          if (typeof onPercent === 'function') {
+            try {
+              onPercent(pct, received, total);
+            } catch (_e) {}
+          }
+        }
+      }
+    });
+    response.data.pipe(writer);
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+  } finally {
+    activeDownloads.delete(tracker);
+  }
+}
+
+async function ensureFasterWhisperEngine(onPercent) {
+  if (process.platform !== 'win32') {
+    throw new Error('Faster-Whisper sync engine is currently available on Windows only.');
+  }
+  _cachedFwExePath = null; // 재탐색 강제
+  let exePath = getFasterWhisperExePath();
+  if (exePath && fs.existsSync(exePath)) return exePath;
+
+  const rootDir = getFasterWhisperRootDir();
+  const engineDir = getFasterWhisperEngineDir();
+  fs.mkdirSync(rootDir, { recursive: true });
+  fs.mkdirSync(engineDir, { recursive: true });
+
+  downloadsCancelled = false;
+  const archivePath = path.join(rootDir, 'Faster-Whisper-XXL_windows.7z');
+  const partialPath = archivePath + '.partial';
+  try {
+    if (fs.existsSync(partialPath)) fs.unlinkSync(partialPath);
+    if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
+  } catch (_e) {}
+
+  mainWindow?.webContents?.send(
+    'output-update',
+    'Preparing GPU sync engine (Faster-Whisper-XXL, ~1.4GB). This first-time download can take a while...\n'
+  );
+  await downloadFileWithProgress(FASTER_WHISPER_ZIP_URL, partialPath, 'Sync engine (XXL)', onPercent);
+  fs.renameSync(partialPath, archivePath);
+
+  mainWindow?.webContents?.send('output-update', 'Extracting GPU sync engine (this can take a minute)...\n');
+  await extract7z(archivePath, engineDir);
+  try {
+    fs.unlinkSync(archivePath);
+  } catch (_e) {}
+
+  _cachedFwExePath = null;
+  exePath = getFasterWhisperExePath();
+  if (!exePath || !fs.existsSync(exePath)) {
+    throw new Error(`Faster-Whisper-XXL engine extraction failed (exe not found under ${engineDir})`);
+  }
+  mainWindow?.webContents?.send('output-update', 'GPU sync engine ready.\n');
+  return exePath;
+}
+
+function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = false) {
+  const args = [
+    wavPath,
+    '--model',
+    FASTER_WHISPER_MODEL,
+    '--task',
+    'transcribe',
+    '--output_dir',
+    outputDir,
+    '--model_dir',
+    getFasterWhisperModelsDir(),
+    '--output_format',
+    'srt',
+    '--word_timestamps',
+    'True',
+    '--vad_filter',
+    reduceRepetition ? 'True' : 'False',
+    '--vad_threshold',
+    '0.3',
+    '--vad_min_silence_duration_ms',
+    '200',
+    '--vad_speech_pad_ms',
+    '100',
+    '--sentence',
+    '--standard_asia',
+    // GPU(cuda)면 float16, CPU면 int8. XXL은 cuBLAS/cuDNN을 동봉해 GPU에서 바로 동작한다.
+    '--device',
+    useGpu ? 'cuda' : 'cpu',
+    // 라이트는 GPU에서 int8_float16(가중치 int8 + 누적 float16)으로 VRAM을 줄인다(품질 손실 극소).
+    // CPU는 정밀/라이트 모두 int8(CTranslate2 CPU 표준)이라 차이가 없다.
+    '--compute_type',
+    useGpu ? (lite ? 'int8_float16' : 'float16') : 'int8',
+    // CPU 경로일 때만 의미: 이 엔진은 기본 최대 4스레드(--help: "no more than 4")라
+    // 멀티코어 PC에서 절반도 못 쓴다. 물리 코어 수만큼 올린다(최대 8, 과구동 방지).
+    '--threads',
+    String(Math.max(4, Math.min(os.cpus().length, 8))),
+    '--print_progress',
+    '--beep_off',
+  ];
+  if (language && language !== 'auto') {
+    args.splice(5, 0, '--language', language);
+  }
+  return args;
+}
+
+async function runFasterWhisperExtraction(filePath, wavPath, language, device, model = SYNC_ENGINE_MODEL_ID) {
+  const lite = model === SYNC_ENGINE_LITE_MODEL_ID;
+  const modeLabel = lite ? 'large-v2 lite' : 'large-v2';
+  const exePath = await ensureFasterWhisperEngine();
+  const outputDir = path.join(getSafeTempDir(), `fw_out_${Date.now()}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.mkdirSync(getFasterWhisperModelsDir(), { recursive: true });
+
+  const outputSrt = path.join(outputDir, `${path.basename(wavPath, path.extname(wavPath))}.srt`);
+  const finalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+
+  // 장치 선택은 일반 모델과 일관되게 따른다.
+  // CPU = CPU만, GPU = GPU만, 자동 = GPU 먼저 시도 후 CPU 폴백.
+  const requestedDevice = String(device || 'auto').toLowerCase();
+  const attempts = requestedDevice === 'cpu' ? [false] : requestedDevice === 'cuda' || requestedDevice === 'gpu' ? [true] : [true, false];
+
+  const runOnce = (useGpu) =>
+    new Promise((resolve, reject) => {
+      const args = buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite);
+      mainWindow?.webContents?.send(
+        'output-update',
+        `Starting sync repair extraction (${modeLabel}, ${useGpu ? 'GPU' : 'CPU'}). This mode is for subtitles that do not sync with normal models; English is usually faster with large-v3-turbo. First run may download the model (~3GB).\n`
+      );
+      console.log(`[FasterWhisper] (${useGpu ? 'GPU' : 'CPU'}) ${exePath} ${args.join(' ')}`);
+
+      const proc = spawn(exePath, args, {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: path.dirname(exePath),
+        // PyInstaller exe non-TTY pipe stdout block-buffering -> progress arrives
+        // all at once at the end. PYTHONUNBUFFERED forces real-time streaming.
+        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      });
+      currentProcess = proc;
+
+      const timeout = setTimeout(
+        () => {
+          if (proc && !proc.killed) {
+            console.log('[FasterWhisper TIMEOUT] exceeded 3 hours');
+            proc.kill('SIGKILL');
+          }
+        },
+        3 * 60 * 60 * 1000
+      );
+
+      let lastLoggedPct = -1;
+      let lastProgressLogAt = 0;
+      const handleOutput = (data) => {
+        const output = data.toString('utf8');
+        const pct = parseFasterWhisperProgress(output);
+        if (pct != null) {
+          sendExtractionProgress(pct);
+          // Show transcription progress as a human-readable line every 3s so the
+          // log does not look frozen during the long single-pass transcription.
+          const now = Date.now();
+          if (pct !== lastLoggedPct && (pct === 100 || now - lastProgressLogAt >= 3000)) {
+            lastLoggedPct = pct;
+            lastProgressLogAt = now;
+            const where = useGpu ? 'GPU' : 'CPU';
+            mainWindow?.webContents?.send('output-update', `Transcribing (sync-first ${modeLabel}, ${where})... ${pct}%\n`);
+          }
+        }
+        // tqdm progress chunks contain carriage returns and can spam the log. Keep meaningful lines.
+        const cleaned = output
+          .replace(/\r[^\n]*\|[^\n]*/g, '')
+          .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+          .trim();
+        if (cleaned) mainWindow?.webContents?.send('output-update', cleaned + '\n');
+      };
+
+      proc.stdout.on('data', handleOutput);
+      proc.stderr.on('data', handleOutput);
+
+      proc.on('close', (code) => {
+        clearTimeout(timeout);
+        currentProcess = null;
+        if (isUserStopped) return reject(new Error('Stopped by user'));
+        if (fs.existsSync(outputSrt)) return resolve();
+        reject(new Error(`Faster-Whisper failed (exit ${code})`));
+      });
+      proc.on('error', (err) => {
+        clearTimeout(timeout);
+        currentProcess = null;
+        reject(err);
+      });
+    });
+
+  let lastErr = null;
+  for (const useGpu of attempts) {
+    try {
+      await runOnce(useGpu);
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      if (isUserStopped) throw e;
+      // GPU 실패 + CPU 폴백이 남아있으면 한 번 더 시도.
+      if (useGpu && attempts.length > 1) {
+        mainWindow?.webContents?.send(
+          'output-update',
+          `GPU run failed (${e.message}). Falling back to CPU (slower)...\n`
+        );
+        try {
+          fs.rmSync(outputSrt, { force: true });
+        } catch (_e) {}
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
+
+  fs.copyFileSync(outputSrt, finalSrtPath);
+  try {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  } catch (_e) {}
+  mainWindow?.webContents?.send('output-update', `Sync-first SRT saved: ${finalSrtPath}\n`);
+  return finalSrtPath;
 }
 
 // ===== VAD (Voice Activity Detection) =====
@@ -1569,6 +1839,33 @@ function extractSingleFile(filePath, model, language, device) {
           }
         }
         return reject(new Error('Stopped by user'));
+      }
+
+      // 모델 드롭다운에서 'large-v2-sync'(정밀) 또는 'large-v2-sync-lite'(int8)를 고르면
+      // whisper.cpp 대신 Faster-Whisper-XXL로 추출한다. 둘은 같은 엔진+model.bin을 공유하고
+      // compute_type만 다르다. 장치 선택은 일반 모델과 일관되게 따른다:
+      // CPU = CPU만, GPU = GPU만, 자동 = GPU 먼저 시도 후 CPU 폴백.
+      if (isSyncEngineModel(model)) {
+        try {
+          const finalSrtPath = await runFasterWhisperExtraction(filePath, wavPath, language, device, model);
+          if (wavPath !== filePath && fs.existsSync(wavPath)) {
+            try {
+              fs.unlinkSync(wavPath);
+            } catch (_e) {
+              /* ignore */
+            }
+          }
+          return resolve(finalSrtPath);
+        } catch (fwErr) {
+          if (wavPath !== filePath && fs.existsSync(wavPath)) {
+            try {
+              fs.unlinkSync(wavPath);
+            } catch (_e) {
+              /* ignore */
+            }
+          }
+          return reject(fwErr);
+        }
       }
 
       // 모델 경로 (분할 처리에서도 필요하므로 먼저 선언)
@@ -1722,6 +2019,7 @@ function extractSingleFile(filePath, model, language, device) {
         '-f',
         wavPath,
         '-osrt', // SRT 출력
+        '-ojf', // 토큰별 실제 시각 포함 JSON → 자막 끝을 실발화 끝으로 트림
         '-of',
         outputBase, // 출력 파일 기본 이름 (확장자 제외)
         ...getWhisperCppSettings(chosenDevice),
@@ -1800,6 +2098,14 @@ function extractSingleFile(filePath, model, language, device) {
         // Enhanced cleanup after each file
         await forceMemoryCleanup(chosenDevice, true);
 
+        // SRT 존재 확인 (wav 정리 전에 해야 끝시각 정리에 wav를 쓸 수 있다)
+        const srtExists = fs.existsSync(srtPath);
+
+        // 토큰 끝시각 기반 끝 트림(VAD 늘어짐). 텍스트 위치는 안 바꿈. wav 삭제 전.
+        if (srtExists) {
+          applyTokenTightTiming(outputBase, srtPath);
+        }
+
         // WAV 임시 파일 정리 (원본이 WAV가 아닌 경우)
         if (wavPath !== filePath && fs.existsSync(wavPath)) {
           try {
@@ -1813,9 +2119,6 @@ function extractSingleFile(filePath, model, language, device) {
         if (isUserStopped) {
           return reject(new Error('Stopped by user'));
         }
-
-        // Check if SRT file was actually created (real success indicator)
-        const srtExists = fs.existsSync(srtPath);
 
         if (code === 0 || srtExists) {
           let finalSrtPath = srtPath;
@@ -2283,6 +2586,65 @@ ipcMain.handle('delete-whisper-model', async (_event, modelName) => {
   }
 });
 
+// 싱크 엔진(large-v2-sync) 사전 다운로드: 엔진(7z) + Systran large-v2 모델 파일을 받는다.
+// 모델 관리 카드가 쓰는 'whisper-model-progress'(modelName='large-v2-sync')로 진행률을 보낸다.
+ipcMain.handle('download-sync-engine', async () => {
+  const emit = (percent) => {
+    try {
+      mainWindow?.webContents?.send('whisper-model-progress', {
+        modelName: SYNC_ENGINE_MODEL_ID,
+        percent: Math.max(0, Math.min(100, Math.round(percent))),
+      });
+    } catch (_e) {}
+  };
+  try {
+    downloadsCancelled = false;
+    // 1) 엔진(약 1.42GB): 전체 진행의 0~32%로 매핑
+    await ensureFasterWhisperEngine((pct) => emit(pct * 0.32));
+    emit(34);
+
+    // 2) 모델 파일(Systran/faster-whisper-large-v2): 작은 파일 먼저, model.bin을 38~100%로
+    const modelDir = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`);
+    fs.mkdirSync(modelDir, { recursive: true });
+    const HF = `https://huggingface.co/Systran/faster-whisper-${FASTER_WHISPER_MODEL}/resolve/main`;
+    const small = ['config.json', 'tokenizer.json', 'vocabulary.txt'];
+    for (let i = 0; i < small.length; i++) {
+      const dest = path.join(modelDir, small[i]);
+      if (!fs.existsSync(dest)) {
+        const partial = dest + '.partial';
+        await downloadFileWithProgress(`${HF}/${small[i]}`, partial, small[i]);
+        fs.renameSync(partial, dest);
+      }
+      emit(34 + (i + 1));
+    }
+    const binDest = path.join(modelDir, 'model.bin');
+    if (!fs.existsSync(binDest)) {
+      const partial = binDest + '.partial';
+      await downloadFileWithProgress(`${HF}/model.bin`, partial, 'model.bin', (pct) => emit(38 + pct * 0.62));
+      fs.renameSync(partial, binDest);
+    }
+    emit(100);
+    _cachedFwExePath = null;
+    return { success: true };
+  } catch (error) {
+    const msg = String(error?.message || error);
+    if (msg === 'cancelled' || isUserStopped) return { success: false, error: 'cancelled', userStopped: true };
+    return { success: false, error: msg };
+  }
+});
+
+// 싱크 엔진 삭제: 엔진+모델 전체(_faster-whisper) 제거.
+ipcMain.handle('delete-sync-engine', async () => {
+  try {
+    const root = getFasterWhisperRootDir();
+    if (fs.existsSync(root)) fs.rmSync(root, { recursive: true, force: true });
+    _cachedFwExePath = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error?.message || error) };
+  }
+});
+
 ipcMain.handle('check-model-status', async () => {
   const modelsPath = getGgmlModelsDir();
   const availableModels = {};
@@ -2302,6 +2664,20 @@ ipcMain.handle('check-model-status', async () => {
   } catch (error) {
     console.error('Error checking model status:', error);
   }
+
+  // 싱크 엔진: GGML이 아니라 Faster-Whisper-XXL 엔진+모델이 받아졌는지로 판단.
+  // 정밀(large-v2-sync)과 라이트(large-v2-sync-lite)는 같은 파일을 공유하므로 함께 available 처리.
+  try {
+    const fwExe = getFasterWhisperExePath();
+    const fwModel = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin');
+    if (fwExe && fs.existsSync(fwExe) && fs.existsSync(fwModel)) {
+      availableModels[SYNC_ENGINE_MODEL_ID] = true;
+      availableModels[SYNC_ENGINE_LITE_MODEL_ID] = true;
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+
   return availableModels;
 });
 

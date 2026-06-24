@@ -95,7 +95,9 @@
     "whisper-base": "More accurate than Tiny. For general voice subtitles.",
     "whisper-small": "Fast subtitle extraction. Good for daily use.",
     "whisper-medium": "Balanced accuracy & speed. Default recommendation.",
-    "whisper-large-v3-turbo": "Large accuracy + 8x speed. Recommended for high-end GPUs."
+    "whisper-large-v3-turbo": "Large accuracy + 8x speed. Recommended for high-end GPUs.",
+    "whisper-large-v2-sync": "Separate engine (Faster-Whisper) that fixes subtitles which will not sync. Best for non-English (JA/KO/ZH); English is fine with large-v3-turbo. Follows device choice. ~4.5GB GPU, slow.",
+    "whisper-large-v2-sync-lite": "Runs the same file in int8, lighter. ~3GB VRAM for low-end GPUs, no extra download. Sync quality nearly identical."
   },
   "modelTagTranslation": "MT",
   "modelTagAsr": "ASR",
@@ -204,7 +206,7 @@
   "allDoneSrtOnly": "All translations completed!",
   "allStopped": "Processing stopped.",
   "apiKeyMissingFallback": "API key missing — switched to “No translation”.",
-  "allFailed": "⚠️ All translations failed — check API key/quota",
+  "allFailed": "⚠️ All tasks failed — see the log above for the cause",
   "allDoneWithErrors": "Completed — some files failed (check output folder)",
   "labelLocalModel": "Local model",
   "statusLabel": "Status",
@@ -252,5 +254,21 @@
   "updateAvailable": "Update Available",
   "updateDownload": "Download",
   "updateLater": "Later",
-  "updateChecking": "Checking for updates..."
+  "updateChecking": "Checking for updates...",
+  "deviceSyncLockNote": "Follows the device setting. Auto tries GPU first and falls back to CPU. CPU means CPU-only, so it is slow.",
+  "errorTranslationPassthrough": "The translation engine failed on almost all lines (the local model may have crashed). Subtitles were not translated. Try again, switch the device to CPU, or pick another translation method.",
+  "allFailedLocal": "⚠️ All translations failed — the local model failed. Try again or switch the device to CPU",
+  "allFailedApi": "⚠️ All translations failed — check your API key or quota",
+  "modelNames": {
+    "hy-mt-1.8b": "Hy-MT2 · 1.8B",
+    "hy-mt-7b": "Hy-MT2 · 7B",
+    "whisper-tiny": "Whisper · Tiny",
+    "whisper-base": "Whisper · Base",
+    "whisper-small": "Whisper · Small",
+    "whisper-medium": "Whisper · Medium",
+    "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v2-sync": "Whisper · Large v2 Sync",
+    "whisper-large-v2-sync-lite": "Whisper · Large v2 Sync Lite"
+  },
+  "modelSizeShared": "Shared with precise"
 }

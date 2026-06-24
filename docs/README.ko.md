@@ -2,303 +2,146 @@
 
 [English](../README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-로컬에서 동영상의 음성을 인식해 SRT 자막을 만들고, 원하는 언어로 번역하는 Windows 데스크톱 앱입니다. 추출은 whisper.cpp로 빠르고 안정적으로 처리되며, 번역은 **로컬 모델(Hy-MT2 1.8B/7B GGUF, 오프라인)** 또는 온라인 엔진(MyMemory 무료, DeepL, OpenAI GPT-5.4 mini, Gemini) 중 선택할 수 있습니다.
+영상을 내 PC에서 다국어 자막으로 만듭니다. 영상을 넣으면 whisper.cpp로 SRT를 생성하고, 번들된 Hy-MT2 모델로 오프라인 번역하거나 무료/유료 온라인 엔진으로 번역합니다.
 
-> 중요: 이 앱은 동영상의 소리를 whisper.cpp로 인식해 새로운 SRT 자막을 생성합니다. 기존에 내장된 자막 트랙이나 화면에 그려진 자막(OCR)은 추출하지 않습니다.
+> 이 앱은 영상의 음성을 받아써서 새 자막을 만듭니다. 영상에 들어 있는 자막 트랙을 추출하거나 화면의 글자를 읽지 않습니다(OCR 아님).
 
 ## 미리보기
 
-![메인 UI](../assets/hero/hero.png)
+<p align="center">
+  <img src="../assets/hero/hero.png" alt="WhisperSubTranslate 메인 화면" width="100%">
+</p>
 
-## 왜 WhisperSubTranslate를 써야 할까요?
+## 주요 기능
 
-자막 추출은 100% 로컬에서 이루어집니다. 영상은 내 PC 밖으로 나가지 않습니다. 계정도 카드도 필요 없습니다. 정확한 SRT를 오프라인으로 만들고, 번역도 **로컬 모델(Hy-MT2 GGUF)**을 선택하면 완전 오프라인. 온라인 엔진(MyMemory 무료, DeepL/OpenAI/Gemini 키)도 선택 가능합니다.
-
-### 핵심 가치 한눈에
-
-| 고민             | 제공 가치                           |
-| ---------------- | ----------------------------------- |
-| 프라이버시/통제  | 100% 로컬 STT, 클라우드 업로드 없음 |
-| 가입/결제 불필요 | 계정/카드/개인정보 입력 없이 사용   |
-| 사용 제한 없음   | 앱 차원의 일/월 사용량 제한 없음    |
-| 외국어 영상 이해 | 추출+번역 SRT를 한 번에 생성        |
-| 설치/환경 부담   | 모델 자동 다운로드, 파이썬 불필요   |
-| 진행률/피드백    | 대기열, 매끄러운 진행률, ETA        |
-
-> 참고: 온라인 번역 엔진을 사용할 경우, 제공사(MyMemory 등)의 정책/쿼터는 적용될 수 있습니다. 앱 자체는 별도의 사용 제한을 두지 않습니다.
+- 음성 인식이 100% 로컬에서 돌아갑니다. 영상이 PC를 벗어나지 않고 계정도 업로드도 없습니다.
+- 번들된 Hy-MT2 모델로 오프라인 번역하거나, 본인 키로 온라인 엔진(MyMemory, DeepL, OpenAI, Gemini)을 씁니다.
+- 모델 자동 다운로드. 파이썬 설치나 수동 설정이 필요 없습니다.
+- 일반 모델로 싱크가 밀릴 때 쓰는 싱크 교정 모델(large-v2 싱크, 싱크 라이트)을 제공합니다.
+- 작업 큐, 실시간 진행률, 로컬 전용 작업 히스토리.
 
 ## 시작하기
 
-### 사용자: 포터블 배포판 실행
+### 사용자
 
-- Releases에서 최신 포터블 압축 파일 다운로드: `WhisperSubTranslate-v2.2.0-win-x64.zip`
-- 압축 해제한 폴더에서 `WhisperSubTranslate.exe` 실행
+[Releases](https://github.com/Blue-B/WhisperSubTranslate/releases)에서 최신 포터블 파일을 받아 압축을 풀고 `WhisperSubTranslate.exe`를 실행합니다. 자막 추출은 PC에서 완전히 오프라인으로 돌아갑니다. 번역은 선택입니다.
 
-바로 사용 가능합니다. 추출은 PC에서 완전 오프라인으로 실행됩니다. 번역은 선택 사항(로컬 Hy-MT2 모델로 100% 오프라인 번역 가능, 또는 무료 MyMemory/본인 DeepL·OpenAI·Gemini 키).
-
-### 개발자: 소스에서 실행
+### 개발자
 
 ```bash
 npm install
 npm start
 ```
 
-- **Node.js ≥ 20.19 또는 ≥ 22.12** 필요 (Electron 42 빌드 툴체인)
-- **whisper-cpp**는 `npm install` 시 자동 다운로드됩니다 (Windows: ~700MB CUDA 버전)
-- **Linux/macOS**에서는 사전 빌드 바이너리가 없을 경우, 소스에서 자동 빌드됩니다 (`cmake`, `gcc`/`clang`, `git` 필요)
-- **FFmpeg**는 npm 패키지를 통해 자동 포함됩니다
-- 첫 실행 시 선택한 GGML 모델이 없으면 `_models/`에 자동 다운로드됩니다
+- Node.js 20.19 이상 또는 22.12 이상 (Electron 42 빌드 툴체인)
+- whisper.cpp는 `npm install` 때 자동으로 받습니다 (윈도우는 CUDA 빌드, 약 700MB)
+- FFmpeg는 npm으로 포함되며, 선택한 GGML 모델은 처음 쓸 때 받습니다
 
-> 자동 다운로드 실패 시, [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases)에서 수동 다운로드 후 `whisper-cpp/` 폴더에 압축 해제하세요.
-
-### Linux 설치
-
-WhisperSubTranslate는 몇 가지 추가 단계를 거치면 Linux에서도 작동합니다:
-
-**필수 패키지:**
+### Linux
 
 ```bash
-# Ubuntu/Debian
-sudo apt install cmake build-essential git ffmpeg
-
-# CUDA GPU 가속 (선택사항, NVIDIA GPU + 드라이버 필요)
-# CUDA Toolkit 설치: https://developer.nvidia.com/cuda-downloads
-```
-
-**소스에서 실행:**
-
-```bash
-git clone https://github.com/Blue-B/WhisperSubTranslate.git
-cd WhisperSubTranslate
-npm install    # whisper.cpp가 소스에서 자동 빌드됩니다
+sudo apt install cmake build-essential git ffmpeg   # Ubuntu/Debian
+npm install   # whisper.cpp를 소스에서 빌드
 npm start
 ```
 
-자동 빌드 실패 시, whisper.cpp를 수동으로 빌드하세요:
-
-```bash
-git clone https://github.com/ggml-org/whisper.cpp
-cd whisper.cpp
-
-# CPU 전용
-cmake -B build && cmake --build build --config Release
-
-# CUDA 포함 (NVIDIA GPU)
-cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
-
-# 바이너리 복사
-cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
-```
+CUDA 가속이 필요하면 `npm install` 전에 NVIDIA CUDA Toolkit을 설치하세요. whisper.cpp 수동 빌드 방법은 [CONTRIBUTING.md](../CONTRIBUTING.md)에 있습니다.
 
 ### Windows 빌드
 
 ```bash
-npm run build-win
+npm run build-win   # 결과물은 dist2/에 생성됩니다
 ```
-
-산출물은 `dist2/`에 생성됩니다.
-
-## 기술 스택
-
-[![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/ko/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
-
-| 영역        | 설명                                                                                       |
-| ----------- | ------------------------------------------------------------------------------------------ |
-| 런타임      | Electron, Node.js, JavaScript                                                              |
-| 패키징      | electron-builder                                                                           |
-| 네트워킹    | axios                                                                                      |
-| 음성→텍스트 | whisper.cpp (GGML 모델)                                                                    |
-| 번역(선택)  | 로컬(Hy-MT2 1.8B/7B GGUF, node-llama-cpp), DeepL API, OpenAI(GPT-5.4 mini), Gemini, MyMemory |
 
 ## 번역 엔진
 
-WhisperSubTranslate는 번들된 Tencent **Hy-MT2** 모델로 자막을 **완전 오프라인** 번역하거나, 자신의 API 키로 무료/유료 온라인 엔진을 사용할 수 있습니다.
+번들된 Tencent Hy-MT2 모델로 완전히 오프라인 번역하거나, 본인 API 키로 무료/유료 온라인 엔진을 씁니다.
 
-| 엔진                          | 오프라인 |   키   | 비용           | 비고                                                                                             |
-| ----------------------------- | :------: | :----: | -------------- | ------------------------------------------------------------------------------------------------ |
-| **Hy-MT2 1.8B** (로컬 · 기본) |    ✅    | 불필요 | 무료           | ~1.13GB 모델, VRAM 2GB / RAM 4GB, 빠름                                                           |
-| **Hy-MT2 7B** (로컬)          |    ✅    | 불필요 | 무료           | ~6.16GB 모델, VRAM 8GB / RAM 12GB, 고품질                                                        |
-| MyMemory                      |    ❌    | 불필요 | 무료           | IP당 일 약 5만자                                                                                 |
-| DeepL                         |    ❌    |  필요  | 월 50만자 무료 | 유료 플랜 제공                                                                                   |
-| OpenAI GPT-5.4 mini | ❌ | 필요 | 유료 | 입력 $0.075 / 출력 $0.60 per 1M 토큰 · 문맥 인식 |
-| OpenAI GPT-5.4 nano | ❌ | 필요 | 유료 | 더 저렴한 등급 — 입력 $0.20 / 출력 $1.25 per 1M 토큰 |
-| Gemini 3 Flash                |    ❌    |  필요  | 무료/유료      | 무료: 하루 250자막/20-30분, 유료: 무제한 ([API 키 발급](https://aistudio.google.com/app/apikey)) |
+| 엔진 | 오프라인 | API 키 | 비용 | 비고 |
+| --- | :---: | :---: | --- | --- |
+| Hy-MT2 1.8B (로컬, 기본) | 예 | 불필요 | 무료 | 약 1.13GB, VRAM 2GB / RAM 4GB, 온디바이스 |
+| Hy-MT2 7B (로컬) | 예 | 불필요 | 무료 | 약 6.16GB, VRAM 8GB / RAM 12GB, 더 큰 모델 |
+| MyMemory | 아니오 | 불필요 | 무료 | IP당 하루 약 5만 자 |
+| DeepL | 아니오 | 필요 | 월 50만 자 무료 | 결과가 일정함 |
+| OpenAI GPT-5.4 mini | 아니오 | 필요 | 유료 | 문맥 인식 |
+| OpenAI GPT-5.4 nano | 아니오 | 필요 | 유료 | 더 저렴한 등급 |
+| Gemini 3 Flash | 아니오 | 필요 | 무료 / 저비용 | 추천 저비용 경로 ([키 받기](https://aistudio.google.com/app/apikey)) |
 
-> **프라이버시:** 로컬 Hy-MT2 엔진만이 API 키·네트워크·사용료가 전혀 필요 없는 유일한 옵션입니다 — 영상과 대사가 PC를 벗어나지 않습니다.
->
-> **팁**: 1시간 이상 긴 영상은 MyMemory 일일 한도에 걸릴 수 있어요. Gemini나 DeepL 사용 권장.
+로컬 Hy-MT2 엔진만 API 키도, 네트워크도, 사용 비용도 필요 없어서 대사가 PC를 벗어나지 않습니다.
 
 ### 번역 품질 (오프라인 엔진)
 
-WhisperSubTranslate는 Tencent의 **Hy-MT2** 모델(기본 1.8B, 선택 7B)을 번들로 제공합니다. Tencent 공식 멀티 벤치마크 평가에서 Hy-MT2 제품군은 주요 상용 번역 API와 경쟁력이 있으며, 일부 벤치마크에서는 이를 앞섭니다:
+WhisperSubTranslate는 Tencent Hy-MT2 모델(기본 1.8B, 선택 7B)을 함께 제공합니다. Tencent 공식 평가에서 Hy-MT2 계열은 주요 상용 번역 API와 경쟁력 있는 결과를 보였고, 일부 벤치마크에서는 앞선 결과도 냈습니다.
 
-![Tencent Hy-MT2 공식 벤치마크 (WhisperSubTranslate 번들 모델)](../assets/hy-mt2-benchmark.ko.png)
+![Tencent Hy-MT2 공식 벤치마크, WhisperSubTranslate 번들 모델](../assets/hy-mt2-benchmark.ko.png)
 
-> **출처:** 모델 제작사 Tencent가 발표한 공식 벤치마크 — [Hy-MT2 저장소](https://github.com/Tencent-Hunyuan/Hy-MT2) · [기술 보고서](https://arxiv.org/pdf/2605.22064) · [HuggingFace 모델](https://huggingface.co/tencent/Hy-MT2-1.8B). 위 그래프는 **Tencent 공식 Figure 1을 재작도**한 것으로, 내장 모델(1.8B/7B) 수치는 논문 표와 대조해 확인했습니다. 이 수치는 표준 기계번역 벤치마크(WildMTBench, WMT25, FLORES-200 등)에서 **모델 자체**를 측정한 것으로, WhisperSubTranslate 앱을 재측정한 것이 **아닙니다**. Tencent에 따르면 7B/30B는 DeepSeek-V4-Pro/Kimi 등 오픈 모델을 능가하며, 경량 **1.8B(기본값)** 도 Microsoft·Doubao 등 주요 상용 API를 전반적으로 능가합니다.
+출처: Tencent 공식 벤치마크: [Hy-MT2 저장소](https://github.com/Tencent-Hunyuan/Hy-MT2), [기술 보고서](https://arxiv.org/pdf/2605.22064), [HuggingFace 모델](https://huggingface.co/tencent/Hy-MT2-1.8B). 위 그래프는 Tencent 공식 Figure 1을 재작도한 것이며, 내장 모델(1.8B/7B) 수치는 논문 표와 대조했습니다. 이 수치는 표준 기계번역 벤치마크(WildMTBench, WMT25, FLORES-200 등)에서 모델 자체를 측정한 결과이며, WhisperSubTranslate 앱 자체를 재측정한 것은 아닙니다.
 
-API 키와 설정은 사용자 PC의 `app.getPath('userData')` 경로에 기본 인코딩을 적용하여 저장됩니다. 파일 탐색기에서 우연히 열어도 평문으로 노출되지 않도록 보호하며, Git이나 배포 파일에는 절대 포함되지 않습니다.
+긴 영상(1시간 이상)에서는 MyMemory 일일 한도 때문에 느려질 수 있습니다. 그럴 때는 Gemini, DeepL, 설정한 GPT 모델을 쓰세요.
 
-### 데이터 저장 위치
+## 음성 인식 모델
 
-| 데이터              | 위치                                                                |
-| ------------------- | ------------------------------------------------------------------- |
-| 설정 & API 키       | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json`   |
-| 작업 히스토리       | `%APPDATA%\whispersubtranslate\history.json` (최대 200개 자동 보관) |
-| 오류 로그 (Windows) | `%APPDATA%\whispersubtranslate\logs\errors.log`                     |
-| 오류 로그 (macOS)   | `~/Library/Application Support/whispersubtranslate/logs/errors.log` |
-| 오류 로그 (Linux)   | `~/.config/whispersubtranslate/logs/errors.log`                     |
-| 모델                | `_models/` (앱 폴더 내)                                             |
+모델은 필요할 때 `_models/`로 받아집니다. CUDA가 있으면 GPU, 없으면 CPU로 돌아갑니다. GPU에 맞는 크기를 고르세요.
 
-### 작업 히스토리
+| 모델 | 크기 | VRAM | 속도 | 비고 |
+| --- | --- | --- | --- | --- |
+| tiny | 약 75MB | 약 1GB | 가장 빠름 | 기본 |
+| base | 약 142MB | 약 1GB | 빠름 | 양호 |
+| small | 약 466MB | 약 1GB | 보통 | 더 좋음 |
+| medium | 약 1.5GB | 약 2GB | 보통 | 우수 |
+| large-v3 | 약 3GB | 약 4GB | 느림 | 받아쓰기 최고 |
+| large-v3-turbo (기본) | 약 809MB | 약 2GB | 빠름 | 전반적으로 가장 무난 |
+| large-v2 싱크 | 약 4.4GB | 약 4.5GB | 느림 | 별도 엔진, 자막 싱크 교정 |
+| large-v2 싱크 라이트 | 공용 | 약 3GB | 느림 | 싱크와 같은 파일, int8, 저VRAM |
 
-- 완료된 작업마다 자동으로 기록 — **최대 200개** 까지 보관.
-- 열기(결과 파일 재생) / 폴더(탐색기로 이동) 버튼 제공.
-- **설정 → 히스토리** 에서 언제든 끌 수 있으며, 끌 경우 새 기록만 중단되고 기존 데이터는 유지됩니다.
-- **전체 삭제** 시 파일을 0으로 덮어쓴 뒤 제거 + 이전 localStorage 잔존물을 padding으로 압축 유도합니다. SSD wear leveling 특성상 100% 복구 불가는 SW로 보장 불가 — 완벽한 보장이 필요하면 전체 디스크 암호화(BitLocker 등) 를 사용하세요.
+싱크와 싱크 라이트는 별도 Faster-Whisper 엔진(한 번 자동 다운로드, 약 4.4GB)을 쓰고 같은 모델 파일을 공유해서, 한 번 받으면 둘 다 쓸 수 있습니다. 일반 모델로 싱크가 밀릴 때만 쓰세요. 비영어 영상(일본어, 한국어, 중국어)에서 가장 정확하고, 영어는 보통 large-v3-turbo로 충분합니다.
 
-### 모델 다운로드 안전성
-
-- 다운로드 중 카드에 **취소** 버튼이 나타나므로 언제든 중단할 수 있습니다.
-- 다운로드 중 창을 닫아도 안전하게 중단됩니다.
-- Whisper GGML 파일은 `.partial` 임시 파일로 받은 뒤 **완료되어야만** `ggml-*.bin` 으로 rename 됩니다 — 중단된 부분 파일이 "설치됨"으로 오인식되지 않고 다음 실행 시 처음부터 깨끗이 다시 받습니다.
+whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 약 10GB)보다 훨씬 적습니다. 싱크 모델 수치는 Faster-Whisper 벤치마크 기준입니다.
 
 ## 언어 지원
 
-### UI 언어
+- UI: 한국어, 영어, 일본어, 중국어, 폴란드어
+- 번역 대상(14개): ko, en, ja, zh, es, fr, de, it, pt, ru, hu, ar, pl, fa
+- 음성 인식: whisper.cpp로 100개 이상 언어
 
-한국어, 영어, 일본어, 중국어, 폴란드어 (5개 언어)
+## 데이터 저장
 
-### 번역 대상 언어 (14개)
+모든 데이터는 사용자 폴더에 로컬로만 저장되고 업로드되지 않습니다.
 
-한국어 (ko), 영어 (en), 일본어 (ja), 중국어 (zh), 스페인어 (es), 프랑스어 (fr), 독일어 (de), 이탈리아어 (it), 포르투갈어 (pt), 러시아어 (ru), 헝가리어 (hu), 아랍어 (ar), 폴란드어 (pl), **페르시아어 (fa)**
+| 데이터 | 위치 |
+| --- | --- |
+| 설정 및 API 키 | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
+| 작업 히스토리 | `%APPDATA%\whispersubtranslate\history.json` (최대 200개) |
+| 에러 로그 | `%APPDATA%\whispersubtranslate\logs\errors.log` |
+| 모델 | `_models/` (앱 폴더) |
 
-### 음성 인식 언어
-
-whisper.cpp는 100개 이상의 언어를 지원합니다 (영어, 스페인어, 프랑스어, 독일어, 이탈리아어, 포르투갈어, 러시아어, 중국어, 일본어, 한국어, 아랍어, 힌디어, 터키어 등 주요 세계 언어 포함).
-
-## 모델과 성능
-
-모델은 `_models/`에 저장되고 필요 시 자동 다운로드됩니다. 큰 모델일수록 느리지만 더 정확할 수 있습니다. CUDA 가능 시 GPU, 아니면 CPU로 동작합니다.
-
-| 모델              | 크기   | VRAM | 속도      | 품질    |
-| ----------------- | ------ | ---- | --------- | ------- |
-| tiny              | ~75MB  | ~1GB | 가장 빠름 | 기본    |
-| base              | ~142MB | ~1GB | 빠름      | 좋음    |
-| small             | ~466MB | ~2GB | 보통      | 더 좋음 |
-| medium            | ~1.5GB | ~4GB | 느림      | 훌륭함  |
-| large-v3          | ~3GB   | ~5GB | 가장 느림 | 최고    |
-| large-v3-turbo ⭐ | ~809MB | ~4GB | 빠름      | 뛰어남  |
-
-> 참고: VRAM 요구사항은 [whisper.cpp](https://github.com/ggerganov/whisper.cpp)의 GGML 최적화 기준이며, PyTorch Whisper(large ~10GB)보다 훨씬 낮습니다. 테스트: 6GB VRAM GPU에서 large-v3 동작 확인.
-
-## 브랜치 전략
-
-단일 트렁크: `main` 하나만 장수 브랜치로 운용하며, 메인테이너는 `main`에 직접 커밋·태그합니다(예: `v2.2.0`).
-
-**외부 기여자**는 포크 후 Pull Request를 열어주세요. `feature/<scope>` 형식의 짧은 수명 브랜치를 권장하며, squash 머지로 `main`에 올라갑니다.
+API 키는 OS 보안 저장소로 로컬에 저장되고, 설정 파일은 깃에 올라가거나 빌드에 포함되지 않습니다. 작업 히스토리는 선택이고(설정에서 토글) 최대 200개까지 보관됩니다.
 
 ## 기여
 
-> **새 언어를 추가하고 싶으신가요?** [번역 가이드](TRANSLATION.md)를 참고하세요.
+Pull Request를 환영합니다. 브랜치 네이밍, 커밋 규칙, 수동 테스트 체크리스트, whisper.cpp 수동 빌드는 [CONTRIBUTING.md](../CONTRIBUTING.md)를 보세요. 언어 추가는 [번역 가이드](./TRANSLATION.md)를 참고하세요.
 
-### 1) 브랜치/네이밍
-
-모든 변경(기능/수정/문서)은 하나의 타입으로 통일합니다.
-
-| 패턴                     | 용도      |
-| ------------------------ | --------- |
-| `feature/<scope>-<설명>` | 모든 변경 |
-
-권장 <scope> 예시: i18n, ui, translation, whisper, model, download, queue, progress, ipc, main, renderer, updater, config, build, logging, perf, docs, readme
-
-예시:
-
-```text
-feature/i18n-api-modal
-feature/ui-progress-smoothing
-feature/translation-deepl-test
-feature/main-disable-devtools
-```
-
-### 2) 커밋 규칙(Conventional Commits)
-
-`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `perf:`, `build:` 접두어를 사용하세요.
-
-```text
-feat: add DeepL connection test
-fix: localize target language note
-```
-
-### 3) 코드 가이드(I18N)
-
-| 주제      | 가이드                                                       |
-| --------- | ------------------------------------------------------------ |
-| I18N      | UI/로그 문자열을 코드에 직접 쓰지 말고 I18N 테이블 키로 참조 |
-| UX        | 진행률/ETA/대기열 동작 일관성 유지, 회귀 방지                |
-| 범위      | 작은 단위의 집중된 변경, 명확한 함수명                       |
-| 다국어 UI | UI 추가 시 ko/en/ja/zh/pl 함께 업데이트                      |
-
-### 4) 수동 테스트 체크리스트
-
-| 시나리오      | 검증 항목                               |
-| ------------- | --------------------------------------- |
-| 추출만        | 시작/중지, 진행률/ETA 동작              |
-| 추출+번역     | 종단 결과와 최종 SRT 파일명             |
-| 모델 다운로드 | 누락 모델 자동 다운로드, 중간 취소/정지 |
-| I18N 전환     | 대상 언어 라벨/모달 텍스트가 즉시 갱신  |
-| 번역 엔진     | MyMemory(무키), DeepL/OpenAI(키)        |
-| 빌드          | `npm run build-win` 완료                |
-
-### 5) PR 체크리스트
-
-| 항목    | 기대 사항                                  |
-| ------- | ------------------------------------------ |
-| 설명    | 변경 사항을 명확히 기술                    |
-| UI 영향 | 시각적 변경 스크린샷 첨부                  |
-| 테스트  | 재현/검증 절차 제공                        |
-| 자산    | 대용량 바이너리 금지, 스크린샷은 `assets/` |
-
-## 후원
-
-이 프로젝트가 시간을 아껴주거나 더 나은 자막을 만드는 데 도움이 된다면, 후원은 개발 속도를 직접 높여줍니다.
-
-- 사용처: 버그 수정, 모델 다운로드 안정화, UI 다듬기, 번역 옵션 확장, Windows 빌드/테스트
-- 투명성: 데이터 판매 없음. 후원금은 개발 시간, 릴리스 빌드 인프라, 번역 API 테스트 비용에만 사용합니다.
-- 일시 후원도 스폰서 명단(README/릴리스 노트)에 이름을 표기합니다(비공개 요청 가능).
-- 월 정기 후원($3/mo, GitHub Sponsors 자동결제)은 "Sponsor Request" 이슈 우선 확인(베스트 에포트) 혜택을 추가로 제공합니다.
-
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/일시후원_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h) [![PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ZEWFKDX595ESJ)
-
-## 감사의 말
-
-- whisper.cpp는 Georgi Gerganov가 개발했습니다: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
-- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/)에서 번역에 참여할 수 있습니다. 번역 문자열은 [`locales/*.json`](../locales/)에 있습니다.
 
 ## 기여자
 
-WhisperSubTranslate를 더 좋게 만들어주신 모든 분들께 감사드립니다! 🙏
+WhisperSubTranslate를 함께 만들어주는 모든 분께 감사합니다.
 
 <a href="https://github.com/Blue-B"><img src="https://github.com/Blue-B.png?size=80" width="80" alt="Blue-B" title="Blue-B" /></a>
 <a href="https://github.com/matbgn"><img src="https://github.com/matbgn.png?size=80" width="80" alt="matbgn" title="matbgn" /></a>
 
-## 저장소 활동
+## 후원
 
-![Repobeats analytics image](https://repobeats.axiom.co/api/embed/bb4da4df4fdd4f9193f24a6647d5f10022e9bab9.svg 'Repobeats analytics image')
+이 프로젝트가 시간을 아껴줬다면, 후원은 버그 수정과 모델 안정화, 새 번역 옵션 작업에 직접 도움이 됩니다.
 
-## 번역
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h) [![PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ZEWFKDX595ESJ)
 
-WhisperSubTranslate 번역에 참여해 주세요! 번역 문자열은 [`locales/*.json`](../locales/)에 있으며 [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/)에서 관리됩니다. [번역 가이드](TRANSLATION.md)를 참고하세요.
+## 감사의 말
 
-<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
-  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="번역 현황" />
-</a>
-
-## 스타 히스토리
-
-<a href="https://star-history.com/#Blue-B/WhisperSubTranslate&Date">
-  <img src="https://api.star-history.com/svg?repos=Blue-B/WhisperSubTranslate&type=Date" alt="Star History Chart" width="600" />
-</a>
+- whisper.cpp: Georgi Gerganov [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- Hy-MT2: Tencent [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
+- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
 ## 라이선스
 
-GPL-3.0. 외부 API/서비스(DeepL, OpenAI 등)는 각 약관을 준수해야 합니다.
+GPL-3.0. 외부 API와 서비스(DeepL, OpenAI, Gemini 등)는 각자의 약관을 따릅니다.

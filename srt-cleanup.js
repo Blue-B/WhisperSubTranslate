@@ -213,103 +213,82 @@ function _msToSrtTime(ms) {
   const p = (n, l = 2) => String(n).padStart(l, '0');
   return `${p(h)}:${p(mn)}:${p(s)},${p(ms, 3)}`;
 }
-// 한 큐 텍스트를 n조각으로 나눔 (단어 경계 우선, 글자수 균등)
-function _splitTextParts(text, n) {
-  const t = String(text).replace(/\s+/g, ' ').trim();
-  if (n <= 1 || !t) return t ? [t] : [];
-  const target = t.length / n;
-  const parts = [];
-  if (/\s/.test(t)) {
-    let cur = '';
-    for (const w of t.split(' ')) {
-      if (cur && cur.length + 1 + w.length > target && parts.length < n - 1) {
-        parts.push(cur);
-        cur = w;
-      } else {
-        cur = cur ? cur + ' ' + w : w;
-      }
-    }
-    if (cur) parts.push(cur);
-  } else {
-    const size = Math.ceil(t.length / n);
-    for (let i = 0; i < t.length; i += size) parts.push(t.slice(i, i + size));
-  }
-  return parts.filter(Boolean);
+
+// ── Whisper JSON (-ojf) → speech-tight SRT ───────────────────────────────
+// 문제: whisper.cpp를 VAD와 함께 돌리면, 무음을 빼고 전사한 뒤 타임라인에 되매핑하는
+// 과정에서 무음 경계에 걸친 세그먼트의 끝 시각이 그 빈 구간만큼 늘어난다(예: "ありがとう"
+// 59.85s→87.26s = 27초). 그래서 짧은 한 마디가 수십 초 화면에 박혀 있고 싱크가 안 맞는다.
+//
+// 주의: -ojf JSON의 토큰 offsets는 VAD 압축 타임라인(세그먼트 내부/누적)이라 원본 시각으로
+// 복원 불가능하다(실측: 1초짜리 세그먼트 토큰이 15s를 가리킴). 원본 시각으로 믿을 수 있는
+// 건 세그먼트 from/to뿐이고, 그건 정확하도(41.37s≈SDH) 늘어난 것만 문제다.
+//
+// 해결: 세그먼트 시작(정확)은 그대로 쓰고, 길이만 텍스트 분량에 비례한 상한으로 캅한다.
+// 일반 대사는 원본 길이 그대로(공식 자막과 일치), 늘어진 것만 자연스러운 읽기 시간으로 줄어들어
+// 말할 때만 뜨고 무음엔 사라진다(영화 자막처럼).
+function _displayMsForText(text, perCharMs, minMs, maxMs) {
+  const n = String(text).replace(/\s/g, '').length;
+  return Math.max(minMs, Math.min(maxMs, n * perCharMs));
 }
 
 /**
- * 긴 큐를 maxDurationSec 이하로 시간 비례 분할 + 각 큐 줄바꿈.
- * @param {string} srtText
- * @param {{maxDurationSec?: number, maxLineLen?: number}} [opts]
+ * whisper.cpp -ojf JSON을 받아, 세그먼트 시각 기반 SRT를 만들되 늘어진 큐는 텍스트 분량에 맞게 캅한다.
+ * @param {string} jsonText  whisper -ojf 출력 (outputBase.json)
+ * @param {{perCharMs?:number, minDisplayMs?:number, maxDisplayMs?:number}} [opts]
+ * @returns {string|null} SRT. 파싱 실패/형식 불일치면 null (호출측이 -osrt로 폴백).
  */
-function splitLongCues(srtText, opts = {}) {
-  const maxDurMs = (opts.maxDurationSec || 6) * 1000;
-  const maxLineLen = opts.maxLineLen || 42;
-  if (typeof srtText !== 'string' || !srtText.trim()) return srtText;
+function srtFromWhisperJson(jsonText, opts = {}) {
+  const perCharMs = opts.perCharMs != null ? opts.perCharMs : 350; // 글자당 표시 시간(읽혀을 여유)
+  const minDisplayMs = opts.minDisplayMs != null ? opts.minDisplayMs : 1200; // 최소 표시
+  const maxDisplayMs = opts.maxDisplayMs != null ? opts.maxDisplayMs : 7000; // 최대 표시(이상은 늘어짐으로 판단)
+  if (typeof jsonText !== 'string' || !jsonText.trim()) return null;
 
-  const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const blocks = normalized.split(/\n[ \t]*\n/);
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch (_e) {
+    return null;
+  }
+  const segs = data && Array.isArray(data.transcription) ? data.transcription : null;
+  if (!segs || !segs.length) return null;
+
   const cues = [];
-  let sawAnyCue = false;
+  for (const s of segs) {
+    const text = String((s && s.text) || '').trim();
+    if (!text) continue;
+    const o = (s && s.offsets) || {};
+    const start = typeof o.from === 'number' ? o.from : null;
+    const segEnd = typeof o.to === 'number' ? o.to : null;
+    if (start == null || segEnd == null || segEnd <= start) continue;
 
-  for (const rawBlock of blocks) {
-    if (!rawBlock.trim()) continue;
-    const lines = rawBlock.split('\n');
-    const tsIdx = lines.findIndex((l) => l.includes('-->'));
-    if (tsIdx === -1) {
-      cues.push({ raw: rawBlock });
-      continue;
-    }
-    sawAnyCue = true;
-    const tm = /(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/.exec(lines[tsIdx]);
-    const text = lines
-      .slice(tsIdx + 1)
-      .join(' ')
-      .trim();
-    const startMs = tm ? _srtTimeToMs(tm[1]) : null;
-    const endMs = tm ? _srtTimeToMs(tm[2]) : null;
-    if (startMs == null || endMs == null || !text) {
-      cues.push({ rawLine: lines[tsIdx].trim(), text });
-      continue;
-    }
-    const dur = endMs - startMs;
-    // 텍스트가 짧으면(노래·늘어진 발화로 한 마디가 긴 시간에 걸친 경우) 시간이 길어도 쪼개지 않는다.
-    // CJK는 공백이 없어 글자 수로 강제 분할되므로, 그대로 쪼개면 "감사합니다"가 "감사/합니/다."로 깨진다.
-    const MIN_PART_CHARS = 12; // 한 조각 최소 길이 — 이보다 짧게는 분할 금지(단어 토막 방지)
-    const maxPartsByText = Math.floor(text.length / MIN_PART_CHARS);
-    if (dur <= maxDurMs || maxPartsByText < 2) {
-      cues.push({ startMs, endMs, text });
-      continue;
-    }
-    // 분할 수: 시간 기준(약간 여유)과 텍스트 길이 기준(큐당 ≈2줄) 중 큰 쪽 —
-    // 단, 텍스트가 감당할 수 있는 조각 수(maxPartsByText)로 상한을 둔다.
-    const n = Math.min(
-      maxPartsByText,
-      Math.max(Math.ceil(dur / (maxDurMs * 0.9)), Math.ceil(text.length / (maxLineLen * 2)))
-    );
-    const parts = _splitTextParts(text, n);
-    const totalChars = parts.reduce((a, p) => a + p.length, 0) || 1;
-    let cursor = startMs;
-    parts.forEach((p, i) => {
-      const e = i === parts.length - 1 ? endMs : cursor + (p.length / totalChars) * dur;
-      cues.push({ startMs: cursor, endMs: e, text: p });
-      cursor = e;
-    });
+    // 세그먼트 길이가 텍스트가 자연스럽게 차지할 시간보다 길면(=늘어진 것) 그만큼만 보여준다.
+    const natural = _displayMsForText(text, perCharMs, minDisplayMs, maxDisplayMs);
+    let end = Math.min(segEnd, start + natural);
+    if (end <= start) end = start + minDisplayMs;
+    cues.push({ start, end, text });
+  }
+  if (!cues.length) return null;
+
+  // 다음 큐 시작을 침범하지 않도록 끝을 당김(겹침 방지)
+  for (let i = 0; i < cues.length - 1; i++) {
+    if (cues[i].end > cues[i + 1].start) cues[i].end = cues[i + 1].start;
+    if (cues[i].end <= cues[i].start) cues[i].end = cues[i].start + 1; // 0 길이 방지
   }
 
-  if (!sawAnyCue) return srtText;
-
   let idx = 0;
-  const rebuilt = cues
-    .map((c) => {
-      if (c.raw != null) return c.raw;
-      idx++;
-      const wrapped = wrapTextToLines(c.text || '', maxLineLen).join('\n');
-      const time = c.startMs != null ? `${_msToSrtTime(c.startMs)} --> ${_msToSrtTime(c.endMs)}` : c.rawLine || '';
-      return `${idx}\n${time}\n${wrapped}`;
-    })
-    .join('\n\n');
-  return rebuilt + '\n';
+  return (
+    cues
+      .map((c) => {
+        idx++;
+        return `${idx}\n${_msToSrtTime(c.start)} --> ${_msToSrtTime(c.end)}\n${c.text}`;
+      })
+      .join('\n\n') + '\n'
+  );
 }
 
-module.exports = { applySrtCleanup, isSdhOnlyText, wrapCuesForDisplay, wrapTextToLines, splitLongCues };
+module.exports = {
+  applySrtCleanup,
+  isSdhOnlyText,
+  wrapCuesForDisplay,
+  srtFromWhisperJson,
+};

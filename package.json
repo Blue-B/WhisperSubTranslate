@@ -1,6 +1,6 @@
 {
   "name": "whispersubtranslate",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
@@ -51,7 +51,11 @@
       "!node_modules/@node-llama-cpp/linux-*/**",
       "!node_modules/@node-llama-cpp/win-arm64/**",
       "!node_modules/ffprobe-static/bin/linux/**",
-      "!node_modules/ffprobe-static/bin/darwin/**"
+      "!node_modules/ffprobe-static/bin/darwin/**",
+      "!node_modules/7zip-bin/linux/**",
+      "!node_modules/7zip-bin/mac/**",
+      "!node_modules/7zip-bin/win/arm64/**",
+      "!node_modules/7zip-bin/win/ia32/**"
     ],
     "extraResources": [
       {
@@ -63,7 +67,8 @@
       "node_modules/ffmpeg-static/**",
       "node_modules/ffprobe-static/**",
       "node_modules/node-llama-cpp/**",
-      "node_modules/@node-llama-cpp/**"
+      "node_modules/@node-llama-cpp/**",
+      "node_modules/7zip-bin/win/x64/**"
     ],
     "win": {
       "target": [
@@ -133,6 +138,7 @@
     "prettier": "^3.8.1"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "axios": "^1.6.0",
     "deepl-node": "^1.27.0",
     "ffmpeg-static": "^5.3.0",

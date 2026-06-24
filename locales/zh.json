@@ -95,7 +95,9 @@
     "whisper-base": "比Tiny更准确。适用于一般语音字幕。",
     "whisper-small": "快速字幕提取。适合日常使用。",
     "whisper-medium": "准确度与速度平衡。默认推荐。",
-    "whisper-large-v3-turbo": "Large精度+8倍速度。高性能GPU推荐。"
+    "whisper-large-v3-turbo": "Large精度+8倍速度。高性能GPU推荐。",
+    "whisper-large-v2-sync": "修复对不上字幕的独立引擎(Faster-Whisper)。对非英语(日/韩/中)最准确，英语用 large-v3-turbo 即可。遵循设备选择。GPU约4.5GB，较慢。",
+    "whisper-large-v2-sync-lite": "用 int8 轻量运行精密的同一文件。显存约3GB，适合低端 GPU，无需额外下载。同步质量几乎相同。"
   },
   "modelTagTranslation": "翻译",
   "modelTagAsr": "语音",
@@ -204,7 +206,7 @@
   "allDoneSrtOnly": "所有翻译完成！",
   "allStopped": "处理已停止。",
   "apiKeyMissingFallback": "缺少API密钥，已切换为“不翻译”。",
-  "allFailed": "⚠️ 所有翻译失败 — 请检查API密钥/配额",
+  "allFailed": "⚠️ 全部失败 — 请查看上方日志了解原因",
   "allDoneWithErrors": "完成 — 部分文件失败（请检查输出文件夹）",
   "labelLocalModel": "本地模型",
   "statusLabel": "状态",
@@ -252,5 +254,21 @@
   "updateAvailable": "有新版本可用",
   "updateDownload": "下载",
   "updateLater": "稍后",
-  "updateChecking": "正在检查更新..."
+  "updateChecking": "正在检查更新...",
+  "deviceSyncLockNote": "遵循设备设置。自动会先试 GPU，失败后切换到 CPU。选择 CPU 时只使用 CPU，因此较慢。",
+  "errorTranslationPassthrough": "翻译引擎几乎所有行都未能翻译（本地模型可能崩溃）。字幕未被翻译。请重试，或将处理设备改为 CPU，或选择其他翻译方式。",
+  "allFailedLocal": "⚠️ 翻译全部失败 — 本地模型失败。请重试或将处理设备改为 CPU",
+  "allFailedApi": "⚠️ 翻译全部失败 — 请检查 API 密钥或配额",
+  "modelNames": {
+    "hy-mt-1.8b": "Hy-MT2 · 1.8B",
+    "hy-mt-7b": "Hy-MT2 · 7B",
+    "whisper-tiny": "Whisper · Tiny",
+    "whisper-base": "Whisper · Base",
+    "whisper-small": "Whisper · Small",
+    "whisper-medium": "Whisper · Medium",
+    "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v2-sync": "Whisper · Large v2 同步",
+    "whisper-large-v2-sync-lite": "Whisper · Large v2 同步 轻量"
+  },
+  "modelSizeShared": "与精密共用"
 }

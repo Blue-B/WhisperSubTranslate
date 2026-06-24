@@ -2,6 +2,31 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.2] — 2026-06-24
+
+Sync accuracy release: a dedicated Faster-Whisper engine repairs subtitle drift, the unreliable SenseVoice timing path is gone, and local translation no longer fails silently or shows misleading API errors.
+
+### Added
+
+- **large-v2 Sync model** — a separate Faster-Whisper-XXL engine, selectable from the model dropdown, that fixes subtitle timing drift on videos where the normal models slip out of sync. It is most accurate on non-English video (Japanese, Korean, Chinese); English is usually fine with `large-v3-turbo`. The engine downloads automatically on first use (~4.4GB) with no Python or manual setup. Device behavior is consistent: CPU runs CPU only, GPU runs GPU only, Auto tries GPU first then falls back to CPU.
+- **large-v2 Sync Lite model** — runs the same Sync model file with int8 compute for lower VRAM (~3GB vs ~4.5GB), for lower-end GPUs. No extra download: Sync and Sync Lite share one model file, so installing or deleting either covers both. Both appear in the model dropdown and Model Manager, localized in all 5 UI languages.
+
+### Changed
+
+- **Model Manager wording and VRAM figures** — sync model cards spell out what each mode is for and list realistic VRAM (Sync ~4.5GB, Sync Lite ~3GB) from the Faster-Whisper benchmark; `large-v3-turbo` ~2GB and `large-v3` ~4GB corrected from measured runs. Device-lock note clarified so "Auto" no longer reads as GPU-only.
+- **README and translated docs** — trimmed and corrected (settings file name, build output path, model tables), Contributing split into `CONTRIBUTING.md`, and all four translations synced.
+
+### Fixed
+
+- **Silent untranslated output safety net** — if local translation leaves most segments untranslated (the local model crashed mid-run), the job now fails with a clear message instead of saving a subtitle file identical to the source.
+- **Misleading "check API key/quota" error on local translation** — failures are now reported by method: a local-model failure suggests trying CPU, only online-engine failures mention API keys. Local translation no longer falls back to online engines, respecting the offline choice.
+- **Completion sound** — no longer hangs waiting on a media event that may never fire; plays reliably on job completion.
+
+### Removed
+
+- **SenseVoice timing refinement** — the onset-correction path could shift dialogue out of place and is replaced by the large-v2 Sync engine. The bundled SenseVoice model and the `sherpa-onnx` dependencies are removed, reducing install size.
+- **Dead code** — unused ETA/formatting helpers, an unused optimal-settings probe, and orphaned split/wrap utilities removed.
+
 ## [2.4.1] — 2026-06-21
 
 Feature + fix release on top of 2.4.0: translate to several target languages in one run, an honest real-time extraction progress bar, and always-on natural sentence segmentation for better translation quality.

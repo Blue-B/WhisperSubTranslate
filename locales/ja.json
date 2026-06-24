@@ -95,7 +95,9 @@
     "whisper-base": "Tinyより高精度。一般の音声字幕用。",
     "whisper-small": "高速な字幕抽出。日常使用に適しています。",
     "whisper-medium": "精度と速度のバランス。デフォルト推奨。",
-    "whisper-large-v3-turbo": "Largeの精度 + 8倍高速。高性能GPUに推奨。"
+    "whisper-large-v3-turbo": "Largeの精度 + 8倍高速。高性能GPUに推奨。",
+    "whisper-large-v2-sync": "同期が合わない字幕を補正する別エンジン(Faster-Whisper)。非英語(日/韓/中)に最も正確、英語はlarge-v3-turboで十分。デバイス選択に従う。GPU約4.5GB、低速。",
+    "whisper-large-v2-sync-lite": "精密と同じファイルをint8で軽量実行。VRAM約3GBで低スペックGPU向け、追加DLなし。同期品質はほぼ同じ。"
   },
   "modelTagTranslation": "翻訳",
   "modelTagAsr": "音声",
@@ -204,7 +206,7 @@
   "allDoneSrtOnly": "すべての翻訳が完了！",
   "allStopped": "処理が中止されました。",
   "apiKeyMissingFallback": "APIキーがないため「翻訳なし」に切り替えました。",
-  "allFailed": "⚠️ すべての翻訳が失敗 — APIキー/割当量を確認",
+  "allFailed": "⚠️ すべて失敗 — 上のログで原因を確認してください",
   "allDoneWithErrors": "完了 — 一部ファイルが失敗（出力フォルダを確認）",
   "labelLocalModel": "ローカルモデル",
   "statusLabel": "状態",
@@ -252,5 +254,21 @@
   "updateAvailable": "新しいバージョンがあります",
   "updateDownload": "ダウンロード",
   "updateLater": "後で",
-  "updateChecking": "アップデートを確認中..."
+  "updateChecking": "アップデートを確認中...",
+  "deviceSyncLockNote": "デバイス設定に従います。自動はGPUを先に試し、失敗したらCPUに切り替えます。CPUを選ぶとCPUのみなので低速です。",
+  "errorTranslationPassthrough": "翻訳エンジンがほぼ全ての行を翻訳できませんでした（ローカルモデルがクラッシュした可能性）。字幕は翻訳されていません。再試行するか、処理デバイスをCPUに変更するか、別の翻訳方式を選んでください。",
+  "allFailedLocal": "⚠️ 翻訳がすべて失敗 — ローカルモデルが失敗しました。再試行するか、処理デバイスをCPUに変更してください",
+  "allFailedApi": "⚠️ 翻訳がすべて失敗 — APIキーまたは利用枠を確認してください",
+  "modelNames": {
+    "hy-mt-1.8b": "Hy-MT2 · 1.8B",
+    "hy-mt-7b": "Hy-MT2 · 7B",
+    "whisper-tiny": "Whisper · Tiny",
+    "whisper-base": "Whisper · Base",
+    "whisper-small": "Whisper · Small",
+    "whisper-medium": "Whisper · Medium",
+    "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v2-sync": "Whisper · Large v2 同期",
+    "whisper-large-v2-sync-lite": "Whisper · Large v2 同期 ライト"
+  },
+  "modelSizeShared": "精密と共用"
 }

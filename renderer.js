@@ -89,29 +89,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ETA state (ETA 계산 상태)
-let etaStartTime = null;
-let _etaLastUpdate = null;
-let _etaTotalWork = 100; // 0~100 스케일 (reserved)
-
-function _formatETA(ms) {
-  if (!ms || ms < 0) return '';
-  const sec = Math.ceil(ms / 1000);
-  const lang = currentUiLang || 'ko';
-  const suffix =
-    {
-      ko: '남음',
-      en: 'left',
-      ja: '残り',
-      zh: '剩余',
-      pl: 'pozostało',
-    }[lang] || 'left';
-  if (sec < 60) return `${sec}s ${suffix}`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s ${suffix}`;
-}
-
 // Supported video extensions (지원되는 비디오 파일 확장자)
 const SUPPORTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'];
 
@@ -362,14 +339,6 @@ function updateProgress(progress, text) {
   const progressText = document.getElementById('progressText');
   const progressPercent = document.getElementById('progressPercent');
   const progressTitle = document.getElementById('progressTitle');
-
-  // Reset ETA (ETA 초기화)
-  if (progress === 0 || etaStartTime === null) {
-    etaStartTime = Date.now();
-    _etaLastUpdate = etaStartTime;
-  } else {
-    _etaLastUpdate = Date.now();
-  }
 
   // Keep visible during processing; update width only on numeric (항상 표시 유지, 숫자일 때만 폭 업데이트)
   progressContainer.style.display = 'block';
@@ -841,8 +810,8 @@ async function continueProcessing() {
       if (stoppedCount > 0 || (_stoppedAt && Date.now() - _stoppedAt < 10000)) {
         showToast(d.allStopped || 'Processing stopped.');
       } else if (errorCount > 0 && completedCount === 0) {
-        setProgressTarget(100, d.allFailed || 'All translations failed');
-        showToast(d.allFailed || 'All translations failed');
+        setProgressTarget(100, getAllFailedMsg());
+        showToast(getAllFailedMsg());
       } else if (errorCount > 0) {
         setProgressTarget(100, d.allDoneWithErrors || `Done with ${errorCount} error(s)`);
         showToast(d.allDoneWithErrors || `Done with ${errorCount} error(s)`, {
@@ -1022,7 +991,9 @@ async function continueProcessing() {
 
   try {
     // 모델 다운로드가 필요한 경우 먼저 다운로드
-    if (!availableModels[model]) {
+    // 싱크 엔진(large-v2-sync / large-v2-sync-lite)은 GGML 다운로드 대상이 아니다. 엔진+모델은
+    // 추출 시점에 main.js가 자동으로 받고 진행률을 로그에 표시하므로 여기서 선다운로드하지 않는다.
+    if (model !== 'large-v2-sync' && model !== 'large-v2-sync-lite' && !availableModels[model]) {
       addOutput(`${I18N[currentUiLang].downloadingModel}: ${model}\n`);
       await window.electronAPI.downloadModel(model);
       availableModels[model] = true;
@@ -1050,6 +1021,7 @@ async function continueProcessing() {
       // 메이저장 안 key면 기본 ON (whisper 반복/환각 억제)
       reduceRepetition: localStorage.getItem('reduceRepetition') !== 'false',
       // 자연 문장 단위 전사는 항상 ON (main.js 기본값). 별도 토글 없음.
+      // 싱크 엔진은 model='large-v2-sync' 하나로 결정된다(별도 플래그 없음).
     });
 
     // 추출 단계 종료 → 의사 진행률 중지하고 현재 진행률 고정
@@ -1297,8 +1269,8 @@ async function continueProcessing() {
       if (stoppedCount > 0 || (_stoppedAt && Date.now() - _stoppedAt < 10000)) {
         showToast(d.allStopped || 'Processing stopped.');
       } else if (errorCount > 0 && completedCount === 0) {
-        setProgressTarget(100, d.allFailed || 'All translations failed');
-        showToast(d.allFailed || 'All translations failed');
+        setProgressTarget(100, getAllFailedMsg());
+        showToast(getAllFailedMsg());
       } else if (errorCount > 0) {
         setProgressTarget(100, d.allDoneWithErrors || `Done with ${errorCount} error(s)`);
         showToast(d.allDoneWithErrors || `Done with ${errorCount} error(s)`, {
@@ -1677,6 +1649,17 @@ const LOG_I18N = {
 // I18N object moved to locales/i18n.js
 
 // 에러 메시지 다국어 변환 헬퍼
+// "all translations failed" summary message, chosen by translation method.
+// Local translation has no API key, so never show the API key/quota hint here
+// (that wrong hint was the source of user confusion).
+function getAllFailedMsg() {
+  const d = I18N[currentUiLang] || I18N.ko;
+  const method = document.getElementById('translationSelect')?.value;
+  if (method === 'local') return d.allFailedLocal || d.allFailed || 'All translations failed';
+  if (method && method !== 'none') return d.allFailedApi || d.allFailed || 'All translations failed';
+  return d.allFailed || 'All tasks failed';
+}
+
 function getLocalizedError(errorMessage) {
   if (!errorMessage) return I18N[currentUiLang].errorUnknown;
 
@@ -1715,6 +1698,9 @@ function getLocalizedError(errorMessage) {
   if (errorMessage.includes('SRT file path missing') || errorMessage.includes('SRT 파일 경로')) {
     return lang.errorSrtPathMissing;
   }
+  if (errorMessage.includes('TRANSLATION_PASSTHROUGH')) {
+    return lang.errorTranslationPassthrough || lang.errorEmptyTranslation;
+  }
   if (errorMessage.includes('empty translation') || errorMessage.includes('번역 결과가 비어')) {
     return lang.errorEmptyTranslation;
   }
@@ -1730,47 +1716,112 @@ function getLocalizedError(errorMessage) {
   return errorMessage;
 }
 
-// 모델 이름 현지화
+// 모델 이름 현지화 — select 드롭다운 욵은 한 줄이라 길면 잘린다. 여긴 이름+용량+추천마크만 짧게.
+// 긴 설명은 MODEL_DESC_I18N으로 분리해 select 아래 줄에서 풀로 보여준다.
 const MODEL_I18N = {
   ko: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU 가속, 가장 빠름. 대부분 영상에 충분 (정확도는 large-v3가 조금 위) ⭐추천',
-    'large-v3': 'large-v3 (1550MB) — 정확도 최우선, 느림 / GPU 권장',
-    medium: 'medium (769MB) — 고사양 PC, GPU 불필요',
-    small: 'small (244MB) — 중사양 PC, 속도·정확 균형',
-    base: 'base (74MB) — 저사양 PC, 빠른 초안용',
-    tiny: 'tiny (39MB) — 초저사양 PC용, 속도 최우선',
+    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐추천',
+    'large-v2-sync': 'large-v2 싱크 (싱크 문제 해결용, 매우 느림)',
+    'large-v2-sync-lite': 'large-v2 싱크 라이트 (int8, 저사양/저VRAM)',
+    'large-v3': 'large-v3 (1550MB)',
+    medium: 'medium (769MB)',
+    small: 'small (244MB)',
+    base: 'base (74MB)',
+    tiny: 'tiny (39MB)',
   },
   en: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU-accelerated, fastest. Good enough for most videos (large-v3 is a bit more accurate) ⭐Recommended',
-    'large-v3': 'large-v3 (1550MB) — Top accuracy, slow / GPU advised',
-    medium: 'medium (769MB) — High-spec PC, no GPU needed',
-    small: 'small (244MB) — Mid-spec PC, speed/accuracy balance',
-    base: 'base (74MB) — Low-spec PC, fast draft use',
-    tiny: 'tiny (39MB) — Very low-spec PC, speed priority',
+    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐Recommended',
+    'large-v2-sync': 'large-v2 Sync (fix bad sync, very slow)',
+    'large-v2-sync-lite': 'large-v2 Sync Lite (int8, low VRAM)',
+    'large-v3': 'large-v3 (1550MB)',
+    medium: 'medium (769MB)',
+    small: 'small (244MB)',
+    base: 'base (74MB)',
+    tiny: 'tiny (39MB)',
   },
   ja: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU高速化で最速。ほとんどの動画に十分 (精度はlarge-v3がやや上) ⭐推奨',
-    'large-v3': 'large-v3 (1550MB) — 精度最優先、低速 / GPU推奨',
-    medium: 'medium (769MB) — 高スペックPC、GPU不要',
-    small: 'small (244MB) — 中スペックPC、速度・精度バランス',
-    base: 'base (74MB) — 低スペックPC、高速下書き用',
-    tiny: 'tiny (39MB) — 低スペックPC用、速度最優先',
+    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐推奨',
+    'large-v2-sync': 'large-v2 同期 (同期ずれ対策, 非常に低速)',
+    'large-v2-sync-lite': 'large-v2 同期 ライト (int8, 低VRAM)',
+    'large-v3': 'large-v3 (1550MB)',
+    medium: 'medium (769MB)',
+    small: 'small (244MB)',
+    base: 'base (74MB)',
+    tiny: 'tiny (39MB)',
   },
   zh: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — GPU加速，最快。多数视频已够用 (精度略低于large-v3) ⭐推荐',
-    'large-v3': 'large-v3 (1550MB) — 精度优先，较慢 / 建议GPU',
-    medium: 'medium (769MB) — 高配置PC，不需要GPU',
-    small: 'small (244MB) — 中配置PC，速度与精度平衡',
-    base: 'base (74MB) — 低配置PC，快速草稿用',
-    tiny: 'tiny (39MB) — 超低配置PC，速度优先',
+    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐推荐',
+    'large-v2-sync': 'large-v2 同步 (修复错位, 非常慢)',
+    'large-v2-sync-lite': 'large-v2 同步 轻量 (int8, 低显存)',
+    'large-v3': 'large-v3 (1550MB)',
+    medium: 'medium (769MB)',
+    small: 'small (244MB)',
+    base: 'base (74MB)',
+    tiny: 'tiny (39MB)',
   },
   pl: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) — Akceleracja GPU, najszybszy. Wystarczy do większości filmów (large-v3 nieco dokładniejszy) ⭐Zalecany',
-    'large-v3': 'large-v3 (1550MB) — Najwyższa dokładność, wolny / zalecane GPU',
-    medium: 'medium (769MB) — Wydajny PC, bez GPU',
-    small: 'small (244MB) — Średniy PC, balans szybkości i dokładności',
-    base: 'base (74MB) — Słaby PC, szybkie szkice',
-    tiny: 'tiny (39MB) — Bardzo słaby PC, priorytet szybkości',
+    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐Zalecany',
+    'large-v2-sync': 'large-v2 Sync (naprawa złej synch., bardzo wolny)',
+    'large-v2-sync-lite': 'large-v2 Sync Lite (int8, niski VRAM)',
+    'large-v3': 'large-v3 (1550MB)',
+    medium: 'medium (769MB)',
+    small: 'small (244MB)',
+    base: 'base (74MB)',
+    tiny: 'tiny (39MB)',
+  },
+};
+
+// 모델 상세 설명 — select 아래 힌트 줄(modelRequirements)에 표시. 여기는 안 잘림.
+const MODEL_DESC_I18N = {
+  ko: {
+    'large-v3-turbo': '빠르고 싱크 정확, 대부분 영상에 적합',
+    'large-v2-sync': '싱크가 안 맞는 영상 교정용. 비영어(일/한/중)에 가장 정확, 영어는 turbo로 충분. 장치 선택 따름. 느림',
+    'large-v2-sync-lite': '정밀과 같은 모델을 int8로 가볍게. VRAM 약 3GB, 렉 적음. 싱크 품질은 거의 동일',
+    'large-v3': '받아쓰기는 조금 더 정확하지만 긴 영상에서 싱크가 밀리고 느림',
+    medium: '고사양 PC용, GPU 없어도 됨',
+    small: '중사양 PC용, 속도와 정확도 균형',
+    base: '저사양 PC용, 빠른 초안',
+    tiny: '초저사양 PC용, 속도 최우선',
+  },
+  en: {
+    'large-v3-turbo': 'Fast, accurate sync, best for most videos',
+    'large-v2-sync': 'Fixes subtitles that will not sync. Best for non-English (JA/KO/ZH); English is fine with turbo. Follows device choice. Slow',
+    'large-v2-sync-lite': 'Same model in int8, lighter. ~3GB VRAM, less lag. Sync quality nearly identical',
+    'large-v3': 'Slightly better text but sync drifts and slower on long videos',
+    medium: 'High-spec PC, works without GPU',
+    small: 'Mid-spec PC, speed/accuracy balance',
+    base: 'Low-spec PC, fast draft',
+    tiny: 'Very low-spec PC, speed priority',
+  },
+  ja: {
+    'large-v3-turbo': '高速で同期正確、ほとんどの動画に最適',
+    'large-v2-sync': '同期が合わない映像の補正用。非英語(日/韓/中)に最も正確、英語はturboで十分。デバイス選択に従う。低速',
+    'large-v2-sync-lite': '精密と同じモデルをint8で軽量化。VRAM約3GB、ラグ少。同期品質はほぼ同じ',
+    'large-v3': '文字起こしはやや上だが長い動画で同期がずれ、低速',
+    medium: '高スペックPC用、GPU不要',
+    small: '中スペックPC用、速度・精度バランス',
+    base: '低スペックPC用、高速下書き',
+    tiny: '低スペックPC用、速度最優先',
+  },
+  zh: {
+    'large-v3-turbo': '快速同步准确，多数视频最合适',
+    'large-v2-sync': '用于字幕对不上的视频。对非英语(日/韩/中)最准确，英语用 turbo 即可。遵循设备选择。较慢',
+    'large-v2-sync-lite': '与精密相同模型，int8 更轻。显存约3GB，卡顿更少。同步质量几乎相同',
+    'large-v3': '识别略高但长视频同步偏移、较慢',
+    medium: '高配置PC，不需GPU',
+    small: '中配置PC，速度与精度平衡',
+    base: '低配置PC，快速草稿',
+    tiny: '超低配置PC，速度优先',
+  },
+  pl: {
+    'large-v3-turbo': 'Szybki, dokładna synchronizacja, najlepszy do większości filmów',
+    'large-v2-sync': 'Naprawia napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z turbo. Wg wyboru urządzenia. Wolny',
+    'large-v2-sync-lite': 'Ten sam model w int8, lżejszy. ~3GB VRAM, mniej zacięć. Synchronizacja prawie identyczna',
+    'large-v3': 'Lepszy tekst, ale synchronizacja dryfuje i wolniejszy w długich filmach',
+    medium: 'Wydajny PC, bez GPU',
+    small: 'Średni PC, balans szybkości i dokładności',
+    base: 'Słaby PC, szybkie szkice',
+    tiny: 'Bardzo słaby PC, priorytet szybkości',
   },
 };
 
@@ -2237,6 +2288,17 @@ function applyI18n(lang) {
   }
 }
 
+// 싱크 우선 엔진(Faster-Whisper large-v2)이 선택되면 장치 카드에 동작 힌트를 띄운다.
+// 장치 선택은 일반 모델과 동일하게 따른다: CPU=CPU만, GPU=GPU만, 자동=GPU 먼저 후 CPU 폴백.
+// 모델 변경/설정 로드/모델목록 재구성 후 호출.
+function updateSyncModelUI() {
+  const _mv = document.getElementById('modelSelect')?.value;
+  const isSync = _mv === 'large-v2-sync' || _mv === 'large-v2-sync-lite';
+  // 장치 카드에 싱크 엔진 장치 선택 힌트(잠금 아님)를 표시. 싱크 모델일 때만 표시.
+  const deviceNote = document.getElementById('deviceSyncLockNote');
+  if (deviceNote) deviceNote.style.display = isSync ? '' : 'none';
+}
+
 // updateModelSelect를 현지화 지원하도록 보강
 function updateModelSelect() {
   const modelSelect = document.getElementById('modelSelect');
@@ -2247,8 +2309,8 @@ function updateModelSelect() {
 
   modelSelect.innerHTML = '';
 
-  // 성능 좋은 순서 (위가 더 좋음), 구버전(large, large-v2) 제거
-  const ids = ['large-v3-turbo', 'large-v3', 'medium', 'small', 'base', 'tiny'];
+  // 성능 좋은 순서 (위가 더 좋음). large-v2-sync는 별도 엔진(Faster-Whisper-XXL). 장치 선택을 따른다.
+  const ids = ['large-v3-turbo', 'large-v2-sync', 'large-v2-sync-lite', 'large-v3', 'medium', 'small', 'base', 'tiny'];
   const models = ids.map((id) => ({ id, name: getModelDisplayName(currentUiLang, id) }));
 
   const availableGroup = document.createElement('optgroup');
@@ -2305,7 +2367,10 @@ function updateModelSelect() {
 
   // 모델 요구사항 표시 초기화 및 이벤트 리스너
   updateModelRequirements(modelSelect.value);
-  modelSelect.onchange = (e) => updateModelRequirements(e.target.value);
+  modelSelect.onchange = (e) => {
+    updateModelRequirements(e.target.value);
+    updateSyncModelUI();
+  };
 
   // Rebuild custom dropdown so it reflects new option list
   const wrapper = modelSelect.closest('.custom-select-wrapper');
@@ -2316,6 +2381,9 @@ function updateModelSelect() {
     wrapper.replaceWith(modelSelect);
   }
   if (typeof buildCustomSelect === 'function') buildCustomSelect(modelSelect);
+
+  // 모델 목록을 다시 만들면 선택이 바뀥 수 있으므로 싱크 모델 UI 재적용
+  updateSyncModelUI();
 }
 
 // 모델별 시스템 요구사항 표시
@@ -2327,12 +2395,14 @@ function updateModelRequirements(modelId) {
   // Source: https://github.com/ggerganov/whisper.cpp
   // Tested: large-v3 works on 6GB VRAM GPU
   const requirements = {
-    tiny: { vram: '~1GB', ram: '~2GB', speed: '★★★★★' },
-    base: { vram: '~1GB', ram: '~2GB', speed: '★★★★☆' },
-    small: { vram: '~2GB', ram: '~4GB', speed: '★★★☆☆' },
-    medium: { vram: '~4GB', ram: '~5GB', speed: '★★☆☆☆' },
-    'large-v3': { vram: '~5GB', ram: '~8GB', speed: '★★☆☆☆' },
-    'large-v3-turbo': { vram: '~4GB', ram: '~4GB', speed: '★★★★☆' },
+    tiny: { vram: '~1GB', ram: '~1GB', speed: '★★★★★' },
+    base: { vram: '~1GB', ram: '~1GB', speed: '★★★★☆' },
+    small: { vram: '~1GB', ram: '~2GB', speed: '★★★☆☆' },
+    medium: { vram: '~2GB', ram: '~3GB', speed: '★★★☆☆' },
+    'large-v3': { vram: '~4GB', ram: '~5GB', speed: '★★☆☆☆' },
+    'large-v3-turbo': { vram: '~2GB', ram: '~3GB', speed: '★★★★☆' },
+    'large-v2-sync': { vram: '~4.5GB', ram: '~5GB', speed: '★★☆☆☆' },
+    'large-v2-sync-lite': { vram: '~3GB', ram: '~4GB', speed: '★★★☆☆' },
   };
 
   const req = requirements[modelId];
@@ -2350,9 +2420,14 @@ function updateModelRequirements(modelId) {
   };
 
   const reqText = texts[currentUiLang] || texts.en;
+  // 모델 상세 설명(select 드롭다운 잘림 피해 이리로 옮긴 것). select 아래에 풀로 표시.
+  const descMap = (typeof MODEL_DESC_I18N !== 'undefined' && (MODEL_DESC_I18N[currentUiLang] || MODEL_DESC_I18N.en)) || {};
+  const descText = descMap[modelId] || '';
+  const descHtml = descText ? `<span class="model-req-desc">${descText}</span><br>` : '';
+
   const isInstalled = !!(typeof availableModels !== 'undefined' && availableModels && availableModels[modelId]);
   if (isInstalled) {
-    requirementsEl.textContent = reqText;
+    requirementsEl.innerHTML = `${descHtml}${reqText}`;
     requirementsEl.classList.remove('need-download');
   } else {
     const warn = {
@@ -2362,7 +2437,7 @@ function updateModelRequirements(modelId) {
       zh: '⚠ 未安装 — 启动时自动下载，或在模型管理中预先下载。',
       pl: '⚠ Nie zainstalowano — pobierze się automatycznie lub możesz pobrać wcześniej w Menedżerze modeli.',
     };
-    requirementsEl.innerHTML = `${reqText}<br><span class="need-download-msg">${warn[currentUiLang] || warn.en}</span>`;
+    requirementsEl.innerHTML = `${descHtml}${reqText}<br><span class="need-download-msg">${warn[currentUiLang] || warn.en}</span>`;
     requirementsEl.classList.add('need-download');
   }
 }
@@ -2552,8 +2627,6 @@ function resetProgress(textKey) {
   targetProgress = 0;
   const d = I18N[currentUiLang];
   targetText = textKey === 'prepare' ? d.progressPreparing : '';
-  etaStartTime = null;
-  _etaLastUpdate = null;
   updateProgress(0, targetText);
 }
 
@@ -2751,8 +2824,8 @@ if (window?.electronAPI) {
                   showToast(d.allStopped || 'Processing stopped.');
                 } else if (errorCount > 0 && completedCount === 0) {
                   // 전원 실패: 완료 효과음 X, 실패 토스트
-                  setProgressTarget(100, d.allFailed || 'All translations failed');
-                  showToast(d.allFailed || 'All translations failed');
+                  setProgressTarget(100, getAllFailedMsg());
+                  showToast(getAllFailedMsg());
                 } else if (errorCount > 0) {
                   // 부분 실패: 경고 토스트, 효과음 X
                   setProgressTarget(100, d.allDoneWithErrors || `Done with ${errorCount} error(s)`);
@@ -3321,10 +3394,12 @@ function buildCustomSelect(selectEl) {
 
   trigger.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (selectEl.disabled) return; // 싱크 우선 엔진 등으로 잠긴 select는 열지 않음
     wrapper.classList.contains('open') ? close() : open();
   });
 
   trigger.addEventListener('keydown', (e) => {
+    if (selectEl.disabled) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       open();
@@ -3672,6 +3747,7 @@ function showSettingsModal() {
     const reduceRepetitionCheckbox = document.getElementById('reduceRepetitionCheckbox');
     if (reduceRepetitionCheckbox)
       reduceRepetitionCheckbox.checked = localStorage.getItem('reduceRepetition') !== 'false';
+    updateSyncModelUI();
     const autoRetryCheckbox = document.getElementById('autoRetryCheckbox');
     if (autoRetryCheckbox) autoRetryCheckbox.checked = localStorage.getItem('autoRetryFailed') === 'true';
     if (soundVolumeRow) {
@@ -3749,16 +3825,21 @@ async function playCompletionSound() {
       const audio = new Audio(cachedAudioDataUrl);
       audio.volume = soundVolume;
 
-      // 로드 완료 대기 후 재생
-      await new Promise((resolve, reject) => {
-        audio.oncanplaythrough = () => {
-          console.log('[Audio] Audio loaded, ready to play');
-          resolve();
+      // data URL은 즉시 로드되므로 canplaythrough를 무한정 기다리지 않는다.
+      // (일부 Electron/Chromium에서 data URL의 canplaythrough가 안 떠 await가 멈추면
+      //  소리가 영영 안 났다.) 준비되면 바로, 안 떠도 최대 300ms 후 그냥 재생한다.
+      await new Promise((resolve) => {
+        let done = false;
+        const go = () => {
+          if (!done) {
+            done = true;
+            resolve();
+          }
         };
-        audio.onerror = (e) => {
-          console.error('[Audio] Audio load error:', e);
-          reject(e);
-        };
+        audio.oncanplaythrough = go;
+        audio.onerror = go; // 에러여도 play()를 시도(아래서 잡힘)
+        if (audio.readyState >= 3) go();
+        setTimeout(go, 300);
         audio.load();
       });
 
@@ -3770,11 +3851,21 @@ async function playCompletionSound() {
     }
   } catch (error) {
     console.warn('[Audio] WAV file failed:', error.message);
-    // 폴백: WebAudio로 간단한 3음 비프
+    // packaged build has devTools off, so surface the reason in the on-screen log too.
+    try {
+      if (typeof addOutput === 'function') addOutput(`[sound] completion sound failed: ${error.message}\n`);
+    } catch (_) {}
+    // fallback: short 3-note WebAudio beep
   }
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     const ctx = new AudioCtx();
+    // long-running/backgrounded jobs can leave the context suspended; resume first.
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch (_) {}
+    }
     const now = ctx.currentTime;
     const sequence = [
       { freq: 880, dur: 0.12 },
@@ -4526,6 +4617,8 @@ function _wireModelProgress() {
   if (window.electronAPI?.onWhisperModelProgress) {
     window.electronAPI.onWhisperModelProgress(({ modelName, percent }) => {
       _updateModelCardProgress(`whisper-${modelName}`, percent);
+      // 정밀/라이트는 같은 다운로드를 공유하므로 진행률을 두 카드에 함께 표시한다.
+      if (modelName === 'large-v2-sync') _updateModelCardProgress('whisper-large-v2-sync-lite', percent);
     });
   }
   // Hy-MT2 (local translator) downloads. Map filename → card id.
@@ -4666,6 +4759,34 @@ async function renderModels() {
       category: 'asr',
       tag: 'ASR',
     },
+    {
+      // 싱크 엔진: GGML이 아니라 Faster-Whisper-XXL(GPU 자동). whisperKey 대신 syncEngine 마커 사용.
+      id: 'whisper-large-v2-sync',
+      whisperKey: null,
+      syncEngine: true,
+      name: 'Whisper · Large v2 Sync',
+      desc: 'Best subtitle sync. GPU auto, separate engine.',
+      size: '~4.4 GB',
+      vram: '~4.5 GB',
+      speedKey: 'medium',
+      category: 'asr',
+      tag: 'ASR',
+    },
+    {
+      // 싱크 엔진 라이트(int8): 정밀과 같은 엔진+model.bin을 공유한다. 다운로드/삭제는 정밀 카드와
+      // 동일한 download-sync-engine/delete-sync-engine을 쓰고, 설치 판정도 엔진 존재로 함께 처리된다.
+      id: 'whisper-large-v2-sync-lite',
+      whisperKey: null,
+      syncEngine: true,
+      name: 'Whisper · Large v2 Sync Lite',
+      desc: 'Same file as precise, int8, lower VRAM.',
+      sizeKey: 'shared',
+      size: '~4.4 GB',
+      vram: '~3 GB',
+      speedKey: 'medium',
+      category: 'asr',
+      tag: 'ASR',
+    },
   ];
 
   // Check installed status (best-effort) — always fresh from disk
@@ -4704,6 +4825,8 @@ async function renderModels() {
     const mergedWhisper = Object.assign({}, availableModels || {}, whisperStatus || {});
     for (const m of models) {
       if (m.whisperKey && mergedWhisper[m.whisperKey]) installedSet.add(m.id);
+      // 싱크 엔진은 check-model-status가 'large-v2-sync' 키로 설치 여부를 보고한다.
+      if (m.syncEngine && mergedWhisper['large-v2-sync']) installedSet.add(m.id);
     }
     console.log('[renderModels] merged whisper:', mergedWhisper, 'installedSet:', Array.from(installedSet));
   } catch (_e) {
@@ -4735,7 +4858,7 @@ async function renderModels() {
         </div>
         <div class="model-card-head">
           <div class="model-card-info">
-            <h3 class="model-card-name">${_esc(m.name)}</h3>
+            <h3 class="model-card-name">${_esc((D.modelNames && D.modelNames[m.id]) || m.name)}</h3>
             <p class="model-card-desc">${_esc((D.modelDescriptions && D.modelDescriptions[m.id]) || m.desc)}</p>
           </div>
           ${badge}
@@ -4743,7 +4866,7 @@ async function renderModels() {
         <div class="model-card-meta">
           <div class="model-card-meta-item">
             <span class="model-card-meta-label">${D.modelMetaSize || 'Size'}</span>
-            <span class="model-card-meta-value">${m.size}</span>
+            <span class="model-card-meta-value">${m.sizeKey === 'shared' ? (D.modelSizeShared || 'Shared') : m.size}</span>
           </div>
           <div class="model-card-meta-item">
             <span class="model-card-meta-label">${D.modelMetaVram || 'VRAM'}</span>
@@ -4821,6 +4944,29 @@ async function renderModels() {
             renderModels();
           }
         }
+      } else if (m.syncEngine && window.electronAPI?.downloadSyncEngine) {
+        const D3 = I18N[currentUiLang] || I18N.ko;
+        if (!confirm(`${m.name} (${m.size}) — ${D3.confirmDownloadModel || 'Start download?'}`)) return;
+        // 정밀/라이트 카드는 같은 엔진을 공유 → 어느 쪽을 눌러도 두 카드 모두 다운로드 상태로 표시.
+        const syncCardIds = ['whisper-large-v2-sync', 'whisper-large-v2-sync-lite'];
+        syncCardIds.forEach((cid) => _downloadingModels.add(cid));
+        try {
+          renderModels();
+        } catch (_e) {}
+        try {
+          syncCardIds.forEach((cid) => _updateModelCardProgress(cid, 0));
+          const r = await window.electronAPI.downloadSyncEngine();
+          if (r && r.success === false && !r.userStopped) throw new Error(r.error || 'failed');
+          // 정밀/라이트는 같은 엔진+모델을 공유 → 한 번 받으면 둘 다 사용 가능.
+          availableModels['large-v2-sync'] = true;
+          availableModels['large-v2-sync-lite'] = true;
+          if (typeof updateModelSelect === 'function') updateModelSelect();
+        } catch (e) {
+          alert(`${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${e?.message || e}`);
+        } finally {
+          syncCardIds.forEach((cid) => _downloadingModels.delete(cid));
+          renderModels();
+        }
       } else if (m.whisperKey && window.electronAPI?.downloadModel) {
         const D3 = I18N[currentUiLang] || I18N.ko;
         if (!confirm(`Whisper ${m.whisperKey} (${m.size}) — ${D3.confirmDownloadModel || 'Start download?'}`)) return;
@@ -4854,7 +5000,7 @@ async function renderModels() {
         btn.disabled = true;
         if (m.category === 'translation' && window.electronAPI?.localModelCancel) {
           await window.electronAPI.localModelCancel();
-        } else if (m.whisperKey && window.electronAPI?.whisperModelCancel) {
+        } else if ((m.whisperKey || m.syncEngine) && window.electronAPI?.whisperModelCancel) {
           await window.electronAPI.whisperModelCancel();
         }
       } catch (_e) {}
@@ -4875,6 +5021,12 @@ async function renderModels() {
         btn.textContent = (I18N[currentUiLang] || I18N.ko).btnDeleting || 'Deleting…';
         if (m.category === 'translation' && window.electronAPI?.localModelDelete) {
           await window.electronAPI.localModelDelete(m.id === 'hy-mt-7b' ? '7b' : '1.8b');
+        } else if (m.syncEngine && window.electronAPI?.deleteSyncEngine) {
+          await window.electronAPI.deleteSyncEngine();
+          // 공유 파일 삭제 → 정밀/라이트 둘 다 불가 상태로.
+          delete availableModels['large-v2-sync'];
+          delete availableModels['large-v2-sync-lite'];
+          if (typeof updateModelSelect === 'function') updateModelSelect();
         } else if (m.whisperKey && window.electronAPI?.deleteWhisperModel) {
           await window.electronAPI.deleteWhisperModel(m.whisperKey);
           delete availableModels[m.whisperKey];

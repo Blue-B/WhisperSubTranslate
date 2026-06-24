@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('delete-whisper-model', modelName);
   },
 
+  // 싱크 엔진(large-v2-sync) 사전 다운로드 / 삭제
+  downloadSyncEngine: () => ipcRenderer.invoke('download-sync-engine'),
+  deleteSyncEngine: () => ipcRenderer.invoke('delete-sync-engine'),
+
   // Whisper 다운로드 진행률 구독
   onWhisperModelProgress: (callback) => {
     const handler = (_event, data) => callback(data);

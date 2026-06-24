@@ -2,6 +2,11 @@
 node_modules/
 dist/
 dist2/
+dist3/
+dist_ui/
+fw-engine/
+fw-models/
+fw-out/
 out/
 *.log
 *.map
@@ -84,3 +89,12 @@ release-kit/
 
 # editor/backup leftovers
 *.bak
+
+# SenseVoice ASR model (bundled at build, not in git)
+sense-voice/*.onnx
+sense-voice/tokens.txt
+dist_fast/
+dist_xxl/
+dist_rel/
+dist_mm/
+dist_new/

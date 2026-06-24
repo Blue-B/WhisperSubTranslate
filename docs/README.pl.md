@@ -2,303 +2,146 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | Polski
 
-Szybka, lokalna aplikacja desktopowa do konwersji wideo na napisy (SRT) i tłumaczenia ich na wybrany język. Wykorzystuje whisper.cpp do ekstrakcji oraz opcjonalne silniki online do tłumaczenia.
+Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneruj SRT za pomocą whisper.cpp, a następnie przetłumacz je offline dołączonym modelem Hy-MT2 albo darmowymi/płatnymi silnikami online.
 
-> Ważne: Ta aplikacja tworzy nowe napisy SRT z dźwięku wideo za pomocą whisper.cpp. Nie wyodrębnia istniejących osadzonych ścieżek napisów ani tekstu na ekranie (brak OCR).
+> Aplikacja tworzy nowe napisy z dźwięku wideo (mowa na tekst). Nie wyciąga osadzonych ścieżek napisów ani nie czyta tekstu z ekranu (bez OCR).
 
 ## Podgląd
 
-![Główny interfejs WhisperSubTranslate](../assets/hero/hero.png)
+<p align="center">
+  <img src="../assets/hero/hero.png" alt="WhisperSubTranslate, główny interfejs" width="100%">
+</p>
 
-## Dlaczego WhisperSubTranslate
+## Funkcje
 
-Ekstrakcja napisów działa w 100% lokalnie — Twoje wideo nigdy nie opuszcza Twojego komputera. Brak przesyłania do chmury, brak kont, brak kart kredytowych. Twórz dokładne pliki SRT offline; tłumaczenie też może działać **w pełni offline** z lokalnym modelem Hy-MT2, albo poprzez darmowe/płatne silniki online (MyMemory, własne klucze DeepL/OpenAI/Gemini).
+- Rozpoznawanie mowy w 100% lokalnie. Twoje wideo nie opuszcza komputera, bez konta, bez wysyłania.
+- Tłumaczenie offline dołączonym modelem Hy-MT2 lub silnikami online (MyMemory, DeepL, OpenAI, Gemini) z własnymi kluczami.
+- Automatyczne pobieranie modeli. Bez Pythona, bez ręcznej konfiguracji.
+- Modele naprawy synchronizacji (large-v2 Sync i Sync Lite) do wideo, gdzie zwykłe modele tracą synchronizację.
+- Kolejka, postęp na żywo i lokalna historia zadań.
 
-### Wartość w skrócie
+## Pierwsze kroki
 
-| Potrzeba                        | Co otrzymujesz                                |
-| ------------------------------- | --------------------------------------------- |
-| Prywatność i kontrola           | 100% lokalne STT; bez przesyłania do chmury   |
-| Zero rejestracji                | Bez konta, karty kredytowej, danych osobowych |
-| Nieograniczone użycie           | Brak dziennych/miesięcznych limitów aplikacji |
-| Zrozumienie obcych filmów       | Ekstrakcja + tłumaczenie SRT za jednym razem  |
-| Unikanie problemów z instalacją | Auto-pobieranie modeli; bez Pythona           |
-| Przejrzysty feedback            | Kolejka, płynny postęp, ETA                   |
+### Użytkownicy
 
-> Uwaga: Podczas korzystania z silników tłumaczenia online mogą obowiązywać limity dostawcy (np. kwota MyMemory). Sama aplikacja nie nakłada ograniczeń użytkowania.
+Pobierz najnowsze archiwum przenośne z [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), rozpakuj je i uruchom `WhisperSubTranslate.exe`. Wyodrębnianie napisów działa w pełni offline. Tłumaczenie jest opcjonalne.
 
-## Rozpoczęcie pracy
-
-### Dla użytkowników: uruchom wersję przenośną
-
-- Pobierz najnowsze archiwum przenośne z Releases: `WhisperSubTranslate-v2.2.0-win-x64.zip`
-- Otwórz rozpakowany folder i uruchom `WhisperSubTranslate.exe`
-
-To wszystko — ekstrakcja działa w pełni offline na Twoim PC. Tłumaczenie jest opcjonalne (darmowy MyMemory jest wbudowany; DeepL/OpenAI wymagają własnych kluczy API).
-
-### Dla deweloperów: uruchom ze źródła
+### Programiści
 
 ```bash
 npm install
 npm start
 ```
 
-- Wymagany **Node.js ≥ 20.19 lub ≥ 22.12** (łańcuch budowania Electron 42)
-- **whisper-cpp** jest automatycznie pobierany podczas `npm install` (Windows: ~700MB wersja CUDA)
-- Na **Linux/macOS**, jeśli nie ma gotowego pliku binarnego, whisper.cpp jest automatycznie budowany ze źródeł (wymaga `cmake`, `gcc`/`clang`, `git`)
-- **FFmpeg** jest automatycznie dołączony przez pakiet npm
-- Przy pierwszym uruchomieniu wybrany model GGML zostanie pobrany do `_models/` jeśli brakuje
+- Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 42)
+- whisper.cpp jest pobierany podczas `npm install` (wersja CUDA na Windows, ~700MB)
+- FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
 
-> Jeśli automatyczne pobieranie nie powiedzie się, pobierz ręcznie z [whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases) i rozpakuj do folderu `whisper-cpp/`.
-
-### Konfiguracja Linux
-
-WhisperSubTranslate działa na Linuksie po kilku dodatkowych krokach:
-
-**Wymagane pakiety:**
+### Linux
 
 ```bash
-# Ubuntu/Debian
-sudo apt install cmake build-essential git ffmpeg
-
-# Akceleracja CUDA GPU (opcjonalnie, wymaga NVIDIA GPU + sterowników)
-# Zainstaluj CUDA Toolkit: https://developer.nvidia.com/cuda-downloads
-```
-
-**Uruchom ze źródeł:**
-
-```bash
-git clone https://github.com/Blue-B/WhisperSubTranslate.git
-cd WhisperSubTranslate
-npm install    # whisper.cpp zostanie automatycznie zbudowany ze źródeł
+sudo apt install cmake build-essential git ffmpeg   # Ubuntu/Debian
+npm install   # whisper.cpp budowany ze źródeł
 npm start
 ```
 
-Jeśli automatyczna kompilacja się nie powiedzie, zbuduj whisper.cpp ręcznie:
-
-```bash
-git clone https://github.com/ggml-org/whisper.cpp
-cd whisper.cpp
-
-# Tylko CPU
-cmake -B build && cmake --build build --config Release
-
-# Z CUDA (NVIDIA GPU)
-cmake -B build -DGGML_CUDA=ON && cmake --build build --config Release
-
-# Skopiuj plik binarny
-cp build/bin/whisper-cli /path/to/WhisperSubTranslate/whisper-cpp/
-```
+Aby przyspieszyć przez CUDA, zainstaluj NVIDIA CUDA Toolkit przed `npm install`. Ręczne kroki budowania whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ### Budowanie (Windows)
 
 ```bash
-npm run build-win
+npm run build-win   # wynik trafia do dist2/
 ```
 
-Artefakty są generowane do `dist2/`.
+## Silniki tłumaczeń
 
-## Stack technologiczny
+Tłumacz napisy w pełni offline dołączonym modelem Tencent Hy-MT2 albo kieruj do darmowych/płatnych silników online przy użyciu własnych kluczy API.
 
-[![Electron](https://img.shields.io/badge/Electron-2C2E3B?style=for-the-badge&logo=electron&logoColor=9FEAF9)](https://www.electronjs.org/) [![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/) [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=000)](https://developer.mozilla.org/docs/Web/JavaScript) [![DeepL](https://img.shields.io/badge/DeepL_API-0F2B46?style=for-the-badge&logo=deepl&logoColor=white)](https://www.deepl.com/pro-api) [![OpenAI](https://img.shields.io/badge/OpenAI_API-412991?style=for-the-badge&logo=openai&logoColor=white)](https://platform.openai.com/)
+| Silnik | Offline | Klucz API | Koszt | Uwagi |
+| --- | :---: | :---: | --- | --- |
+| Hy-MT2 1.8B (lokalny, domyślny) | Tak | Nie | Darmowy | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu |
+| Hy-MT2 7B (lokalny) | Tak | Nie | Darmowy | ~6,16GB, VRAM 8GB / RAM 12GB, większy model |
+| MyMemory | Nie | Nie | Darmowy | ~50K znaków/dzień na IP |
+| DeepL | Nie | Tak | 500K/mies. darmowo | Stabilny wynik |
+| OpenAI GPT-5.4 mini | Nie | Tak | Płatny | Świadomy kontekstu |
+| OpenAI GPT-5.4 nano | Nie | Tak | Płatny | Tańszy poziom |
+| Gemini 3 Flash | Nie | Tak | Darmowy / tani | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey)) |
 
-| Obszar                   | Szczegóły                                        |
-| ------------------------ | ------------------------------------------------ |
-| Runtime                  | Electron, Node.js, JavaScript                    |
-| Pakowanie                | electron-builder                                 |
-| Sieć                     | axios                                            |
-| Mowa-na-tekst            | whisper.cpp (modele GGML)                        |
-| Tłumaczenie (opcjonalne) | DeepL API, OpenAI (GPT-5.4 mini), Gemini, MyMemory |
-
-## Silniki tłumaczenia
-
-WhisperSubTranslate może tłumaczyć napisy **w pełni offline** za pomocą dołączonego modelu Tencent **Hy-MT2** lub korzystać z darmowych/płatnych silników online przy użyciu własnych kluczy API.
-
-| Silnik                               | Offline | Klucz API | Koszt                | Uwagi                                                                                                                |
-| ------------------------------------ | :-----: | :-------: | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Hy-MT2 1.8B** (lokalny · domyślny) |   ✅    |    Nie    | Darmowy              | ~1.13 GB · VRAM 2 GB / RAM 4 GB · 100% na urządzeniu                                                                 |
-| **Hy-MT2 7B** (lokalny)              |   ✅    |    Nie    | Darmowy              | ~6.16 GB · VRAM 8 GB / RAM 12 GB · większy model                                                                     |
-| MyMemory                             |   ❌    |    Nie    | Darmowy              | ~50K znaków/dzień na IP                                                                                              |
-| DeepL                                |   ❌    |    Tak    | Darmowe 500K/miesiąc | Dostępne płatne plany                                                                                                |
-| OpenAI GPT-5.4 mini | ❌ | Tak | Płatny | $0.075 wejście / $0.60 wyjście za 1M tokenów · uwzględnia kontekst |
-| OpenAI GPT-5.4 nano | ❌ | Tak | Płatny | Tańszy poziom — $0.20 wejście / $1.25 wyjście za 1M tokenów |
-| Gemini 3 Flash                       |   ❌    |    Tak    | Darmowy/Płatny       | Darmowy: 250 napisów/dzień (~20-30min), Płatny: bez limitu ([Pobierz klucz](https://aistudio.google.com/app/apikey)) |
-
-> **Prywatność:** lokalny silnik Hy-MT2 to jedyna opcja, która nie wymaga klucza API, sieci ani opłat za użycie — Twoje wideo i jego dialogi nigdy nie opuszczają Twojego komputera.
->
-> **Wskazówka**: Dla długich filmów (1h+) MyMemory może osiągnąć dzienny limit. Użyj Gemini lub DeepL.
+Tylko lokalny silnik Hy-MT2 nie wymaga klucza API, sieci ani opłat za użycie, więc dialogi nie opuszczają komputera.
 
 ### Jakość tłumaczenia (silnik offline)
 
-WhisperSubTranslate dołącza modele **Hy-MT2** firmy Tencent (domyślnie 1.8B, opcjonalnie 7B). W oficjalnej, wielobenchmarkowej ocenie Tencent rodzina Hy-MT2 jest konkurencyjna wobec — a w kilku benchmarkach wyprzedza — czołowe komercyjne API tłumaczeniowe:
+WhisperSubTranslate dołącza modele Tencent Hy-MT2 (domyślnie 1.8B, opcjonalnie 7B). W oficjalnej ocenie Tencent rodzina Hy-MT2 konkuruje z czołowymi komercyjnymi API tłumaczeniowymi i w części benchmarków uzyskuje lepsze wyniki.
 
-![Oficjalny benchmark Tencent Hy-MT2 (model dołączony do WhisperSubTranslate)](../assets/hy-mt2-benchmark.pl.png)
+![Oficjalny benchmark Tencent Hy-MT2, model dołączony do WhisperSubTranslate](../assets/hy-mt2-benchmark.pl.png)
 
-> **Źródło:** oficjalne benchmarki opublikowane przez autorów modelu, Tencent — [repozytorium Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2) · [raport techniczny](https://arxiv.org/pdf/2605.22064) · [modele na HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). Powyższy wykres jest **przerysowany z oficjalnego Figure 1 Tencent**, a liczby modeli dołączonych (1.8B/7B) zweryfikowano z tabelami w pracy. Liczby te mierzą **sam model** na standardowych benchmarkach MT (WildMTBench, WMT25, FLORES-200 itd.), a **nie** są ponownym benchmarkiem aplikacji WhisperSubTranslate. Według Tencent rozmiary 7B/30B przewyższają otwarte modele takie jak DeepSeek-V4-Pro/Kimi, a lekki **1.8B (domyślny)** ogólnie przewyższa główne komercyjne API, takie jak Microsoft i Doubao.
+Źródło: oficjalne benchmarki Tencent: [repozytorium Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2), [raport techniczny](https://arxiv.org/pdf/2605.22064), [modele na HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). Wykres jest przerysowany z oficjalnego Figure 1 Tencent, a liczby modeli dołączonych (1.8B/7B) sprawdzono z tabelami w pracy. Liczby mierzą sam model na standardowych benchmarkach tłumaczenia maszynowego (WildMTBench, WMT25, FLORES-200 itd.), nie są osobnym benchmarkiem aplikacji WhisperSubTranslate.
 
-Klucze API i preferencje są zapisywane lokalnie na Twoim PC w `app.getPath('userData')` z podstawowym kodowaniem, aby zapobiec przypadkowemu ujawnieniu. Plik konfiguracyjny nigdy nie jest przesyłany do Git ani dołączany do buildów.
+Przy długich filmach (1h+) dzienny limit MyMemory może powodować spowolnienia. Użyj wtedy Gemini, DeepL lub skonfigurowanego modelu GPT.
 
-### Lokalizacja danych
+## Modele rozpoznawania mowy
 
-| Dane                    | Lokalizacja                                                         |
-| ----------------------- | ------------------------------------------------------------------- |
-| Ustawienia & klucze API | `%APPDATA%\whispersubtranslate\translation-config-encrypted.json`   |
-| Logi błędów (Windows)   | `%APPDATA%\whispersubtranslate\logs\errors.log`                     |
-| Logi błędów (macOS)     | `~/Library/Application Support/whispersubtranslate/logs/errors.log` |
-| Logi błędów (Linux)     | `~/.config/whispersubtranslate/logs/errors.log`                     |
-| Historia zadań          | `%APPDATA%\whispersubtranslate\history.json` (do 200 wpisów)        |
-| Modele                  | `_models/` (w folderze aplikacji)                                   |
+Modele pobierają się na żądanie do `_models/`. CUDA jest używana, gdy dostępna, w przeciwnym razie CPU. Wybierz rozmiar pasujący do GPU.
 
-### Historia zadań
+| Model | Rozmiar | VRAM | Szybkość | Uwagi |
+| --- | --- | --- | --- | --- |
+| tiny | ~75MB | ~1GB | Najszybszy | Podstawowy |
+| base | ~142MB | ~1GB | Szybki | Dobry |
+| small | ~466MB | ~1GB | Średni | Lepszy |
+| medium | ~1,5GB | ~2GB | Średni | Bardzo dobry |
+| large-v3 | ~3GB | ~4GB | Wolny | Najlepsza transkrypcja |
+| large-v3-turbo (domyślny) | ~809MB | ~2GB | Szybki | Najlepszy ogólnie |
+| large-v2 Sync | ~4,4GB | ~4,5GB | Wolny | Osobny silnik, naprawa synchronizacji |
+| large-v2 Sync Lite | wspólny | ~3GB | Wolny | Ten sam plik co Sync, int8, niższy VRAM |
 
-- Każde zakończone zadanie jest automatycznie zapisywane — do **200 wpisów**.
-- Każdy wiersz oferuje przyciski **Otwórz** (odtwarza plik wynikowy) i **Folder** (pokaż w eksploratorze).
-- Możesz włączyć/wyłączyć historię w **Ustawienia → Historia**. Wyłączenie wstrzymuje tylko _nowe_ wpisy; istniejące dane są zachowywane.
-- **Wyczyść wszystko** wykonuje bezpieczne kasowanie kryminalistyczne (plik nadpisywany zerami, usuwany, oraz wymuszona kompakcja resztek z localStorage). SSD wear leveling oznacza, że 100% nieodtwarzalności nie da się zagwarantować samym oprogramowaniem — dla twardych gwarancji użyj szyfrowania całego dysku.
+Sync i Sync Lite używają osobnego silnika Faster-Whisper (pobieranego raz automatycznie, ~4,4GB) i współdzielą ten sam plik modelu, więc jedno pobranie obejmuje oba. Używaj ich tylko, gdy zwykłe modele tracą synchronizację. Są najdokładniejsze przy wideo nieangielskim (japoński, koreański, chiński). Angielski zwykle wystarczy z large-v3-turbo.
 
-### Bezpieczeństwo pobierania modeli
-
-- Podczas pobierania na karcie modelu pojawia się przycisk **Anuluj** — możesz przerwać w dowolnym momencie.
-- Zamknięcie okna w trakcie pobierania bezpiecznie przerywa transfer.
-- Pliki Whisper GGML zapisywane są do ścieżki `.partial` i przenoszone na `ggml-*.bin` dopiero **po pełnym pobraniu** — częściowy plik nigdy nie zostanie pomylony z zainstalowanym modelem przy następnym uruchomieniu.
+VRAM modeli whisper.cpp podano dla optymalizacji GGML, znacznie niżej niż PyTorch Whisper (~10GB dla large). Wartości Sync pochodzą z benchmarku Faster-Whisper.
 
 ## Obsługa języków
 
-### Języki interfejsu
+- Interfejs: koreański, angielski, japoński, chiński, polski
+- Cele tłumaczenia (14): ko, en, ja, zh, es, fr, de, it, pt, ru, hu, ar, pl, fa
+- Rozpoznawanie mowy: ponad 100 języków przez whisper.cpp
 
-Koreański, Angielski, Japoński, Chiński, Polski (5 języków)
+## Przechowywanie danych
 
-### Języki docelowe tłumaczenia (14)
+Wszystko zostaje lokalnie w folderze użytkownika. Nic nie jest wysyłane.
 
-Koreański (ko), Angielski (en), Japoński (ja), Chiński (zh), Hiszpański (es), Francuski (fr), Niemiecki (de), Włoski (it), Portugalski (pt), Rosyjski (ru), Węgierski (hu), Arabski (ar), Polski (pl), **Perski (fa)**
+| Dane | Lokalizacja |
+| --- | --- |
+| Ustawienia i klucze API | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
+| Historia zadań | `%APPDATA%\whispersubtranslate\history.json` (do 200 wpisów) |
+| Logi błędów | `%APPDATA%\whispersubtranslate\logs\errors.log` |
+| Modele | `_models/` (folder aplikacji) |
 
-### Języki rozpoznawania audio
-
-whisper.cpp obsługuje ponad 100 języków, w tym wszystkie główne języki świata (angielski, hiszpański, francuski, niemiecki, włoski, portugalski, rosyjski, chiński, japoński, koreański, arabski, hindi, turecki i wiele innych).
-
-## Modele i wydajność
-
-Modele są przechowywane w `_models/` i automatycznie pobierane na żądanie. Wybierz rozmiar odpowiedni dla Twojego komputera; większe modele są wolniejsze, ale mogą być dokładniejsze. CUDA jest używana gdy dostępna; w przeciwnym razie domyślnie CPU.
-
-| Model             | Rozmiar | VRAM | Szybkość      | Jakość     |
-| ----------------- | ------- | ---- | ------------- | ---------- |
-| tiny              | ~75MB   | ~1GB | Najszybszy    | Podstawowa |
-| base              | ~142MB  | ~1GB | Szybki        | Dobra      |
-| small             | ~466MB  | ~2GB | Średnia       | Lepsza     |
-| medium            | ~1.5GB  | ~4GB | Wolna         | Świetna    |
-| large-v3          | ~3GB    | ~5GB | Najwolniejsza | Najlepsza  |
-| large-v3-turbo ⭐ | ~809MB  | ~4GB | Szybka        | Doskonała  |
-
-> Uwaga: Wymagania VRAM dotyczą [whisper.cpp](https://github.com/ggerganov/whisper.cpp) z optymalizacją GGML, która jest znacznie niższa niż PyTorch Whisper (~10GB dla large). Przetestowano: large-v3 działa na GPU z 6GB VRAM.
-
-## Strategia gałęzi
-
-Pojedynczy trunk: `main` to jedyna długotrwała gałąź. Maintainer commituje bezpośrednio na `main` i taguje wydania (np. `v2.2.0`).
-
-**Współtworzący:** otwórz Pull Request z forka. Krótkotrwałe gałęzie `feature/<scope>` są mile widziane; zostaną zmergowane przez squash do `main`.
+Klucze API są przechowywane lokalnie w bezpiecznym magazynie systemu, a plik konfiguracji nigdy nie trafia do Git ani do builda. Historia zadań jest opcjonalna (przełącznik w Ustawieniach) i ograniczona do 200 wpisów.
 
 ## Współtworzenie
 
-> **Chcesz dodać nowy język?** Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
+Pull Requesty mile widziane. Nazewnictwo gałęzi, styl commitów, lista testów ręcznych i ręczne budowanie whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md). Aby dodać język, zobacz [Przewodnik tłumaczeń](./TRANSLATION.md).
 
-### 1) Gałęzie i nazewnictwo
-
-Używaj jednego typu gałęzi do wszystkiego (funkcje, poprawki, dokumentacja):
-
-| Wzorzec                         | Użycie           |
-| ------------------------------- | ---------------- |
-| `feature/<scope>-<krótki-opis>` | Wszystkie zmiany |
-
-Zalecane wartości <scope>: i18n, ui, translation, whisper, model, download, queue, progress, ipc, main, renderer, updater, config, build, logging, perf, docs, readme
-
-Przykłady:
-
-```text
-feature/i18n-api-modal
-feature/ui-progress-smoothing
-feature/translation-deepl-test
-feature/main-disable-devtools
-```
-
-### 2) Styl commitów (Conventional Commits)
-
-Używaj prefiksów jak `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `perf:`, `build:`.
-
-```text
-feat: add DeepL connection test
-fix: localize target language note
-```
-
-### 3) Wytyczne dotyczące kodu
-
-| Temat            | Wytyczna                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| I18N             | Nie wstawiaj stringów UI/logów bezpośrednio. Dodaj je do tabel I18N i odwołuj się przez klucz |
-| UX               | Utrzymuj spójność stanów postępu/ETA/kolejki; unikaj regresji                                 |
-| Zakres           | Preferuj małe, skupione zmiany z czytelnymi nazwami funkcji                                   |
-| Wielojęzyczny UI | Aktualizuj ko/en/ja/zh/pl razem przy dodawaniu UI                                             |
-
-### 4) Ręczna lista kontrolna testów
-
-| Scenariusz               | Weryfikacja                                                             |
-| ------------------------ | ----------------------------------------------------------------------- |
-| Tylko ekstrakcja         | Przepływy start/stop, zachowanie postępu/ETA                            |
-| Ekstrakcja + tłumaczenie | Wynik end-to-end i finalna nazwa SRT                                    |
-| Pobieranie modelu        | Brakująca ścieżka modelu; anulowanie/zatrzymanie w trakcie pobierania   |
-| Przełączanie I18N        | Etykieta języka docelowego, teksty modalu API aktualizują się poprawnie |
-| Silniki tłumaczenia      | MyMemory (bez klucza), DeepL/OpenAI (z kluczami)                        |
-| Budowanie                | `npm run build-win` kończy się sukcesem                                 |
-
-### 5) Lista kontrolna Pull Request
-
-| Element     | Oczekiwanie                                                   |
-| ----------- | ------------------------------------------------------------- |
-| Opis        | Jasne wyjaśnienie zmian                                       |
-| Wpływ na UI | Zrzuty ekranu dla zmian wizualnych                            |
-| Testowanie  | Kroki do odtworzenia/weryfikacji                              |
-| Zasoby      | Brak dużych plików binarnych w Git; zrzuty ekranu w `assets/` |
-
-## Wsparcie
-
-Jeśli ten projekt oszczędza Twój czas lub pomaga publikować lepsze napisy, wsparcie bezpośrednio przyspiesza rozwój:
-
-- Twoje wsparcie pomaga: poprawki błędów, niezawodność pobierania modeli, dopracowanie UI, nowe opcje tłumaczenia i budowanie/testowanie Windows.
-- Transparentność: Nie sprzedaję danych; fundusze idą na czas rozwoju, infrastrukturę dla buildów i kredyty testowe dla API tłumaczeń.
-- Jednorazowi sponsorzy są wymienieni w README i notatkach wydania (możliwość rezygnacji).
-- Miesięczni sponsorzy ($3/mies. przez GitHub Sponsors, automatyczne rozliczanie) otrzymują również priorytetową obsługę zgłoszeń "Sponsor Request" (best-effort).
-
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/Jednorazowo_$3-Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h) [![PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ZEWFKDX595ESJ)
-
-## Podziękowania
-
-- whisper.cpp został opracowany przez Georgi Gerganova: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
-- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+Pomóż tłumaczyć na [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/); teksty do tłumaczenia są w [`locales/*.json`](../locales/).
 
 ## Współtwórcy
 
-Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate! 🙏
+Dziękujemy wszystkim, którzy pomagają ulepszać WhisperSubTranslate.
 
 <a href="https://github.com/Blue-B"><img src="https://github.com/Blue-B.png?size=80" width="80" alt="Blue-B" title="Blue-B" /></a>
 <a href="https://github.com/matbgn"><img src="https://github.com/matbgn.png?size=80" width="80" alt="matbgn" title="matbgn" /></a>
 
-## Aktywność repozytorium
+## Wsparcie
 
-![Repobeats analytics image](https://repobeats.axiom.co/api/embed/bb4da4df4fdd4f9193f24a6647d5f10022e9bab9.svg 'Repobeats analytics image')
+Jeśli ten projekt oszczędza Ci czas, wsparcie pomaga w poprawkach błędów, niezawodności modeli i nowych opcjach tłumaczeń.
 
-## Tłumaczenia
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/Blue-B) [![Buy Me A Coffee](https://img.shields.io/badge/Buy_Me_A_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=000)](https://buymeacoffee.com/beckycode7h) [![PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ZEWFKDX595ESJ)
 
-Pomóż przetłumaczyć WhisperSubTranslate na swój język! Teksty do tłumaczenia znajdują się w [`locales/*.json`](../locales/) i są zarządzane w [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/). Zobacz [Przewodnik tłumaczenia](TRANSLATION.md).
+## Podziękowania
 
-<a href="https://hosted.weblate.org/engage/whispersubtranslate/">
-  <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Stan tłumaczenia" />
-</a>
-
-## Historia gwiazdek
-
-<a href="https://star-history.com/#Blue-B/WhisperSubTranslate&Date">
-  <img src="https://api.star-history.com/svg?repos=Blue-B/WhisperSubTranslate&type=Date" alt="Star History Chart" width="600" />
-</a>
+- whisper.cpp: Georgi Gerganov [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- Hy-MT2: Tencent [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
+- FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
 
 ## Licencja
 
-GPL-3.0. Zewnętrzne API/usługi (DeepL, OpenAI itp.) wymagają przestrzegania ich własnych warunków.
+GPL-3.0. Zewnętrzne API i usługi (DeepL, OpenAI, Gemini itd.) wymagają zgodności z ich własnymi warunkami.

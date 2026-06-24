@@ -1048,6 +1048,14 @@ body::after {
   font-weight: 600;
   font-size: 11px;
 }
+.model-req-desc {
+  display: inline-block;
+  margin-bottom: 2px;
+  color: var(--text);
+  font-weight: 500;
+  white-space: normal;
+  word-break: keep-all;
+}
 .model-card-head {
   display: flex;
   align-items: flex-start;
@@ -1585,6 +1593,22 @@ body::after {
 }
 .setting-card * {
   cursor: inherit;
+}
+
+/* 싱크 우선 엔진이 켜지면 이 카드의 선택은 무시된다 — 흐리게 + 잠금 표시 */
+.setting-card--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.setting-card--locked .custom-select-wrapper,
+.setting-card--locked .setting-select {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.sync-lock-note {
+  margin-top: 4px;
+  color: var(--mauve);
+  font-weight: 600;
 }
 .setting-card .custom-select-dropdown,
 .setting-card .custom-select-dropdown * {

@@ -766,4 +766,6 @@ async function downloadVadModel() {
   }
 }
 
-main();
+main().catch((e) => {
+  console.log('  [postinstall] step skipped:', e.message);
+});

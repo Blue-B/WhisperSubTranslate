@@ -95,7 +95,9 @@
     "whisper-base": "Dokładniejszy niż Tiny. Do ogólnych napisów głosowych.",
     "whisper-small": "Szybka ekstrakcja napisów. Dobry do codziennego użytku.",
     "whisper-medium": "Równowaga dokładności i szybkości. Domyślne polecane.",
-    "whisper-large-v3-turbo": "Dokładność Large + 8x szybkość. Polecane dla wydajnych GPU."
+    "whisper-large-v3-turbo": "Dokładność Large + 8x szybkość. Polecane dla wydajnych GPU.",
+    "whisper-large-v2-sync": "Osobny silnik (Faster-Whisper) naprawiający napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z large-v3-turbo. Wg wyboru urządzenia. ~4,5GB GPU, wolny.",
+    "whisper-large-v2-sync-lite": "Uruchamia ten sam plik w int8, lżej. ~3GB VRAM dla słabszych GPU, bez dodatkowego pobierania. Synchronizacja prawie identyczna."
   },
   "modelTagTranslation": "MT",
   "modelTagAsr": "ASR",
@@ -204,7 +206,7 @@
   "allDoneSrtOnly": "Wszystkie tłumaczenia zakończone!",
   "allStopped": "Przetwarzanie zatrzymane.",
   "apiKeyMissingFallback": "Brak klucza API — przełączono na „Bez tłumaczenia”.",
-  "allFailed": "⚠️ Wszystkie tłumaczenia nie powiodły się — sprawdź klucz API/limit",
+  "allFailed": "⚠️ Wszystko nie powiodło się — sprawdź log powyżej",
   "allDoneWithErrors": "Zakończono — niektóre pliki nie powiodły się (sprawdź folder wyjściowy)",
   "labelLocalModel": "Model lokalny",
   "statusLabel": "Status",
@@ -252,5 +254,21 @@
   "updateAvailable": "Dostępna nowa wersja",
   "updateDownload": "Pobierz",
   "updateLater": "Później",
-  "updateChecking": "Sprawdzanie aktualizacji..."
+  "updateChecking": "Sprawdzanie aktualizacji...",
+  "deviceSyncLockNote": "Respektuje ustawienie urządzenia. Auto próbuje najpierw GPU i wraca do CPU po błędzie. CPU oznacza tylko CPU, więc jest wolne.",
+  "errorTranslationPassthrough": "Silnik tłumaczenia zawiódł na prawie wszystkich liniach (model lokalny mógł ulec awarii). Napisy nie zostały przetłumaczone. Spróbuj ponownie, zmień urządzenie na CPU lub wybierz inną metodę tłumaczenia.",
+  "allFailedLocal": "⚠️ Wszystkie tłumaczenia nie powiodły się — model lokalny zawiódł. Spróbuj ponownie lub zmień urządzenie na CPU",
+  "allFailedApi": "⚠️ Wszystkie tłumaczenia nie powiodły się — sprawdź klucz API lub limit",
+  "modelNames": {
+    "hy-mt-1.8b": "Hy-MT2 · 1.8B",
+    "hy-mt-7b": "Hy-MT2 · 7B",
+    "whisper-tiny": "Whisper · Tiny",
+    "whisper-base": "Whisper · Base",
+    "whisper-small": "Whisper · Small",
+    "whisper-medium": "Whisper · Medium",
+    "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v2-sync": "Whisper · Large v2 Sync",
+    "whisper-large-v2-sync-lite": "Whisper · Large v2 Sync Lite"
+  },
+  "modelSizeShared": "Wspólny z precyzyjnym"
 }

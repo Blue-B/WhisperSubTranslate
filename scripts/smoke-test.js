@@ -2,7 +2,7 @@
 
 const assert = require('assert');
 const EnhancedSubtitleTranslator = require('../translator-enhanced');
-const { applySrtCleanup, isSdhOnlyText, splitLongCues } = require('../srt-cleanup');
+const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
 
 function runSrtCleanup() {
   // no-op when no options selected
@@ -44,25 +44,32 @@ function runSrtCleanup() {
   assert.strictEqual(applySrtCleanup(garbage, { removeSDH: true }), garbage);
 }
 
-function runSplitLongCues() {
-  // 짧은 말이 길게 늘어진 큐(노래/끄는 발화)는 시간이 길어도 글자 단위로 토막내면 안 된다.
-  // 회귀: "감사합니다"(26초)가 "감사/합니/다."로 깨지던 버그.
-  const heldKo = '1\n00:00:59,620 --> 00:01:26,220\n감사합니다.\n';
-  const heldOut = splitLongCues(heldKo, { maxDurationSec: 6 });
-  assert.ok(heldOut.includes('감사합니다.'), '짧은 늘어진 CJK 큐는 한 덩어리로 유지돼야 함');
-  assert.ok(!/\n감사\n/.test(heldOut) && !/\n합니\n/.test(heldOut), '단어 중간을 토막내면 안 됨');
+function runSrtFromWhisperJson() {
+  // 실측 재현: VAD로 "ありがとうございます"(10자) 세그먼트가 59.85s->87.26s(27.4초)로 늘어났다.
+  // (참고: -ojf 토큰 offsets는 VAD 압축 타임라인이라 원본 복원 불가 → 세그먼트 from/to만 쓴다.)
+  // 시작은 그대로, 길이는 텍스트 분량(10자*350=3500ms)로 캅되어야 한다.
+  const json = JSON.stringify({
+    transcription: [
+      { offsets: { from: 41370, to: 43360 }, text: ' どうだいいところだろ' },
+      { offsets: { from: 59850, to: 87260 }, text: ' ありがとうございます' },
+      { offsets: { from: 87260, to: 88250 }, text: ' どうですか' },
+    ],
+  });
+  const srt = srtFromWhisperJson(json, { perCharMs: 350, minDisplayMs: 1200, maxDisplayMs: 7000 });
+  assert.ok(srt && srt.includes('ありがとうございます'), 'SRT 생성됨');
+  const blocks = srt.trim().split(/\n\s*\n/);
+  // 1번: 일반 대사는 원본 길이 그대로 (41.37->43.36)
+  assert.ok(/00:00:41,370 --> 00:00:43,360/.test(blocks[0]), '일반 대사는 원본 시각 유지: ' + blocks[0]);
+  // 2번: 늘어진 것은 시작 그대로(59.85), 끝은 텍스트 비례 칅(59.85+3.5=63.35), 87s로 늘어면 안됨
+  assert.ok(/00:00:59,850 --> 00:01:03,350/.test(blocks[1]), '늘어진 큐는 텍스트 분량으로 칅: ' + blocks[1]);
+  assert.ok(!/--> 00:01:27,260/.test(blocks[1]), '늘어진 큐의 끝이 87.26s로 떨어지면 안 됨: ' + blocks[1]);
+  // 3번: 다음 대사는 제 위치(87.26)에 뜨
+  assert.ok(/00:01:27,260 --> /.test(srt), '다음 대사는 실제 발화 시각에 뜨');
 
-  // 라틴 짧은 말도 동일 — 단어 경계로도 쪼개면 안 됨
-  const heldEn = splitLongCues('1\n00:00:00,000 --> 00:00:20,000\nThank you so much.\n', { maxDurationSec: 6 });
-  assert.ok(heldEn.includes('Thank you so much.'), '짧은 라틴 큐는 유지돼야 함');
-
-  // 진짜 긴 문장(글자 충분 + 오래 머묾)은 여전히 여러 큐로 분할돼야 함
-  const longKo =
-    '1\n00:00:00,000 --> 00:00:14,000\n' +
-    '오늘 아침에 일어나서 창밖을 보니 눈이 정말 많이 쌓여 있었고 길에는 사람들이 우산을 쓰고 천천히 걸어가고 있었다 정말 아름다운 풍경이었다\n';
-  const longOut = splitLongCues(longKo, { maxDurationSec: 6 });
-  const cueCount = longOut.split(/\n\s*\n/).filter((b) => b.includes('-->')).length;
-  assert.ok(cueCount >= 2, '긴 문장은 분할돼야 함');
+  // 폴백: 깨진 JSON/빈 입력은 null (호출측이 -osrt로 폴백)
+  assert.strictEqual(srtFromWhisperJson('not json'), null);
+  assert.strictEqual(srtFromWhisperJson('{"transcription":[]}'), null);
+  assert.strictEqual(srtFromWhisperJson(''), null);
 }
 
 function run() {
@@ -86,7 +93,7 @@ function run() {
   assert.deepStrictEqual(parsed.translations, ['안녕']);
 
   runSrtCleanup();
-  runSplitLongCues();
+  runSrtFromWhisperJson();
 
   console.log('Smoke tests passed.');
 }
