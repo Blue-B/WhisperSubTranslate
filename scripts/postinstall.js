@@ -27,6 +27,18 @@ const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 const VAD_MODEL_PATH = path.join(WHISPER_CPP_DIR, VAD_MODEL_NAME);
 const VAD_MODEL_URL = 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin';
 
+function hasWhisperRuntimeLibraries() {
+  if (!fs.existsSync(WHISPER_CPP_DIR)) return false;
+  if (process.platform === 'win32') {
+    return fs.existsSync(WHISPER_CLI);
+  }
+
+  const files = fs.readdirSync(WHISPER_CPP_DIR);
+  const hasWhisperLib = files.some((file) => /^libwhisper.*\.(so|dylib)(\..*)?$/i.test(file));
+  const hasGgmlLib = files.some((file) => /^libggml.*\.(so|dylib)(\..*)?$/i.test(file));
+  return fs.existsSync(WHISPER_CLI) && hasWhisperLib && hasGgmlLib;
+}
+
 /**
  * Fetch latest release info from GitHub API
  * @returns {Promise<Object>} Release data
@@ -334,6 +346,7 @@ async function buildWhisperFromSource(withCuda) {
     if (process.platform !== 'win32') {
       const buildDir = path.join(buildTempDir, 'build');
       const soDirs = [
+        path.join(buildDir, 'bin'),
         path.join(buildDir, 'src'), // libwhisper.so
         path.join(buildDir, 'ggml', 'src'), // libggml*.so
         path.join(buildDir, 'ggml', 'src', 'ggml-cuda'), // libggml-cuda.so
@@ -468,9 +481,13 @@ async function main() {
   console.log('\n[postinstall] Checking whisper-cpp...\n');
 
   // Skip if already installed
-  if (fs.existsSync(WHISPER_CLI)) {
+  if (hasWhisperRuntimeLibraries()) {
     console.log('  whisper-cpp already installed. Skipping.\n');
     return;
+  }
+
+  if (fs.existsSync(WHISPER_CLI)) {
+    console.log('  whisper-cpp install is incomplete. Reinstalling missing runtime libraries...\n');
   }
 
   console.log('  whisper-cpp not found. Downloading...\n');

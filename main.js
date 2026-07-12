@@ -2056,6 +2056,7 @@ function extractSingleFile(filePath, model, language, device) {
       }
 
       const mainSpawnEnv = getWhisperSpawnEnv(chosenDevice, exeCwd);
+      let stderrBuffer = '';
       currentProcess = spawn(exePath, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -2078,6 +2079,7 @@ function extractSingleFile(filePath, model, language, device) {
 
       currentProcess.stderr.on('data', (data) => {
         const output = data.toString('utf8');
+        stderrBuffer = (stderrBuffer + output).slice(-8192);
         // 일반 경로는 whisper -pp %가 곧 파일 전체 진행률 → 그대로 전송
         const pct = parseWhisperProgress(output);
         if (pct != null) sendExtractionProgress(pct);
@@ -2147,6 +2149,14 @@ function extractSingleFile(filePath, model, language, device) {
           resolve(finalSrtPath);
         } else {
           let errorMessage = `Error code: ${code}`;
+          const stderrText = stderrBuffer.toLowerCase();
+          const looksLikeDyldMissingLib =
+            process.platform === 'darwin' &&
+            (stderrText.includes('dyld: library not loaded') ||
+              stderrText.includes('library not loaded:') ||
+              stderrText.includes('image not found') ||
+              stderrText.includes('no such file') ||
+              stderrText.includes('.dylib'));
           if (code === 3221225785) {
             // 0xC0000139 STATUS_ENTRYPOINT_NOT_FOUND
             const cpuAvailable = fs.existsSync(cpuExePath);
@@ -2170,6 +2180,10 @@ function extractSingleFile(filePath, model, language, device) {
               'Download: https://aka.ms/vs/17/release/vc_redist.x64.exe';
           } else if (code === 3221226505) {
             errorMessage = 'GPU memory shortage or driver issue';
+          } else if (looksLikeDyldMissingLib) {
+            errorMessage =
+              `${WHISPER_CLI_NAME} failed to launch on macOS because a required shared library is missing. ` +
+              'Run npm install again to restore whisper-cpp, or rebuild it so libwhisper*.dylib and libggml*.dylib are copied into whisper-cpp/.';
           } else if (code === null || code === undefined) {
             errorMessage = 'Process terminated abnormally (possible memory shortage)';
           } else if (code === 1) {

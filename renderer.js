@@ -1841,6 +1841,7 @@ const LANG_NAMES_I18N = {
     hu: '헝가리어',
     ar: '아랍어',
     pl: '폴란드어',
+    tr: '터키어',
     fa: '페르시아어',
   },
   en: {
@@ -1857,6 +1858,7 @@ const LANG_NAMES_I18N = {
     hu: 'Hungarian',
     ar: 'Arabic',
     pl: 'Polish',
+    tr: 'Turkish',
     fa: 'Persian',
   },
   ja: {
@@ -1873,6 +1875,7 @@ const LANG_NAMES_I18N = {
     hu: 'ハンガリー語',
     ar: 'アラビア語',
     pl: 'ポーランド語',
+    tr: 'トルコ語',
     fa: 'ペルシア語',
   },
   zh: {
@@ -1889,6 +1892,7 @@ const LANG_NAMES_I18N = {
     hu: '匈牙利语',
     ar: '阿拉伯语',
     pl: '波兰语',
+    tr: '土耳其语',
     fa: '波斯语',
   },
   pl: {
@@ -1905,6 +1909,7 @@ const LANG_NAMES_I18N = {
     hu: 'Węgierski',
     ar: 'Arabski',
     pl: 'Polski',
+    tr: 'Turecki',
     fa: 'Perski',
   },
 };
