@@ -101,7 +101,7 @@ whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 
 ## 언어 지원
 
 - UI: 한국어, 영어, 일본어, 중국어, 폴란드어
-- 번역 대상(14개): ko, en, ja, zh, es, fr, de, it, pt, ru, hu, ar, pl, fa
+- 번역 대상(15개): ko, en, ja, zh, es, fr, de, it, pt, ru, hu, ar, pl, tr, fa
 - 음성 인식: whisper.cpp로 100개 이상 언어
 
 ## 데이터 저장
@@ -129,6 +129,7 @@ WhisperSubTranslate를 함께 만들어주는 모든 분께 감사합니다.
 
 <a href="https://github.com/Blue-B"><img src="https://github.com/Blue-B.png?size=80" width="80" alt="Blue-B" title="Blue-B" /></a>
 <a href="https://github.com/matbgn"><img src="https://github.com/matbgn.png?size=80" width="80" alt="matbgn" title="matbgn" /></a>
+<a href="https://github.com/AtillaTahak"><img src="https://github.com/AtillaTahak.png?size=80" width="80" alt="AtillaTahak" title="AtillaTahak" /></a>
 
 ## 후원
 

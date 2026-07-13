@@ -8,7 +8,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync, execSync, spawnSync } = require('child_process');
 
 // Constants
 const WHISPER_CPP_DIR = path.join(__dirname, '..', 'whisper-cpp');
@@ -27,16 +27,23 @@ const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 const VAD_MODEL_PATH = path.join(WHISPER_CPP_DIR, VAD_MODEL_NAME);
 const VAD_MODEL_URL = 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin';
 
-function hasWhisperRuntimeLibraries() {
-  if (!fs.existsSync(WHISPER_CPP_DIR)) return false;
-  if (process.platform === 'win32') {
-    return fs.existsSync(WHISPER_CLI);
+function hasWhisperRuntimeLibraries(cliPath = WHISPER_CLI, runtimeDir = WHISPER_CPP_DIR) {
+  if (!fs.existsSync(cliPath)) return false;
+
+  const env = { ...process.env };
+  if (process.platform !== 'win32') {
+    const libraryPath = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
+    env[libraryPath] = [runtimeDir, env[libraryPath]].filter(Boolean).join(path.delimiter);
   }
 
-  const files = fs.readdirSync(WHISPER_CPP_DIR);
-  const hasWhisperLib = files.some((file) => /^libwhisper.*\.(so|dylib)(\..*)?$/i.test(file));
-  const hasGgmlLib = files.some((file) => /^libggml.*\.(so|dylib)(\..*)?$/i.test(file));
-  return fs.existsSync(WHISPER_CLI) && hasWhisperLib && hasGgmlLib;
+  const result = spawnSync(cliPath, ['--help'], {
+    cwd: runtimeDir,
+    env,
+    stdio: 'ignore',
+    timeout: 5000,
+    windowsHide: true,
+  });
+  return result.status === 0;
 }
 
 /**
@@ -182,21 +189,23 @@ async function downloadFile(url, destPath) {
  * @param {string} archivePath - Path to archive file
  * @param {string} destDir - Destination directory
  */
-async function extractZip(archivePath, destDir) {
-  if (archivePath.endsWith('.tar.gz') || archivePath.endsWith('.tgz')) {
-    console.log('  Extracting tar.gz...');
-    execSync(`tar -xzf "${archivePath}" -C "${destDir}"`, { stdio: 'inherit' });
-  } else if (process.platform === 'win32') {
-    console.log('  Extracting...');
-    // Use PowerShell with proper escaping
-    const psCommand = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
-    execSync(`powershell -Command "${psCommand}"`, {
-      stdio: 'inherit',
-      windowsHide: true,
-    });
-  } else {
-    // Linux/Mac: use unzip
-    execSync(`unzip -o "${archivePath}" -d "${destDir}"`, { stdio: 'inherit' });
+function extractZip(archivePath, destDir) {
+  try {
+    if (archivePath.endsWith('.tar.gz') || archivePath.endsWith('.tgz')) {
+      console.log('  Extracting tar.gz...');
+      execFileSync('tar', ['-xzf', archivePath, '-C', destDir], { stdio: 'inherit' });
+    } else if (process.platform === 'win32') {
+      console.log('  Extracting...');
+      const psCommand = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+      execFileSync('powershell', ['-NoProfile', '-Command', psCommand], {
+        stdio: 'inherit',
+        windowsHide: true,
+      });
+    } else {
+      execFileSync('unzip', ['-o', archivePath, '-d', destDir], { stdio: 'inherit' });
+    }
+  } catch (error) {
+    throw new Error(`Failed to extract ${path.basename(archivePath)}: ${error.message}`, { cause: error });
   }
 }
 
@@ -383,6 +392,11 @@ async function buildWhisperFromSource(withCuda) {
       if (soCount > 0) {
         console.log(`  Copied ${soCount} shared libraries to whisper-cpp/`);
       }
+    }
+
+    if (!hasWhisperRuntimeLibraries()) {
+      console.log('  [WARN] Build completed, but whisper-cli could not load its runtime libraries.');
+      return false;
     }
 
     console.log('\n  [Build] whisper.cpp built and installed successfully!\n');
@@ -629,18 +643,19 @@ async function main() {
     }
 
     // 8. Verify installation and set executable permission
-    if (fs.existsSync(WHISPER_CLI)) {
-      if (process.platform !== 'win32') {
-        try {
-          fs.chmodSync(WHISPER_CLI, 0o755);
-        } catch (_e) {
-          /* ignore */
-        }
+    if (fs.existsSync(WHISPER_CLI) && process.platform !== 'win32') {
+      try {
+        fs.chmodSync(WHISPER_CLI, 0o755);
+      } catch (_e) {
+        /* ignore */
       }
+    }
+
+    if (hasWhisperRuntimeLibraries()) {
       console.log('\n  whisper-cpp installed successfully!\n');
     } else {
-      console.log('\n  [WARN] Installation may be incomplete. Please check whisper-cpp folder.\n');
-      console.log('  Expected file:', WHISPER_CLI);
+      console.log('\n  [WARN] Installation is incomplete or whisper-cli cannot load its runtime libraries.\n');
+      console.log('  Expected executable:', WHISPER_CLI);
     }
 
     // 9. Download CPU fallback build (when main build is CUDA, Windows only)
@@ -783,6 +798,10 @@ async function downloadVadModel() {
   }
 }
 
-main().catch((e) => {
-  console.log('  [postinstall] step skipped:', e.message);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.log('  [postinstall] step skipped:', e.message);
+  });
+}
+
+module.exports = { hasWhisperRuntimeLibraries };

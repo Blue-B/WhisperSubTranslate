@@ -18,7 +18,6 @@
  */
 
 const path = require('path');
-const { spawn } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const BOOT_TIMEOUT_MS = 30_000;
@@ -80,7 +79,24 @@ async function run() {
   });
   if (!uiPresent) throw new Error('No main UI element found in DOM');
 
-  // 4. Idle window — let any async errors surface.
+  // 4. Turkish is available and selectable as a translation target.
+  const translationSelect = window.locator('#translationSelect');
+  const originalMethod = await translationSelect.inputValue();
+  await translationSelect.selectOption('mymemory', { force: true });
+  await window.locator('#targetLanguageGroup').waitFor({ state: 'visible' });
+  await window.locator('#langMsTrigger').click();
+  const turkishTarget = window.locator('#targetLanguageList input[value="tr"]');
+  if ((await turkishTarget.count()) !== 1) throw new Error('Turkish translation target is missing from the UI');
+  const targetLabel = await turkishTarget.locator('xpath=..').textContent();
+  if (!targetLabel?.includes('(tr)')) throw new Error('Turkish translation target label is incorrect');
+  const wasChecked = await turkishTarget.isChecked();
+  await turkishTarget.uncheck();
+  await turkishTarget.check();
+  if (!(await turkishTarget.isChecked())) throw new Error('Turkish translation target cannot be selected');
+  if (!wasChecked) await turkishTarget.uncheck();
+  await translationSelect.selectOption(originalMethod, { force: true });
+
+  // 5. Idle window — let any async errors surface.
   await window.waitForTimeout(IDLE_WATCH_MS);
 
   await electronApp.close();

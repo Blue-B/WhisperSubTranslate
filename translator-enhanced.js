@@ -1070,6 +1070,7 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       hu: 'Hungarian (Magyar)',
       ar: 'Arabic (العربية)',
       pl: 'Polish (Polski)',
+      tr: 'Turkish (Türkçe)',
       fa: 'Persian (فارسی)',
       hi: 'Hindi (हिन्दी)',
       th: 'Thai (ไทย)',
@@ -1113,7 +1114,11 @@ IMPORTANT: Return ONLY the natural ${targetLang} translation without any quotati
       content = content.slice(firstBrace, lastBrace + 1);
     }
 
-    return JSON.parse(content);
+    try {
+      return JSON.parse(content);
+    } catch (error) {
+      throw new Error(`Invalid context-aware translation response: ${error.message}`, { cause: error });
+    }
   }
 
   buildContextAwarePrompt(batch, targetLang, context) {

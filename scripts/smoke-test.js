@@ -1,7 +1,11 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const EnhancedSubtitleTranslator = require('../translator-enhanced');
+const { hasWhisperRuntimeLibraries } = require('./postinstall');
 const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
 
 function runSrtCleanup() {
@@ -72,11 +76,23 @@ function runSrtFromWhisperJson() {
   assert.strictEqual(srtFromWhisperJson(''), null);
 }
 
+function runWhisperRuntimeProbe() {
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-runtime-probe-'));
+  try {
+    assert.strictEqual(hasWhisperRuntimeLibraries(path.join(runtimeDir, 'missing-cli'), runtimeDir), false);
+    assert.strictEqual(hasWhisperRuntimeLibraries(process.execPath, path.dirname(process.execPath)), true);
+  } finally {
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+  }
+}
+
 function run() {
   const translator = new EnhancedSubtitleTranslator();
 
   assert.strictEqual(translator.mapToDeepLLang('ko'), 'KO');
   assert.strictEqual(translator.mapToDeepLLang('hu'), 'HU');
+  assert.strictEqual(translator.mapToDeepLLang('tr'), 'TR');
+  assert.strictEqual(translator.mapToHumanLang('tr'), 'Turkish (Türkçe)');
   assert.strictEqual(translator.mapToHumanLang('fa'), 'Persian (فارسی)');
   // 순수 장식(기호/공백)만 있는 경우만 skip
   assert.strictEqual(translator.isNonDialogue('♪'), true);
@@ -91,9 +107,14 @@ function run() {
 
   const parsed = translator.parseContextAwareJson('```json\n{"translations":["안녕"],"summary":"greeting"}\n```');
   assert.deepStrictEqual(parsed.translations, ['안녕']);
+  assert.throws(
+    () => translator.parseContextAwareJson('not json'),
+    /Invalid context-aware translation response/
+  );
 
   runSrtCleanup();
   runSrtFromWhisperJson();
+  runWhisperRuntimeProbe();
 
   console.log('Smoke tests passed.');
 }
