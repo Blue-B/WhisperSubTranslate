@@ -13,8 +13,10 @@ on:
       - 'locales/**/*.json'
       - 'locales/i18n.functions.js'
 
+# The deploy key is scoped to this repository and is the only actor allowed to
+# bypass the PR rule for this generated-file update.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: i18n-build-${{ github.ref }}
@@ -25,9 +27,12 @@ jobs:
     name: Regenerate locales/i18n.js
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # The following push is the purpose of this job; no artifacts are uploaded.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # zizmor: ignore[artipacked] credentials are required for the final git push
+        with:
+          ssh-key: ${{ secrets.I18N_DEPLOY_KEY }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
 
