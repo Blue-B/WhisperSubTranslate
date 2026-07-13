@@ -1,54 +1,84 @@
 name: i18n
 
-# When translatable sources change on main (e.g. a Weblate sync), regenerate the
-# bundled locales/i18n.js so it never goes stale and the i18n:check guard in CI
-# (npm run check) stays green.
-#
-# Loop-safety: this job only commits locales/i18n.js, which does NOT match the
-# path filter below, so the bot's own commit never re-triggers the workflow.
+# Weblate changes only the JSON source files. After unprivileged CI finishes,
+# this trusted default-branch workflow regenerates the bundled browser file on
+# the Weblate branch. It fetches fixed JSON paths and executes no PR code.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'locales/**/*.json'
-      - 'locales/i18n.functions.js'
+  workflow_run: # zizmor: ignore[dangerous-triggers] only JSON data is fetched; all executed code comes from main
+    workflows: [CI]
+    types: [completed]
 
-# The deploy key is scoped to this repository and is the only actor allowed to
-# bypass the PR rule for this generated-file update.
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: i18n-build-${{ github.ref }}
+  group: i18n-build-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
   rebuild:
-    name: Regenerate locales/i18n.js
+    name: Update generated locale bundle
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'weblate' &&
+      github.event.workflow_run.head_repository.full_name == 'weblate/WhisperSubTranslate' &&
+      github.event.workflow_run.head_branch == 'weblate-whispersubtranslate-ui'
     runs-on: ubuntu-latest
     steps:
-      # The following push is the purpose of this job; no artifacts are uploaded.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # zizmor: ignore[artipacked] credentials are required for the final git push
+      - name: Checkout trusted generator
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ssh-key: ${{ secrets.I18N_DEPLOY_KEY }}
+          ref: main
+          path: base
+          persist-credentials: false
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-
-      # build-i18n.js has no third-party dependencies, so we skip `npm ci`
-      # (and its heavy CUDA/whisper postinstall).
-      - name: Regenerate
-        run: node scripts/build-i18n.js
-
-      - name: Commit if changed
+      - name: Regenerate and update Weblate branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_REF: weblate-whispersubtranslate-ui
+          HEAD_REPO: weblate/WhisperSubTranslate
         run: |
-          if git diff --quiet -- locales/i18n.js; then
-            echo "locales/i18n.js already in sync — nothing to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add locales/i18n.js
-            git commit -m "chore(i18n): regenerate locales/i18n.js from translation sources [skip ci]"
-            git push
+          for lang in ko en ja zh pl; do
+            gh api --method GET "repos/$HEAD_REPO/contents/locales/$lang.json" \
+              -f ref="$HEAD_SHA" --jq .content | tr -d '\n' | base64 -d \
+              > "base/locales/$lang.json"
+          done
+
+          node base/scripts/build-i18n.js
+
+          gh api --method GET "repos/$HEAD_REPO/contents/locales/i18n.js" \
+            -f ref="$HEAD_SHA" --jq .content | tr -d '\n' | base64 -d \
+            > "$RUNNER_TEMP/current-i18n.js"
+          if cmp -s base/locales/i18n.js "$RUNNER_TEMP/current-i18n.js"; then
+            echo "locales/i18n.js already in sync, nothing to commit."
+            exit 0
           fi
+
+          current_head=$(gh api "repos/$HEAD_REPO/commits/$HEAD_REF" --jq .sha)
+          if [ "$current_head" != "$HEAD_SHA" ]; then
+            echo "Weblate branch moved during generation; the next CI run will retry."
+            exit 0
+          fi
+
+          file_sha=$(gh api --method GET "repos/$HEAD_REPO/contents/locales/i18n.js" \
+            -f ref="$HEAD_SHA" --jq .sha)
+          export file_sha
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+
+          with open("base/locales/i18n.js", "rb") as source:
+              content = base64.b64encode(source.read()).decode()
+          payload = {
+              "message": "chore(i18n): regenerate locales/i18n.js",
+              "content": content,
+              "sha": os.environ["file_sha"],
+              "branch": os.environ["HEAD_REF"],
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "i18n-update.json"), "w") as target:
+              json.dump(payload, target)
+          PY
+          gh api --method PUT "repos/$HEAD_REPO/contents/locales/i18n.js" \
+            --input "$RUNNER_TEMP/i18n-update.json" --silent
