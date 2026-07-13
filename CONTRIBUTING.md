@@ -1,12 +1,17 @@
 # Contributing to WhisperSubTranslate
 
-Thanks for helping out. This guide covers branching, commit style, the manual test checklist, and the manual whisper.cpp build. To add a language, see the [Translation Guide](docs/TRANSLATION.md).
+Thanks for helping out. This guide covers branching, commit style, the manual
+test checklist, and the manual whisper.cpp build. To add a UI language or
+translation target, see the [Translation Guide](docs/TRANSLATION.md).
 
 ## Branching model
 
-Single-trunk: `main` is the only long-lived branch. The maintainer commits directly to `main` and tags releases (for example `v2.5.0`).
+Single-trunk: `main` is the only long-lived branch. Changes normally go through
+a short-lived branch and Pull Request, then are squash-merged into `main`.
+The maintainer tags releases (for example `v2.5.0`).
 
-Contributors: open a Pull Request from your fork. Any short-lived `feature/<scope>` branch is welcome; it will be squash-merged into `main`.
+Contributors: open a Pull Request from your fork. Any short-lived
+`feature/<scope>` branch is welcome.
 
 | Pattern | Use for |
 | --- | --- |
@@ -39,6 +44,7 @@ fix: localize target language note
 | UX | Keep progress, ETA, and queue states consistent; avoid regressions |
 | Scope | Prefer small, focused changes with clear function names |
 | Multi-language UI | Update ko/en/ja/zh/pl together when adding UI |
+| Translation target | Update selector, names, provider maps, docs, and tests |
 
 ## Manual test checklist
 

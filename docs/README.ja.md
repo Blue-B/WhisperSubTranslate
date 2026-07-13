@@ -119,9 +119,12 @@ API キーは OS のセキュア保存でローカルに保存され、設定フ
 
 ## 貢献
 
-Pull Request を歓迎します。ブランチ命名、コミット規約、手動テストチェックリスト、whisper.cpp の手動ビルドは [CONTRIBUTING.md](../CONTRIBUTING.md) を参照してください。言語追加は [翻訳ガイド](./TRANSLATION.md) を参照してください。
+Pull Request を歓迎します。ブランチ命名、コミット規約、手動テストチェックリスト、
+whisper.cpp の手動ビルドは [CONTRIBUTING.md](../CONTRIBUTING.md) を参照してください。
+UI 言語または翻訳対象の追加は [翻訳ガイド](./TRANSLATION.md) を参照してください。
 
-[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) で翻訳に参加できます。翻訳文字列は [`locales/*.json`](../locales/) にあります。
+[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/) でアプリ UI の
+翻訳に参加できます。UI 翻訳文字列は [`locales/*.json`](../locales/) にあります。
 
 ## 貢献者
 

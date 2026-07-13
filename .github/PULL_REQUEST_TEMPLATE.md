@@ -15,8 +15,10 @@ Closes #(issue number)
 ## Checklist
 
 - [ ] I have tested my changes locally (`npm start`)
-- [ ] I have run `npm run lint` with no errors
+- [ ] I have run `npm run check` with no errors
 - [ ] I have updated all 5 UI languages (ko/en/ja/zh/pl) if adding UI strings
+- [ ] I have updated the selector, display names, provider mappings, docs, and
+  smoke tests if adding a translation target
 - [ ] I have added screenshots for visual changes (if applicable)
 - [ ] My changes don't include API keys, secrets, or large binary files
 

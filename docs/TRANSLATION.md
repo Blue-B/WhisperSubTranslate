@@ -4,13 +4,25 @@ Want to help translate WhisperSubTranslate into a new language? This guide cover
 
 ## Current Languages
 
-| Language | Code | UI  | Translation Target | Maintainer |
-| -------- | ---- | --- | ------------------ | ---------- |
-| Korean   | `ko` | ✅  | ✅                 | @Blue-B    |
-| English  | `en` | ✅  | ✅                 | @Blue-B    |
-| Japanese | `ja` | ✅  | ✅                 | @Blue-B    |
-| Chinese  | `zh` | ✅  | ✅                 | @Blue-B    |
-| Polish   | `pl` | ✅  | ✅                 | @Blue-B    |
+### UI languages
+
+| Language | Code | Maintainer |
+| --- | --- | --- |
+| Korean | `ko` | @Blue-B |
+| English | `en` | @Blue-B |
+| Japanese | `ja` | @Blue-B |
+| Chinese | `zh` | @Blue-B |
+| Polish | `pl` | @Blue-B |
+
+### Translation targets
+
+The app currently supports these 15 translation targets:
+
+`ko`, `en`, `ja`, `zh`, `es`, `fr`, `de`, `it`, `pt`, `ru`, `hu`, `ar`,
+`pl`, `tr`, `fa`
+
+Turkish (`tr`) is a translation target only. It does not provide a Turkish UI
+or a Turkish README yet.
 
 ## How to Add a New UI Language
 
@@ -29,7 +41,8 @@ npm run i18n:check      # verifies i18n.js is in sync (also runs in `npm run che
 
 > **Translate online**: You can also use [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/), which edits the same `locales/*.json` files.
 >
-> **Important**: All keys must be present (236 strings + 25 interpolation helpers). Missing keys fall back to English.
+> **Important**: Every key in `locales/en.json` and every helper in
+> `locales/i18n.functions.js` must be present. Missing keys fall back to English.
 
 ### 2. Add LOG_I18N mappings (renderer.js)
 
@@ -84,33 +97,43 @@ Create `README.xx.md` following the same structure as `README.md`, and add a lin
 
 Translation target languages allow users to translate subtitles into that language.
 
-### 1. Add to i18n.js
+### 1. Add display names (renderer.js)
 
-In each language block, add your language to the `LANG_NAMES_I18N` mapping:
+In `renderer.js`, add the language code to every UI language block in
+`LANG_NAMES_I18N`:
 
 ```js
-LANG_NAMES_I18N = {
+const LANG_NAMES_I18N = {
   ko: { ..., xx: '새언어' },
   en: { ..., xx: 'New Language' },
   // ... for all UI languages
 };
 ```
 
-### 2. Add to translator-enhanced.js
+### 2. Add provider mappings
 
-- `mapToHumanLang()` — add your language code mapping
-- `mapToDeepLLang()` — add DeepL language code (if supported by DeepL)
+- In `translator-enhanced.js`, update `mapToHumanLang()`.
+- In `translator-enhanced.js`, update `mapToDeepLLang()` if DeepL supports the language.
+- In `local-translator.js`, update `LANGUAGE_NAMES` for the bundled Hy-MT2 model.
 
 ### 3. Add to index.html
 
-Add an `<option>` to the target language selector:
+Add a checkbox to the `targetLanguageList` panel:
 
 ```html
-<select id="targetLanguageSelect">
+<div id="targetLanguageList">
   <!-- Add your language -->
-  <option value="xx">New Language</option>
-</select>
+  <label class="lang-check">
+    <input type="checkbox" value="xx" /><span>New Language (xx)</span>
+  </label>
+</div>
 ```
+
+### 4. Update docs and tests
+
+- Add the code to the translation-target list in every README.
+- Add smoke-test assertions for provider and human-readable mappings.
+- Run `npm run check` before submitting.
 
 ## Tips
 

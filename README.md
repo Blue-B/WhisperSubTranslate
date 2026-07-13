@@ -119,9 +119,14 @@ API keys are stored locally with OS-level safe storage, and the config is never 
 
 ## Contributing
 
-Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit style, the manual test checklist, and the manual whisper.cpp build. To add a language, see the [Translation Guide](docs/TRANSLATION.md).
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch
+naming, commit style, the manual test checklist, and the manual whisper.cpp
+build. To add a UI language or translation target, see the
+[Translation Guide](docs/TRANSLATION.md).
 
-Help translate on [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/); translatable strings live in [`locales/*.json`](locales/).
+Help translate the app UI on
+[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/); translatable
+UI strings live in [`locales/*.json`](locales/).
 
 <a href="https://hosted.weblate.org/engage/whispersubtranslate/">
   <img src="https://hosted.weblate.org/widget/whispersubtranslate/ui/multi-auto.svg" alt="Translation status" />

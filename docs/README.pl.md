@@ -119,9 +119,14 @@ Klucze API są przechowywane lokalnie w bezpiecznym magazynie systemu, a plik ko
 
 ## Współtworzenie
 
-Pull Requesty mile widziane. Nazewnictwo gałęzi, styl commitów, lista testów ręcznych i ręczne budowanie whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md). Aby dodać język, zobacz [Przewodnik tłumaczeń](./TRANSLATION.md).
+Pull Requesty mile widziane. Nazewnictwo gałęzi, styl commitów, lista testów
+ręcznych i ręczne budowanie whisper.cpp są w
+[CONTRIBUTING.md](../CONTRIBUTING.md). Aby dodać język interfejsu lub język
+docelowy tłumaczenia, zobacz [Przewodnik tłumaczeń](./TRANSLATION.md).
 
-Pomóż tłumaczyć na [Weblate](https://hosted.weblate.org/engage/whispersubtranslate/); teksty do tłumaczenia są w [`locales/*.json`](../locales/).
+Pomóż tłumaczyć interfejs aplikacji na
+[Weblate](https://hosted.weblate.org/engage/whispersubtranslate/); teksty
+interfejsu są w [`locales/*.json`](../locales/).
 
 ## Współtwórcy
 
