@@ -7,7 +7,7 @@ const I18N = {
   ko: {
     titleText: "WhisperSubTranslate",
     dropTitle: "파일을 여기에 놓아주세요",
-    dropHint1: "영상은 가져오세요. 자막은 맡겨주세요. 추출부터 번역까지 한 번에.",
+    dropHint1: "동영상이나 SRT 파일을 드래그 하거나 클릭해 선택하세요.",
     dropHint2: "MP4 · AVI · MKV · MOV · WMV · WEBM · SRT",
     queueTitle: "처리 대기열",
     clearQueueBtn: "대기열 삭제",
