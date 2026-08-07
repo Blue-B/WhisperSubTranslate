@@ -468,21 +468,46 @@ function ensureLlamaBinaries() {
     else if (pkg.includes('arm64')) cpu = 'arm64';
     return `--os=${os} --cpu=${cpu}`;
   }
-  let failures = 0;
-  for (const pkg of missing) {
+  // 병렬 설치: npm install은 동일 node_modules에 동시 쓰기가 안전하지 않아
+  // 3개 동시 제한으로 진행한다 (전체 순차 65분 → ~20분). 실패한 패키지는
+  // 마지막에 1회 재시도해 네트워크 일시 오류를 흡수한다.
+  async function installOne(pkg) {
     const cmd = `npm install --no-save --force --ignore-scripts ${flagsFor(pkg)} ${pkg}@${version}`;
-    try {
-      execSync(cmd, { stdio: 'inherit', cwd: root, timeout: 300000 });
-    } catch (err) {
-      failures++;
-      console.log(`  [llama] Failed to install ${pkg}: ${err.message}`);
+    return new Promise((resolve) => {
+      execFileSync(cmd, { stdio: 'inherit', cwd: root, timeout: 300000, shell: true });
+      resolve(true);
+    });
+  }
+  async function run() {
+    const failed = [];
+    const CONCURRENCY = 3;
+    let idx = 0;
+    async function worker() {
+      while (idx < missing.length) {
+        const pkg = missing[idx++];
+        try {
+          await installOne(pkg);
+        } catch (err) {
+          failed.push(pkg);
+          console.log(`  [llama] Failed to install ${pkg}: ${err.message}`);
+        }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
+    // 실패 재시도 1회 (동시 설치로 인한 레지스트리 일시 오류 대비)
+    const stillFailed = [];
+    for (const pkg of failed) {
+      try {
+        await installOne(pkg);
+      } catch (err) {
+        stillFailed.push(pkg);
+        console.log(`  [llama] Retry failed for ${pkg}: ${err.message}`);
+      }
+    }
+    return stillFailed;
   }
-  if (failures === 0) {
-    console.log('  [llama] Cross-platform binaries installed.\n');
-  } else {
-    console.log(`  [llama] ${failures} package(s) failed. Local translation may only work on the current platform.\n`);
-  }
+  const failures = run();
+  return failures;
 }
 
 /**
@@ -490,10 +515,17 @@ function ensureLlamaBinaries() {
  */
 async function main() {
   // Ensure node-llama-cpp binaries for all platforms
+  let llamaFailures = [];
   try {
-    ensureLlamaBinaries();
+    llamaFailures = (await ensureLlamaBinaries()) || [];
   } catch (e) {
     console.log('  [llama] Skipped:', e.message);
+    llamaFailures = ['<unknown>'];
+  }
+  if (llamaFailures.length > 0) {
+    markInstallFailure(`llama cross-platform binaries failed: ${llamaFailures.join(', ')}`);
+  } else {
+    console.log('  [llama] Cross-platform binaries installed.\n');
   }
 
   console.log('\n[postinstall] Checking whisper-cpp...\n');
@@ -769,12 +801,32 @@ async function main() {
   } catch (error) {
     console.error('\n  [ERROR] Failed to download whisper-cpp:', error.message);
     console.log('  Please download manually from: https://github.com/ggml-org/whisper.cpp/releases\n');
-    // Exit 0 so npm install doesn't fail
+    // npm install 자체는 실패시키지 않되, 설치 실패를 CI/사용자가 감지할 수 있게
+    // 마커 파일을 남긴다 (이전엔 조용히 exit 0였다).
+    markInstallFailure(`whisper-cpp download/install failed: ${error.message}`);
+  }
+
+  // whisper-cpp 설치가 불완전하면 실패 마커 (런타임에서 경고 표시 가능)
+  if (!hasWhisperRuntimeLibraries()) {
+    markInstallFailure('whisper-cpp runtime libraries are missing or broken');
   }
 
   // Silero VAD model (separate from the whisper-cli release). Optional — a
   // failure here must NOT break the install; extraction degrades gracefully.
   await downloadVadModel();
+}
+
+// 설치 실패 마커: postinstall이 실패해도 npm install은 성공해야 하므로(설계),
+// 대신 실패 사실을 파일로 남겨 앱 실행 시/CI에서 감지할 수 있게 한다.
+function markInstallFailure(reason) {
+  try {
+    const markerPath = path.join(WHISPER_CPP_DIR, 'install-failed.txt');
+    fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
+    fs.writeFileSync(markerPath, `WhisperSubTranslate postinstall issue at ${new Date().toISOString()}\n${reason}\n`);
+    console.log(`  [WARN] install-failed.txt written: ${reason}`);
+  } catch (_e) {
+    /* ignore */
+  }
 }
 
 /**

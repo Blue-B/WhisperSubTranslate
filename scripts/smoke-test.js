@@ -112,7 +112,9 @@ async function runModelDownloadAbort() {
 
   try {
     require.cache[electronPath].exports = { app: { getPath: () => modelDir } };
-    https.get = (_url, callback) => {
+    // 구현이 https.get(url, { headers }, callback) 형태로 바뀌어 mock도 옵션 인자를 받는다.
+    https.get = (_url, _options, callback) => {
+      const cb = typeof _options === 'function' ? _options : callback;
       const request = new EventEmitter();
       request.destroy = () => {
         destroyed = true;
@@ -121,7 +123,7 @@ async function runModelDownloadAbort() {
       requestCount++;
       if (requestCount === 1) {
         queueMicrotask(() =>
-          callback({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} })
+          cb({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} })
         );
       } else {
         queueMicrotask(() => controller.abort(new Error('ABORTED: test download')));
@@ -135,7 +137,8 @@ async function runModelDownloadAbort() {
 
     requestCount = 0;
     destroyed = false;
-    https.get = () => {
+    https.get = (_url, _options, callback) => {
+      const cb = typeof _options === 'function' ? _options : callback;
       const request = new EventEmitter();
       request.destroy = () => {
         destroyed = true;
@@ -167,6 +170,15 @@ async function runLocalTranslationGuards() {
   assert.strictEqual(localTranslator.looksUntranslated('Hello world', 'Hola mundo', 'en'), false);
   assert.strictEqual(localTranslator.looksUntranslated('こんにちは', 'こんにちは', 'en'), true);
   assert.strictEqual(localTranslator.isEffectivelySameText('Original: Hola mundo', 'Hola mundo', 1), true);
+
+  // HIGH 1 — 고유명사/숫자 자막은 echo 오탐하지 않는다 (클라우드 폴백 비용 방지).
+  assert.strictEqual(localTranslator.looksUntranslated('Episode 7', 'Episode 7', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('John Smith Tokyo', 'John Smith Tokyo', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('123', '123', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('안녕하세요', 'Hello', 'ko'), false);
+  // 진짜 echo는 여전히 잡는다.
+  assert.strictEqual(localTranslator.looksUntranslated('Hello there', 'Hello there', 'ko'), true);
+  assert.strictEqual(localTranslator.isEffectivelySameText('Hi', 'Hi'), false, '2자 이하 스킵 (기존 동작 유지)');
 
   const waitForAbort = (signal) =>
     new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
