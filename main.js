@@ -38,7 +38,7 @@ try {
 } catch (error) {
   console.log('[Auto-Updater] electron-updater not available:', error.message);
 }
-const { spawn, execFile, execSync } = require('child_process');
+const { spawn, execFile, execSync, execFileSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
@@ -118,6 +118,9 @@ let mainWindow;
 let currentProcess = null;
 let isUserStopped = false;
 let translator = new EnhancedSubtitleTranslator();
+// 앱이 spawn한 자식 프로세스 PID 집합 — 정리 시 이미지명(taskkill /IM) 대신
+// 이 PID들만 골라 종료한다. /IM은 같은 이름의 타 앱(OBS 등)까지 죽인다(P1-6).
+let childProcessIds = new Set();
 
 // ===== Download cancellation state (모델 다운로드 취소 관리) =====
 let activeDownloads = new Set(); // { controller, writer, destPath }
@@ -305,6 +308,25 @@ function resolveDevice(requestedDevice) {
 }
 
 // Enhanced memory/GPU cleanup across files (파일 간 메모리/GPU 정리)
+// 앱이 spawn한 자식 프로세스 PID만 골라 종료한다 (이미지명 /IM 킬은 같은 이름의
+// 타 앱까지 죽이므로 사용하지 않는다). Windows에서는 taskkill /PID /T 로 자식 트리를
+// 함께 종료한다.
+function killTrackedChildProcesses() {
+  const ids = [...childProcessIds];
+  childProcessIds.clear();
+  for (const pid of ids) {
+    try {
+      if (process.platform === 'win32') {
+        execFileSync('taskkill', ['/F', '/PID', String(pid), '/T'], { stdio: 'ignore' });
+      } else {
+        process.kill(pid, 'SIGKILL');
+      }
+      console.log(`   - Child process ${pid} killed`);
+    } catch (_e) {
+      // 이미 종료된 프로세스면 무시
+    }
+  }
+}
 function forceMemoryCleanup(device, isFileTransition = false) {
   return new Promise((resolve) => {
     const cleanupType = isFileTransition ? 'Inter-file memory cleanup' : 'General memory cleanup';
@@ -318,69 +340,27 @@ function forceMemoryCleanup(device, isFileTransition = false) {
         console.log('   - Current process killed');
       }
 
-      if (process.platform === 'win32') {
-        // 2. Kill all related processes
-        try {
-          execSync(`taskkill /F /IM ${WHISPER_CLI_NAME} /T`, { stdio: 'ignore' });
-          execSync('taskkill /F /IM ffmpeg.exe /T', { stdio: 'ignore' });
-          console.log('   - All related processes cleaned up');
-        } catch (_e) {
-          console.log('   - No processes to clean up');
-        }
+      // 2. 앱이 spawn한 자식 프로세스(whisper-cli/ffmpeg/faster-whisper)만 PID로 종료.
+      //    taskkill /IM 은 같은 이름의 타 앱(OBS 등)까지 죽이므로 쓰지 않는다(P1-6).
+      killTrackedChildProcesses();
 
-        // 3. Enhanced GPU cleanup for CUDA
-        if (device === 'cuda') {
-          const delay = isFileTransition ? 2000 : 500; // Longer delay for file transitions
+      // 3. GPU 정리 (Windows + CUDA 한정). GPU 리셋은 동기 5회(최대 65초) 대신
+      //    비동기 1회 시도만 한다 — 프로세스 종료만으로 CUDA 컨텍스트는 해제되며,
+      //    리셋은 최후 수단으로 실패해도 추출은 계속되어야 한다(P1-6).
+      if (process.platform === 'win32' && device === 'cuda') {
+        const delay = isFileTransition ? 2000 : 500; // Longer delay for file transitions
 
-          setTimeout(() => {
-            try {
-              console.log('   - Flushing GPU cache...');
-
-              // Kill all CUDA processes first
-              try {
-                execSync('taskkill /F /IM "nvcc.exe" /T', { stdio: 'ignore' });
-                execSync('taskkill /F /IM "nvidia-smi.exe" /T', { stdio: 'ignore' });
-                console.log('   - CUDA processes cleaned up');
-              } catch (e) {
-                console.log('[GPU] CUDA process cleanup failed:', e.message);
-              }
-
-              // Multiple GPU reset attempts with different methods
-              for (let i = 0; i < 5; i++) {
-                try {
-                  if (i < 3) {
-                    execSync('nvidia-smi --gpu-reset', { stdio: 'ignore', timeout: 15000 });
-                  } else {
-                    execSync('nvidia-smi -r', { stdio: 'ignore', timeout: 10000 });
-                  }
-                  console.log(`   - GPU reset attempt ${i + 1}/5 succeeded`);
-                  break;
-                } catch (_e) {
-                  if (i === 4) console.log('   - GPU reset failed, continuing');
-                }
-              }
-
+        setTimeout(() => {
+          console.log('   - Flushing GPU cache...');
+          execFile('nvidia-smi', ['--gpu-reset'], { timeout: 15000, windowsHide: true }, (err) => {
+            if (err) {
+              console.log('   - GPU reset failed (continuing):', err.message);
+            } else {
               console.log('   - GPU memory cleanup completed');
-            } catch (e) {
-              console.log(`   - GPU cleanup attempt failed: ${e.message}`);
             }
-
-            // 4. System memory cleanup
-            try {
-              execSync('powershell -Command "[System.GC]::Collect(); [System.GC]::WaitForPendingFinalizers();"', {
-                stdio: 'ignore',
-                timeout: 5000,
-              });
-              console.log('   - System memory cleanup completed');
-            } catch (_e) {
-              console.log('   - System memory cleanup skipped');
-            }
-
             resolve();
-          }, delay);
-        } else {
-          resolve();
-        }
+          });
+        }, delay);
       } else {
         resolve();
       }
@@ -1069,10 +1049,17 @@ function mergeSrtFiles(srtContents, startTimes) {
   const uniqueEntries = [];
   for (const entry of allEntries) {
     const isDuplicate = uniqueEntries.some((existing) => {
-      if (Math.abs(existing.startMs - entry.startMs) >= 1500) return false;
       const a = existing.text.trim();
       const b = entry.text.trim();
       if (!a || !b) return false;
+      // 텍스트가 완전히 같거나 유사도가 매우 높은(≥0.98) 중복만 오버랩 창
+      // (OVERLAP_DURATION=5초)까지 확대해 흡수한다. 경계에서 같은 자막이
+      // 양쪽 세그먼트에 중복 인식되면 1.5초를 넘겨 떨어질 수 있기 때문(P1-4).
+      // 유사도가 낮은 건(반복 발화 "Thanks" vs "Thanks for watching")은
+      // 기존 1500ms 창을 유지해 실제 다른 대사를 보존한다.
+      const sim = cueTextSimilarity(a, b);
+      const windowMs = sim >= 0.98 ? OVERLAP_DURATION * 1000 : 1500;
+      if (Math.abs(existing.startMs - entry.startMs) >= windowMs) return false;
       // 1ms짜리 초단시간 큐가 오버랩 창 안에 겹치면 중복으로 흡수 (머지 경계 잔재 제거)
       const durMs = entry.endMs ? entry.endMs - entry.startMs : 0;
       const existingDurMs = existing.endMs ? existing.endMs - existing.startMs : 0;
@@ -1082,7 +1069,7 @@ function mergeSrtFiles(srtContents, startTimes) {
       if (durMs <= 5 || existingDurMs <= 5) {
         return cueTextSimilarity(a, b, true) > 0;
       }
-      return cueTextSimilarity(a, b) >= 0.85;
+      return sim >= 0.85;
     });
     if (!isDuplicate) {
       uniqueEntries.push(entry);
@@ -1171,6 +1158,9 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
     currentProcess = proc;
+    if (proc?.pid) childProcessIds.add(proc.pid);
+    proc.once('close', () => childProcessIds.delete(proc.pid));
+    proc.once('error', () => childProcessIds.delete(proc.pid));
 
     const segTimeout = setTimeout(
       () => {
@@ -1369,6 +1359,9 @@ function convertToWav(inputPath) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     currentProcess = ffmpegProcess;
+    if (ffmpegProcess?.pid) childProcessIds.add(ffmpegProcess.pid);
+    ffmpegProcess.once('close', () => childProcessIds.delete(ffmpegProcess.pid));
+    ffmpegProcess.once('error', () => childProcessIds.delete(ffmpegProcess.pid));
 
     let ffmpegStderrTail = '';
     ffmpegProcess.stderr.on('data', (data) => {
@@ -1846,6 +1839,9 @@ async function runFasterWhisperExtraction(
         env: { ...process.env, PYTHONUNBUFFERED: '1' },
       });
       currentProcess = proc;
+      if (proc?.pid) childProcessIds.add(proc.pid);
+      proc.once('close', () => childProcessIds.delete(proc.pid));
+      proc.once('error', () => childProcessIds.delete(proc.pid));
 
       const timeout = setTimeout(
         () => {
@@ -1966,7 +1962,9 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
   return new Promise((resolve, reject) => {
     const start = async () => {
       console.log(`[START] Processing: ${path.basename(filePath)}`);
-      isUserStopped = false;
+      // isUserStopped는 배치 루프(extract-subtitles) 시작에서 한 번만 초기화한다.
+      // 여기서 매 파일마다 false로 리셋하면 파일 간 10초 대기 창에 stop을 눌러도
+      // 다음 파일이 진행되는 문제(P1-3)가 생긴다.
 
       // Force cleanup before each file
       await forceMemoryCleanup(device, true);
@@ -2278,6 +2276,9 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
         cwd: exeCwd,
         ...(mainSpawnEnv ? { env: mainSpawnEnv } : {}),
       });
+      if (currentProcess?.pid) childProcessIds.add(currentProcess.pid);
+      currentProcess.once('close', () => childProcessIds.delete(currentProcess.pid));
+      currentProcess.once('error', () => childProcessIds.delete(currentProcess.pid));
 
       // Process timeout handling — 실제 미디어 길이 × 실시간 계수로 스케일링
       // (기존 30분 고정은 CPU+large 모델이 걸린 작업을 무조건 죽이던 문제가 있었다)
@@ -2524,6 +2525,9 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
   let userStopped = false;
   const successDetails = [];
   const failureDetails = [];
+  // 새 배치는 이전 배치의 stop 상태에서 벗어난다. 이후 각 파일 시작부가 아니라
+  // 여기서만 리셋해 파일 간 대기 창의 stop을 살아있게 한다(P1-3).
+  isUserStopped = false;
   // 배치 내 같은 basename(예: movie.mkv + movie.mp4)이 같은 .srt로 덮어쓰는 충돌 방지.
   // 이미 쓰인 출력 베이스가 있으면 소스 확장자를 붙인 이름(movie.mkv.srt)으로 분리한다.
   const usedSrtBases = new Set();
@@ -2531,6 +2535,12 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
   for (let i = 0; i < filesToProcess.length; i++) {
     const currentFile = filesToProcess[i];
     if (!currentFile) continue;
+
+    // 이전 파일 처리 중(대기 창 포함) stop이 세워졌으면 남은 파일을 건너뛴다.
+    if (isUserStopped) {
+      userStopped = true;
+      break;
+    }
 
     // 충돌 시 사용할 출력 SRT 경로 결정 (extractSingleFile이 내부에서 이 값을 그대로 쓴다)
     const normalSrt = srtOutputPathFor(currentFile);
@@ -2599,6 +2609,11 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
         if (device === 'cuda') {
           event.sender.send('output-update', `Cleaning GPU memory and preparing next file... (wait 10s)\n`);
           await new Promise((resolve) => setTimeout(resolve, 10000));
+          // 대기 중 stop이 세워졌으면 다음 파일을 시작하지 않는다(P1-3).
+          if (isUserStopped) {
+            userStopped = true;
+            break;
+          }
           event.sender.send('output-update', `Start next file!\n\n`);
         }
       }
@@ -2617,13 +2632,18 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
       }
 
       // Next file preview after failure
-      if (i < filesToProcess.length - 1) {
+      if (i < filesToProcess.length - 1 && !isUserStopped) {
         const nextFile = filesToProcess[i + 1];
         event.sender.send('output-update', `Next file: ${path.basename(nextFile)}\n`);
 
         if (device === 'cuda') {
           event.sender.send('output-update', `Recovering and preparing next file... (wait 10s)\n`);
           await new Promise((resolve) => setTimeout(resolve, 10000));
+          // 대기 중 stop이 세워졌으면 다음 파일을 시작하지 않는다(P1-3).
+          if (isUserStopped) {
+            userStopped = true;
+            break;
+          }
           event.sender.send('output-update', `Start next file!\n\n`);
         }
       }
@@ -3471,22 +3491,35 @@ ipcMain.handle('local-translate', async (_event, { text, targetLang, modelId }) 
 
 // App Exit Cleanup
 let _isCleaningUp = false;
-app.on('before-quit', async () => {
-  if (_isCleaningUp) return;
+let _quitRequested = false; // preventDefault 후 재호출된 quit을 정리 완료와 구분
+app.on('before-quit', (event) => {
+  // 정리 중 두 번째 quit 요청(또는 정리 완료 후 재호출)은 그대로 통과시킨다.
+  if (_isCleaningUp || _quitRequested) return;
+  event.preventDefault();
   _isCleaningUp = true;
   console.log('[Cleanup] App closing, cleaning up...');
   // 진행 중인 모델 다운로드 중단 + 부분 파일 정리
-  try {
-    cancelActiveDownloads();
-  } catch (_e) {}
-  try {
-    if (_localDownloadAbort) {
-      _localDownloadAbort.abort();
-      _localDownloadAbort = null;
-    }
-  } catch (_e) {}
-  await localTranslator.unloadModel().catch(() => {});
-  await forceMemoryCleanup('cuda', true);
+  const cleanup = async () => {
+    try {
+      cancelActiveDownloads();
+    } catch (_e) {}
+    try {
+      if (_localDownloadAbort) {
+        _localDownloadAbort.abort();
+        _localDownloadAbort = null;
+      }
+    } catch (_e) {}
+    try {
+      if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
+    } catch (_e) {}
+    await localTranslator.unloadModel().catch(() => {});
+    // GPU 리셋은 비동기 1회 시도로 충분하다 — 정리가 실패해도 종료는 보장한다.
+    await forceMemoryCleanup('cuda', true).catch(() => {});
+    _isCleaningUp = false;
+    _quitRequested = true;
+    app.quit(); // 정리 완료 후 실제 종료 재요청
+  };
+  cleanup();
 });
 
 process.on('SIGINT', () => {
