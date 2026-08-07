@@ -673,6 +673,141 @@ async function runCustomPromptFingerprint() {
   console.log('[CustomFp] custom prompt changes cache fingerprint (ok)');
 }
 
+async function runMyMemoryNormalPhrase() {
+  // MED-1: 오류 문구로 시작하는 정상 번역 결과를 오탐하지 않는다.
+  // startsWith 접두사 검사가 'Please select two distinct languages...'로
+  // 시작하는 실제 번역을 영구 오류로 던지던 문제 — 정확 일치로 바뀌어
+  // 정상 번역으로 반환되어야 한다.
+  const MyMemoryTranslator = require('../myMemoryTranslator');
+  const axios = require('axios');
+  const originalGet = axios.get;
+  const mem = new MyMemoryTranslator();
+  mem.maxRetries = 2; // 테스트 시간 단축
+  axios.get = async () => ({
+    data: {
+      responseData: { translatedText: 'Please select two distinct languages from the menu.' },
+      responseStatus: 200,
+    },
+  });
+  try {
+    const result = await mem.translate('Please select two distinct languages from the menu.', 'en', 'ko');
+    assert.strictEqual(result, 'Please select two distinct languages from the menu.');
+    console.log('[MyMemory] normal translation containing error phrase is not misdetected (ok)');
+  } finally {
+    axios.get = originalGet;
+  }
+}
+
+async function runAbortSurvivesLangLoop() {
+  // HIGH-1a: translateSRTFile이 abort 상태에서 호출되면 resetAbort 없이
+  // 즉시 ABORTED를 던진다 (다국어 루프의 다음 언어가 중지 플래그를 지우지 않음).
+  const translator = new EnhancedSubtitleTranslator();
+  translator.translateSRTContent = async (content) => content.replace('Hello', '안녕');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-abort-lang-'));
+  const inputPath = path.join(tmpDir, 'in.srt');
+  const outputPath = path.join(tmpDir, 'out_ko.srt');
+  fs.writeFileSync(inputPath, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+  try {
+    await translator.translateSRTFile(inputPath, outputPath, 'mymemory', 'ko', null, 'en');
+    assert.strictEqual(translator._aborted, false, 'fresh session runs normally');
+    translator._aborted = true; // 사용자 중지 시뮬레이션
+    await assert.rejects(
+      () => translator.translateSRTFile(inputPath, outputPath, 'mymemory', 'ja', null, 'en'),
+      /ABORTED/,
+      'aborted state must throw immediately without reset'
+    );
+    assert.strictEqual(translator._aborted, true, 'abort flag must survive the language loop');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  console.log('[AbortLangLoop] abort survives language loop (ok)');
+}
+
+async function runParallelRetryDedupe() {
+  // HIGH-2: 병렬 재시도가 translateAuto(전체 폴백 체인)를 재호출하지 않고
+  // 폴백 서비스만 직접 호출한다 — translateAuto 호출은 텍스트당 1회여야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { preferredService: 'mymemory', batchTranslation: true, maxConcurrent: 2 };
+  let autoCalls = 0;
+  translator.translateAuto = async () => {
+    autoCalls++;
+    throw new Error('ECONNRESET blip');
+  };
+  translator.translateWithMyMemory = async () => 'fallback-ok';
+  const results = await translator.translateBatch(['a', 'b'], 'deepl', 'ko', 'en');
+  assert.deepStrictEqual(results, ['fallback-ok', 'fallback-ok']);
+  assert.strictEqual(autoCalls, 2, 'parallel retry must not re-run the whole translateAuto chain');
+
+  // 폴백 서비스의 쿼터는 전파된다 (원문 유지로 삼키지 않음).
+  const quotaT = new EnhancedSubtitleTranslator();
+  quotaT.apiKeys = { preferredService: 'mymemory', batchTranslation: true, maxConcurrent: 2 };
+  quotaT.translateAuto = async () => {
+    throw new Error('ECONNRESET blip');
+  };
+  quotaT.translateWithMyMemory = async () => {
+    throw new Error('MyMemory daily quota exceeded (status 429)');
+  };
+  await assert.rejects(
+    () => quotaT.translateBatch(['a', 'b'], 'deepl', 'ko', 'en'),
+    /API_QUOTA_EXCEEDED/,
+    'quota from parallel fallback must propagate'
+  );
+  console.log('[ParallelRetry] parallel retry dedupes chain, propagates quota (ok)');
+}
+
+async function runThrottleTiers() {
+  // MED-4: 공급자별 스로틀 간격 — Gemini/Claude는 보수적(700ms), OpenAI/DeepL은
+  // 200ms, 429 발생 시 간격 배가·성공 시 리셋.
+  const translator = new EnhancedSubtitleTranslator();
+  assert.strictEqual(translator.getThrottleInterval('mymemory'), 1000);
+  assert.strictEqual(translator.getThrottleInterval('openai'), 200);
+  assert.strictEqual(translator.getThrottleInterval('deepl'), 200);
+  assert.strictEqual(translator.getThrottleInterval('gemini'), 700);
+  assert.strictEqual(translator.getThrottleInterval('anthropic'), 700);
+  translator._adjustThrottleOnQuota('gemini', true);
+  assert.strictEqual(translator.getThrottleInterval('gemini'), 1400, '429 doubles the interval');
+  translator._adjustThrottleOnQuota('gemini', true);
+  assert.strictEqual(translator.getThrottleInterval('gemini'), 2800);
+  translator._adjustThrottleOnQuota('gemini', false);
+  assert.strictEqual(translator.getThrottleInterval('gemini'), 700, 'success resets the multiplier');
+
+  // translateWithLLM은 공급자 포맷 티어로 스로틀을 건다.
+  const spy = new EnhancedSubtitleTranslator();
+  spy.apiKeys = { openai: 'sk-test', openaiBaseUrl: 'https://api.openai.com/v1', openaiModel: 'gpt-5.6-sol' };
+  const throttled = [];
+  spy.throttleRequest = async (service) => {
+    throttled.push(service);
+  };
+  spy.callLLM = async () => ({ content: 'hi', finishReason: 'stop' });
+  await spy.translateWithLLM('hello', 'ko', spy.resolveProvider('chatgpt'));
+  assert.deepStrictEqual(throttled, ['openai'], 'LLM throttle must use the provider format tier');
+  console.log('[ThrottleTiers] provider-tier intervals + 429 doubling (ok)');
+}
+
+async function runQuotaMessagePrecision() {
+  // LOW-1/LOW-2: translateWithRetry의 영구 오류 판정이 isQuotaError와 통일되어
+  // 소문자 'daily limit'/'rate limit'/'resource_exhausted'는 재시도하지 않고,
+  // 'x429x'처럼 429가 아닌 부분일치는 재시도한다.
+  const translator = new EnhancedSubtitleTranslator();
+  for (const msg of ['MyMemory daily limit exceeded', 'hit rate limit', 'RESOURCE_EXHAUSTED: quota']) {
+    let calls = 0;
+    const fn = async () => {
+      calls++;
+      throw new Error(msg);
+    };
+    await assert.rejects(() => translator.translateWithRetry(fn, 'x', 5), new RegExp(msg));
+    assert.strictEqual(calls, 1, `"${msg}" must not be retried`);
+  }
+  let calls = 0;
+  const fn = async () => {
+    calls++;
+    throw new Error('error code x429x from upstream');
+  };
+  await assert.rejects(() => translator.translateWithRetry(fn, 'x', 2), /x429x/);
+  assert.strictEqual(calls, 2, '"x429x" is not a standalone 429, must be retried');
+  console.log('[QuotaPrecision] message-based quota detection unified (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -715,6 +850,7 @@ async function run() {
   await runModelDownloadAbort();
   await runLocalTranslationGuards();
   await runMyMemoryErrorPhrase();
+  await runMyMemoryNormalPhrase();
   await runRetryOn429Case();
   await runThrottleSerialization();
   runCacheKeyConsistency();
@@ -732,6 +868,10 @@ async function run() {
   await runPermanentErrorNoRetry();
   await runAbortSafeRetry();
   await runCustomPromptFingerprint();
+  await runAbortSurvivesLangLoop();
+  await runParallelRetryDedupe();
+  await runThrottleTiers();
+  await runQuotaMessagePrecision();
 
   console.log('Smoke tests passed.');
 }
