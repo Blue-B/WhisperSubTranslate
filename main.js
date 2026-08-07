@@ -1299,7 +1299,9 @@ function convertToWav(inputPath) {
         const srcStat = fs.statSync(inputPath);
         if (wavStat.size > 0 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
-          resolve({ wavPath, usingSafeTemp, originalWavPath });
+          // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
+          // 파일일 수 있으므로 추출 후 정리 단계에서 삭제하지 않는다 (F3).
+          resolve({ wavPath, usingSafeTemp, originalWavPath, reused: true });
           return;
         }
         // 스테일/잘린 WAV: 삭제 후 아래에서 재변환
@@ -1435,7 +1437,7 @@ function convertToWav(inputPath) {
       if (code === 0 && fs.existsSync(wavPath)) {
         console.log(`[Audio] WAV conversion successful: ${path.basename(wavPath)}`);
         mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
-        resolve({ wavPath, usingSafeTemp, originalWavPath });
+        resolve({ wavPath, usingSafeTemp, originalWavPath, reused: false });
       } else {
         const msg = `Audio conversion failed (code: ${code})`;
         try {
@@ -2060,11 +2062,13 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
 
       // WAV 변환 (whisper.cpp는 WAV만 지원)
       let wavPath,
-        usingSafeTemp = false;
+        usingSafeTemp = false,
+        wavReused = false;
       try {
         const wavResult = await convertToWav(filePath);
         wavPath = wavResult.wavPath;
         usingSafeTemp = wavResult.usingSafeTemp;
+        wavReused = !!wavResult.reused;
         // originalWavPath available in wavResult if needed
       } catch (convErr) {
         return reject(convErr);
@@ -2096,7 +2100,7 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
             model,
             srtOutputOverride
           );
-          if (wavPath !== filePath && fs.existsSync(wavPath)) {
+          if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
             try {
               fs.unlinkSync(wavPath);
             } catch (_e) {
@@ -2105,7 +2109,7 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           }
           return resolve(finalSrtPath);
         } catch (fwErr) {
-          if (wavPath !== filePath && fs.existsSync(wavPath)) {
+          if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
             try {
               fs.unlinkSync(wavPath);
             } catch (_e) {
@@ -2216,8 +2220,8 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           console.log(`[Split] Merged SRT saved: ${originalSrtPath}`);
           mainWindow.webContents.send('output-update', `Subtitle merge completed!\n`);
 
-          // WAV 임시 파일 정리
-          if (wavPath !== filePath && fs.existsSync(wavPath)) {
+          // WAV 임시 파일 정리 (재사용된 형제 WAV는 삭제하지 않는다 — F3)
+          if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
             try {
               fs.unlinkSync(wavPath);
             } catch (_e) {
@@ -2365,8 +2369,9 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           applyTokenTightTiming(outputBase, srtPath);
         }
 
-        // WAV 임시 파일 정리 (원본이 WAV가 아닌 경우)
-        if (wavPath !== filePath && fs.existsSync(wavPath)) {
+        // WAV 임시 파일 정리 (원본이 WAV가 아닌 경우). 재사용된 형제 WAV는
+        // 앱이 만든 게 아닐 수 있으므로 삭제하지 않는다 (F3).
+        if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
           try {
             fs.unlinkSync(wavPath);
             console.log(`[Cleanup] Removed temporary WAV: ${path.basename(wavPath)}`);
@@ -2477,8 +2482,9 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
         clearTimeout(processTimeout); // Clear timeout
         await forceMemoryCleanup(chosenDevice, true);
 
-        // 임시 WAV/SRT 잔재 정리 (spawn 자체 실패: ENOENT/EACCES 등)
-        if (wavPath !== filePath && fs.existsSync(wavPath)) {
+        // 임시 WAV/SRT 잔재 정리 (spawn 자체 실패: ENOENT/EACCES 등).
+        // 재사용된 형제 WAV는 삭제하지 않는다 (F3).
+        if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
           try {
             fs.unlinkSync(wavPath);
           } catch (_e) {}

@@ -186,6 +186,12 @@ function updateUIMode() {
     const hasSrt = hasAnySrtFiles();
     const d = I18N[currentUiLang] || I18N.ko;
 
+    // 처리/번역 중에는 번역 방식을 바꿀 수 없게 한다. 중간에 'none'으로 바꾸면
+    // 완료 이벤트가 드롭되어 다음 파일 자동 진행이 멈추는 99% 동결이 발생한다 (F2).
+    if (translationSelect) {
+      translationSelect.disabled = isProcessing || translationSessionActive;
+    }
+
     if (srtOnlyMode) {
       // SRT 전용 모드: whisper 모델·언어 숨김. device는 local 번역일 때만 표시
       if (modelCard) modelCard.style.display = 'none';
@@ -1044,9 +1050,55 @@ async function continueProcessing() {
     // 추출 시점에 main.js가 자동으로 받고 진행률을 로그에 표시하므로 여기서 선다운로드하지 않는다.
     if (model !== 'large-v2-sync' && model !== 'large-v2-sync-lite' && !availableModels[model]) {
       addOutput(`${I18N[currentUiLang].downloadingModel}: ${model}\n`);
-      await window.electronAPI.downloadModel(model);
+      const dlResult = await window.electronAPI.downloadModel(model);
+      // 다운로드 취소/실패 시 모델을 설치된 것으로 표시하지 않는다 (F1).
+      // 취소(cancelled)면 사용자가 중지한 것이므로 이 파일은 멈추고 배치를 종료한다.
+      if (!dlResult || !dlResult.success) {
+        const dlErr = dlResult?.error || 'Model download failed';
+        stopIndeterminate();
+        if (String(dlErr).toLowerCase().includes('cancelled')) {
+          file.status = 'stopped';
+          addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorStopped}: ${fileName}\n`);
+          isProcessing = false;
+          shouldStop = false;
+          currentProcessingIndex = -1;
+          setProgressTarget(0, '');
+          updateQueueDisplay();
+          const stoppedCompletedCount = fileQueue.filter((f) => f.status === 'completed').length;
+          const stoppedErrorCount = fileQueue.filter((f) => f.status === 'error').length;
+          const stoppedStopCount = fileQueue.filter((f) => f.status === 'stopped').length;
+          addOutput(
+            `\n${I18N[currentUiLang].allTasksComplete(stoppedCompletedCount, stoppedErrorCount, stoppedStopCount)}\n`
+          );
+          return; // 배치 종료 — 추출을 시작하지 않는다
+        }
+        // 다운로드 실패(네트워크 등): 이 파일만 에러 처리하고 다음 파일로.
+        file.status = 'error';
+        file.progress = 0;
+        try {
+          saveFileToHistory(file, dlErr);
+        } catch (_e) {}
+        addOutput(
+          `[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorFailed}: ${fileName} - ${getLocalizedError(dlErr)}\n`
+        );
+        updateQueueDisplay();
+        setTimeout(() => continueProcessing(), 100);
+        return;
+      }
       availableModels[model] = true;
       updateModelSelect();
+    }
+
+    // 다운로드가 오래 걸리는 사이 사용자가 중지했을 수 있으므로 추출 직전 재확인한다 (F1).
+    if (shouldStop) {
+      file.status = 'stopped';
+      addOutput(`${I18N[currentUiLang].userStopped}\n`);
+      isProcessing = false;
+      currentProcessingIndex = -1;
+      shouldStop = false;
+      updateQueueDisplay();
+      if (typeof updateUIMode === 'function') updateUIMode();
+      return;
     }
 
     // 자막 추출 단계 의사 진행률 시작
@@ -2829,7 +2881,11 @@ if (window?.electronAPI) {
     let _translationStreamEpoch = -1;
     window.electronAPI.onTranslationProgress((data) => {
       const methodNow = document.getElementById('translationSelect')?.value;
-      if (!methodNow || methodNow === 'none') return; // 번역 비활성 시 무시
+      // 번역 비활성(none) 시 무시하되, completed/error는 예외 — 이벤트가 도착했다는 건
+      // 실제 번역 세션이 있었던 것이고, completed가 자동-다음파일 트리거를 담당하므로
+      // 버리면 99%에서 동결된다 (F2). stale 이벤트는 아래 epoch 가드가 걸러낸다.
+      const isTerminalStage = data?.stage === 'completed' || data?.stage === 'error';
+      if ((!methodNow || methodNow === 'none') && !isTerminalStage) return;
 
       // 이전 세션에서 남은 이벤트는 새 세션이 'starting'을 보낼 때까지 무시.
       // (세션 시작 시 _processingEpoch가 증가하므로 stale 스트림의 completed/error는
@@ -2918,6 +2974,8 @@ if (window?.electronAPI) {
           : data?.message || I18N[currentUiLang].translationCompleted || I18N[currentUiLang].progressComplete;
         setProgressTarget(Math.max(lastProgress, stageProgressTarget), stageText);
 
+        // 완료 처리 시 select 재활성화 상태 반영 (updateUIMode는 완료/중지 경로에서 호출됨)
+        if (typeof updateUIMode === 'function') updateUIMode();
         // 현재 처리 중인 파일을 completed로 마킹
         if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
           const _f = fileQueue[currentProcessingIndex];
@@ -2965,6 +3023,8 @@ if (window?.electronAPI) {
               currentProcessingIndex = -1;
               shouldStop = false;
               updateQueueDisplay();
+              // 번역 select 비활성 해제 (배치 종료 후 변경 가능)
+              if (typeof updateUIMode === 'function') updateUIMode();
 
               const completedCount = fileQueue.filter((f) => f.status === 'completed').length;
               const errorCount = fileQueue.filter((f) => f.status === 'error').length;
