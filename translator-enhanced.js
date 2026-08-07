@@ -120,6 +120,18 @@ const PROVIDER_FORMATS = ['openai', 'anthropic', 'gemini'];
 const CUSTOM_PROVIDER_PREFIX = 'custom:';
 const ANTHROPIC_API_VERSION = '2023-06-01';
 
+// 429/403/할당량 초과 판정. 'quota' 단독 부분매칭은 네트워크 오류 메시지에
+// 우연히 걸릴 수 있어 단어 경계 + 명시 문구로 정밀하게 매치한다.
+// (직렬/병렬/translateAuto 재시도 경로가 같은 규칙을 공유한다 — F2)
+function isQuotaError(message) {
+  const msg = String(message || '');
+  const lower = msg.toLowerCase();
+  if (/(^|\D)(429|403)(\D|$)/.test(msg)) return true; // '429', 'status 403' 등
+  if (/\bquota\b|daily limit|too many requests|rate limit/.test(lower)) return true;
+  if (lower.includes('resource_exhausted') || lower.includes('api_quota_exceeded')) return true;
+  return false;
+}
+
 // 공식 OpenAI와 OpenAI 호환 서버는 받는 파라미터가 달라서 호스트로 갈라준다.
 function isOfficialOpenAI(baseUrl) {
   try {
@@ -1175,12 +1187,7 @@ class EnhancedSubtitleTranslator {
         console.error(`[${m.name} Translation Failed] "${text.substring(0, 40)}..." - ${err.message}`);
 
         // 429 에러 (할당량 초과)면 폴백하지 않고 즉시 throw
-        const is429Error =
-          err.message.includes('429') ||
-          err.message.includes('quota') ||
-          err.message.toLowerCase().includes('too many requests') ||
-          err.message.includes('RESOURCE_EXHAUSTED') ||
-          err.message.includes('API_QUOTA_EXCEEDED');
+        const is429Error = isQuotaError(err.message);
         if (is429Error) {
           console.error(`[Rate Limit] API quota exceeded in translateAuto - stopping`);
           throw new Error('API_QUOTA_EXCEEDED: ' + err.message);
@@ -1373,6 +1380,24 @@ ${lines}`;
 
       const batch = texts.slice(start, start + batchSize);
       try {
+        // 컨텍스트 결과 캐시 히트: 배치의 모든 줄이 ctx:1 키로 캐시돼 있으면
+        // LLM 호출을 건너뛴다. (같은 텍스트 + 같은 소스 언어 + 같은 모드)
+        const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
+        const cachedBatch = batch.map((text) =>
+          this.getCachedTranslation(text, cacheMethod, targetLang, _sourceLang, true)
+        );
+        if (cachedBatch.every((t) => typeof t === 'string' && t.trim().length > 0)) {
+          results.push(...cachedBatch.map((t) => this.sanitizeTranslationText(t)));
+          if (progressCallback) {
+            progressCallback({
+              stage: 'translating',
+              current: Math.min(start + batch.length, texts.length),
+              total: texts.length,
+              text: batch[batch.length - 1]?.substring(0, 50) + '...',
+            });
+          }
+          continue;
+        }
         await this.throttleRequest();
         const parsed = await this.translateContextAwareChunk(batch, selectedMethod, targetLang, context);
         const translations = Array.isArray(parsed.translations) ? parsed.translations : [];
@@ -1388,7 +1413,6 @@ ${lines}`;
           // 컨텍스트(문맥) 결과는 일반 LLM 경로와 같은 provider.cacheKey로 기록하되
           // ctx:1 플래그로 구분한다 — 이전엔 'chatgpt' 등 일반 method 이름으로 써서
           // 아무도 읽지 않는 키로 낭비됐다. (provider.cacheKey = 'chatgpt:모델명')
-          const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
           this.setCachedTranslation(batch[index], cacheMethod, targetLang, translation, _sourceLang, true);
         });
 
@@ -1464,15 +1488,8 @@ ${lines}`;
 
           // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
           // (병렬 경로와 동일 판정 — 직렬 경로도 같은 규칙으로 동작하게 한다)
-          const errMsg = String(error?.message || '');
-          if (
-            errMsg.includes('429') ||
-            errMsg.includes('quota') ||
-            errMsg.toLowerCase().includes('too many requests') ||
-            errMsg.includes('RESOURCE_EXHAUSTED') ||
-            errMsg.includes('API_QUOTA_EXCEEDED')
-          ) {
-            throw new Error('API_QUOTA_EXCEEDED: ' + errMsg);
+          if (isQuotaError(error)) {
+            throw new Error('API_QUOTA_EXCEEDED: ' + String(error?.message || error));
           }
 
           // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
@@ -1508,15 +1525,8 @@ ${lines}`;
               } catch (retryError) {
                 console.error(`[Retry ${retry} Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
                 // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
-                const retryMsg = String(retryError?.message || '');
-                if (
-                  retryMsg.includes('429') ||
-                  retryMsg.includes('quota') ||
-                  retryMsg.toLowerCase().includes('too many requests') ||
-                  retryMsg.includes('RESOURCE_EXHAUSTED') ||
-                  retryMsg.includes('API_QUOTA_EXCEEDED')
-                ) {
-                  throw new Error('API_QUOTA_EXCEEDED: ' + retryMsg);
+                if (isQuotaError(retryError)) {
+                  throw new Error('API_QUOTA_EXCEEDED: ' + String(retryError?.message || retryError));
                 }
                 if (retry === 2) {
                   console.warn(`[Give Up] ${i + 1}/${texts.length}: All retries failed - keeping original`);

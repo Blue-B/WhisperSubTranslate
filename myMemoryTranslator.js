@@ -96,7 +96,19 @@ class MyMemoryTranslator {
         attempts++;
 
         if (attempts >= this.maxRetries) {
-          throw new Error(`MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.`);
+          // 원인 구분: 403/429/쿼터 문구면 "할당량 초과", 그 외(네트워크/타임아웃
+          // 등 일시 장애)면 원래 에러 메시지를 전달한다. 일시 장애를 할당량으로
+          // 오판하면 직렬 번역이 즉시 하드 스톱된다(F2).
+          const msg = String(error?.message || error || '');
+          const lower = msg.toLowerCase();
+          if (
+            lower.includes('status 403') ||
+            lower.includes('status 429') ||
+            /quota|daily limit|too many requests/.test(lower)
+          ) {
+            throw new Error(`MyMemory quota exceeded (${msg.substring(0, 80)}). Try again tomorrow or use DeepL/OpenAI.`);
+          }
+          throw error;
         }
 
         // Wait briefly then retry
