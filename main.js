@@ -1233,7 +1233,9 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       if (isUserStopped) {
         return reject(new Error('Stopped by user'));
       }
-      if ((code === 0 || fs.existsSync(srtPath)) && fs.existsSync(srtPath)) {
+      // 부분/빈 SRT는 성공으로 취급하지 않는다: 단일 파일 경로와 동일하게
+      // isCompleteSrt(큐 ≥1개 + 끝에 개행)로 검증한다 (P1).
+      if ((code === 0 || fs.existsSync(srtPath)) && fs.existsSync(srtPath) && isCompleteSrt(srtPath)) {
         try {
           applyTokenTightTiming(outputBase, srtPath);
           const content = fs.readFileSync(srtPath, 'utf-8');
@@ -1249,6 +1251,9 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
         }
       } else {
         let segError = `Segment processing failed (code: ${code})`;
+        if (code === 0 && fs.existsSync(srtPath) && !isCompleteSrt(srtPath)) {
+          segError = `Segment processing produced an incomplete/empty SRT (code: ${code})`;
+        }
         if (code === 127 && process.platform !== 'win32') {
           segError +=
             '. Required shared libraries (.so) not found. ' +
@@ -1297,7 +1302,10 @@ function convertToWav(inputPath) {
       try {
         const wavStat = fs.statSync(wavPath);
         const srcStat = fs.statSync(inputPath);
-        if (wavStat.size > 0 && wavStat.mtimeMs >= srcStat.mtimeMs) {
+        // 최소 크기 검증: 44바이트 WAV 헤더 + 1KB 이상이어야 온전한 PCM 스트림.
+        // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV(0바이트 ~ 수 KB)를 mtime이
+        // 최신이라고 재사용하면 손상 자막이 재생산된다 (P1).
+        if (wavStat.size >= 1080 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
           // 파일일 수 있으므로 추출 후 정리 단계에서 삭제하지 않는다 (F3).
@@ -1439,6 +1447,16 @@ function convertToWav(inputPath) {
         mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
         resolve({ wavPath, usingSafeTemp, originalWavPath, reused: false });
       } else {
+        // 실패/중지/타임아웃 모든 경로에서 잘린 WAV를 삭제한다.
+        // 남겨두면 다음 실행에서 mtime이 최신인 부분 WAV를 재사용해
+        // 손상 자막이 재생산된다 (P1). isUserStopped도 포함.
+        if (fs.existsSync(wavPath)) {
+          try {
+            fs.unlinkSync(wavPath);
+          } catch (_e) {
+            /* ignore */
+          }
+        }
         const msg = `Audio conversion failed (code: ${code})`;
         try {
           errLogger.logError('ffmpeg', `${msg} input=${path.basename(inputPath)}\nstderr-tail:\n${ffmpegStderrTail}`);
@@ -1668,10 +1686,22 @@ async function extract7z(archivePath, destDir) {
   if (!fs.existsSync(sevenZip)) {
     throw new Error(`7z extraction failed: neither tar.exe nor bundled 7za.exe worked (${sevenZip} missing)`);
   }
-  await execFileAsync(sevenZip, ['x', archivePath, `-o${destDir}`, '-y'], {
-    windowsHide: true,
-    maxBuffer: 4 * 1024 * 1024,
-  });
+  try {
+    await execFileAsync(sevenZip, ['x', archivePath, `-o${destDir}`, '-y'], {
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+  } catch (err) {
+    // 추출 실패 시 destDir에 남은 부분 파일이 '설치됨'으로 오인되지 않게 정리한다.
+    console.warn(`[FasterWhisper] 7z extraction failed, cleaning partial output: ${err.message}`);
+    try {
+      fs.rmSync(destDir, { recursive: true, force: true });
+      fs.mkdirSync(destDir, { recursive: true });
+    } catch (_e) {
+      /* ignore */
+    }
+    throw err;
+  }
 }
 
 function getFasterWhisperModelsDir() {
@@ -1680,7 +1710,7 @@ function getFasterWhisperModelsDir() {
 
 function execFileAsync(file, args, options = {}) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, options, (error, stdout, stderr) => {
+    const proc = execFile(file, args, { ...options, timeout: options.timeout ?? 10 * 60 * 1000 }, (error, stdout, stderr) => {
       if (error) {
         error.stdout = stdout;
         error.stderr = stderr;
@@ -1689,6 +1719,10 @@ function execFileAsync(file, args, options = {}) {
         resolve({ stdout, stderr });
       }
     });
+    // quit/forceCleanup 시 고아 프로세스가 되지 않게 PID를 등록/해제한다 (P1).
+    if (proc?.pid) childProcessIds.add(proc.pid);
+    proc.once('close', () => childProcessIds.delete(proc.pid));
+    proc.once('error', () => childProcessIds.delete(proc.pid));
   });
 }
 
@@ -1701,6 +1735,11 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
   try {
     const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
     const total = Number(response.headers['content-length'] || 0);
+    // 무결성 검증: content-length가 없거나 받은 양과 다르면 실패 처리한다.
+    // 잘린 1.42GB 7z가 '설치됨'으로 남으면 sync 엔진이 조용히 깨진다 (P1).
+    if (!total || total <= 0) {
+      throw new Error(`${label}: server did not provide content-length, refusing partial download`);
+    }
     let received = 0;
     let lastPct = -1;
     let lastSentAt = 0;
@@ -1725,7 +1764,13 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
     });
     response.data.pipe(writer);
     await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
+      writer.on('finish', () => {
+        if (received !== total) {
+          reject(new Error(`${label}: download incomplete (got ${received} of ${total} bytes)`));
+        } else {
+          resolve();
+        }
+      });
       writer.on('error', reject);
       response.data.on('error', reject);
     });
@@ -3319,40 +3364,60 @@ ipcMain.handle(
       event.sender.send('translation-progress', { stage: 'starting' });
 
       const outputPaths = [];
+      const failedLangs = [];
       for (let li = 0; li < langs.length; li++) {
         const safeTarget = langs[li];
         const outputPath = path.join(fileDir, `${fileName}_${safeTarget}.srt`);
-        const result = await translator.translateSRTFile(
-          filePath,
-          outputPath,
-          method,
-          safeTarget,
-          // 진행률 콜백: 여러 언어 전체 기준으로 환산 ((현재언어순번 + 언어내진행)/전체언어)
-          (prog) => {
-            try {
-              const within = prog && prog.total ? prog.current / prog.total : 0;
-              const overall = Math.round(((li + within) / langs.length) * 100);
-              event.sender.send('translation-progress', {
-                stage: prog?.stage || 'translating',
-                current: prog?.current,
-                total: prog?.total,
-                progress: overall,
-                currentText: prog?.text,
-                lang: safeTarget,
-                langIndex: li + 1,
-                langTotal: langs.length,
-              });
-            } catch (_) {
-              /* noop */
-            }
-          },
-          sourceLang
-        );
-        outputPaths.push(result);
+        try {
+          const result = await translator.translateSRTFile(
+            filePath,
+            outputPath,
+            method,
+            safeTarget,
+            // 진행률 콜백: 여러 언어 전체 기준으로 환산 ((현재언어순번 + 언어내진행)/전체언어)
+            (prog) => {
+              try {
+                const within = prog && prog.total ? prog.current / prog.total : 0;
+                const overall = Math.round(((li + within) / langs.length) * 100);
+                event.sender.send('translation-progress', {
+                  stage: prog?.stage || 'translating',
+                  current: prog?.current,
+                  total: prog?.total,
+                  progress: overall,
+                  currentText: prog?.text,
+                  lang: safeTarget,
+                  langIndex: li + 1,
+                  langTotal: langs.length,
+                });
+              } catch (_) {
+                /* noop */
+              }
+            },
+            sourceLang
+          );
+          outputPaths.push(result);
+        } catch (langErr) {
+          // 한 언어의 실패가 다른 언어까지 중단시키지 않는다: 실패 언어만 기록하고
+          // 계속 진행한다. 성공한 언어 SRT는 응답에 포함된다 (P1).
+          console.error(`[Translate] Language ${safeTarget} failed: ${langErr.message}`);
+          failedLangs.push(safeTarget);
+        }
       }
 
-      // 파일 처리 완료: 이 파일의 번역 캐시만 정리 (메모리 해제)
-      translator.clearFileCache();
+      // 파일 처리 완료: 이 파일의 번역 캐시만 정리 (메모리 해제) — 성공/실패 무관
+      try {
+        translator.clearFileCache();
+      } catch (_e) {
+        /* noop */
+      }
+
+      if (!outputPaths.length) {
+        // 모든 언어가 실패한 경우에만 전체 실패로 처리한다.
+        const msg = failedLangs.length
+          ? `All target languages failed: ${failedLangs.join(', ')}`
+          : 'Translation failed';
+        throw new Error(msg);
+      }
 
       // 모든 언어 완료 후 단 한 번만 completed 전송(이벤트 중복 방지)
       event.sender.send('translation-progress', {
@@ -3360,9 +3425,10 @@ ipcMain.handle(
         progress: 99,
         outputPath: outputPaths[0],
         outputPaths,
+        failedLangs,
       });
 
-      return { success: true, outputPath: outputPaths[0], outputPaths };
+      return { success: true, outputPath: outputPaths[0], outputPaths, failedLangs };
     } catch (error) {
       if (error.message && error.message.includes('ABORTED')) {
         event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user' });
