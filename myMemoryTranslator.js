@@ -72,6 +72,21 @@ class MyMemoryTranslator {
               'ANONYMOUS USERS CAN ONLY',
               'DAILY LIMIT',
             ];
+            // 영구 오류: 이메일을 바꿔도 성공할 수 없는 입력/설정 오류라
+            // 10회 재시도+1초 sleep은 무료 할당량만 태운다. 1회차에 즉시 던진다.
+            const PERMANENT_ERROR_PREFIXES = [
+              'PLEASE SELECT TWO DISTINCT LANGUAGES',
+              'NO QUERY SPECIFIED',
+              'INVALID LANGUAGE PAIR',
+              'QUERY LENGTH LIMIT EXCEEDED',
+            ];
+            if (PERMANENT_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
+              throw new Error(
+                `MyMemory returned an error message instead of a translation (permanent, not retried): ${translatedText
+                  .trim()
+                  .substring(0, 80)}`
+              );
+            }
             if (MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
               throw new Error(
                 `MyMemory returned an error message instead of a translation: ${translatedText.trim().substring(0, 80)}`
@@ -91,6 +106,10 @@ class MyMemoryTranslator {
           throw new Error('Unable to get translation result');
         }
       } catch (error) {
+        // 영구 오류(입력/설정 문제)는 재시도해도 성공할 수 없으므로 즉시 전파한다.
+        if (String(error?.message || '').includes('permanent, not retried')) {
+          throw error;
+        }
         console.log(`[MyMemory] Failed: ${error.message}, retrying...`);
         this.emailIndex++;
         attempts++;
