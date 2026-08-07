@@ -299,5 +299,46 @@
   "modelNotInList": "不在模型列表中。如果是手动输入，请确认后保存。",
   "comboSelectTitle": "从列表选择",
   "comboEmptyHint": "列表为空，请用 ↻ 按钮加载。",
-  "resetPromptHint": "修改出错时恢复默认提示词。"
+  "resetPromptHint": "修改出错时恢复默认提示词。",
+  "modelSelectNames": {
+    "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐推荐",
+    "large-v2-sync": "large-v2 同步 (修复错位, 非常慢)",
+    "large-v2-sync-lite": "large-v2 同步 轻量 (int8, 低显存)",
+    "large-v3": "large-v3 (3.1GB)",
+    "medium": "medium (1.5GB)",
+    "small": "small (466MB)",
+    "base": "base (142MB)",
+    "tiny": "tiny (75MB)"
+  },
+  "modelSelectDescs": {
+    "large-v3-turbo": "快速同步准确，多数视频最合适",
+    "large-v2-sync": "用于字幕对不上的视频。对非英语(日/韩/中)最准确，英语用 turbo 即可。遵循设备选择。较慢",
+    "large-v2-sync-lite": "与精密相同模型，int8 更轻。显存约3GB，卡顿更少。同步质量几乎相同",
+    "large-v3": "识别略高但长视频同步偏移、较慢",
+    "medium": "高配置PC，不需GPU",
+    "small": "中配置PC，速度与精度平衡",
+    "base": "低配置PC，快速草稿",
+    "tiny": "超低配置PC，速度优先"
+  },
+  "langNames": {
+    "ko": "韩语",
+    "en": "英语",
+    "ja": "日语",
+    "zh": "中文",
+    "es": "西班牙语",
+    "fr": "法语",
+    "de": "德语",
+    "it": "意大利语",
+    "pt": "葡萄牙语",
+    "ru": "俄语",
+    "hu": "匈牙利语",
+    "ar": "阿拉伯语",
+    "pl": "波兰语",
+    "tr": "土耳其语",
+    "fa": "波斯语"
+  },
+  "engineSupportNote": {
+    "local": "本地翻译引擎不支持匈牙利语，请使用 GPT 或 Gemini。",
+    "deepl": "DeepL 不支持波斯语。"
+  }
 }
