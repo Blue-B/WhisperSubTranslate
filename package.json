@@ -85,7 +85,10 @@
         {
           "from": "whisper-cpp",
           "to": "whisper-cpp",
-          "filter": ["**/*", "!install-failed.txt"]
+          "filter": [
+            "**/*",
+            "!install-failed.txt"
+          ]
         },
         {
           "from": "ffprobe.exe",

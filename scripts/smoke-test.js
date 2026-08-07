@@ -551,6 +551,21 @@ async function runDeepLUnsupportedTargetSkip() {
   console.log('[DeepLSkip] fa target skips DeepL without retry waste (ok)');
 }
 
+async function runDeepLFxSuffixHint() {
+  // #48: Free 키에 ':fx' 접미사가 없으면 deepl-node가 Pro 엔드포인트로 보내
+  // 인증 실패가 난다. 에러 분류가 키 자체 문제로만 안내하지 않고 :fx 힌트를 붙인다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { deepl: 'my-free-key-no-fx' };
+  const msg = translator.classifyError({ message: 'Authentication failed (auth_key invalid)' }, 'deepl', 'ko');
+  assert.ok(msg.includes(':fx'), `expected :fx hint in: ${msg}`);
+
+  // :fx가 이미 붙은 키에는 힌트를 붙이지 않는다.
+  translator.apiKeys = { deepl: 'my-free-key:fx' };
+  const msg2 = translator.classifyError({ message: 'Authentication failed (auth_key invalid)' }, 'deepl', 'ko');
+  assert.ok(!msg2.includes(':fx'), `no hint expected for :fx key, got: ${msg2}`);
+  console.log('[DeepLFx] missing :fx suffix gets a hint (ok)');
+}
+
 async function runLocalContextPrecheck() {
   // LOCAL_TEXT_TOO_LONG: 컨텍스트 2048을 초과할 만한 긴 입력은 번역 전에 명확한 에러.
   const localTranslator = require('../local-translator');
@@ -612,6 +627,7 @@ async function run() {
   await runSerialRetry429Propagation();
   await runSrtFileNoOutputOn429();
   await runQuotaClassification();
+  await runDeepLFxSuffixHint();
   await runFinalFallbackQuotaPropagation();
   await runParallelPathSourceLang();
   await runLoopLevelQuotaContinue();

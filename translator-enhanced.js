@@ -1973,6 +1973,11 @@ ${lines}`;
 
     // DeepL 특수 에러 처리
     if (message.includes('Authentication failed') || message.includes('auth_key')) {
+      // Free 키에 ':fx' 접미사가 없으면 deepl-node가 Pro 엔드포인트로 보내
+      // 'auth_key invalid'가 난다. 키 자체 문제와 헷갈리지 않게 힌트를 붙인다 (#48).
+      if (service === 'deepl' && this.apiKeys?.deepl && !this.apiKeys.deepl.trim().endsWith(':fx')) {
+        return `${errorMsg.invalidApiKey} ${this.getErrorMessages(lang).fxSuffixHint || '(DeepL Free 키는 끝에 :fx 가 필요합니다)'}`;
+      }
       return errorMsg.invalidApiKey;
     }
 
