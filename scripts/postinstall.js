@@ -165,6 +165,13 @@ async function downloadFile(url, destPath) {
 
           file.on('finish', () => {
             file.close();
+            // content-length가 알려진 경우 받은 크기와 다르면 손상 파일로
+            // 취급해 삭제 + 실패시킨다 (MED-7).
+            if (totalSize > 0 && downloadedSize !== totalSize) {
+              fs.unlink(destPath, () => {});
+              reject(new Error(`Download incomplete (${downloadedSize}/${totalSize} bytes)`));
+              return;
+            }
             if (totalSize > 0) {
               console.log('\r  Downloading: 100%');
             } else {
@@ -533,6 +540,10 @@ async function main() {
   // Skip if already installed
   if (hasWhisperRuntimeLibraries()) {
     console.log('  whisper-cpp already installed. Skipping.\n');
+    clearInstallFailure();
+    // VAD 모델은 이전 실패로 누락됐을 수 있으니 조기 반환 전에도 항상
+    // 다운로드를 시도한다 (MED-7).
+    await downloadVadModel();
     return;
   }
 
@@ -806,8 +817,11 @@ async function main() {
     markInstallFailure(`whisper-cpp download/install failed: ${error.message}`);
   }
 
-  // whisper-cpp 설치가 불완전하면 실패 마커 (런타임에서 경고 표시 가능)
-  if (!hasWhisperRuntimeLibraries()) {
+  // whisper-cpp 설치가 불완전하면 실패 마커 (런타임에서 경고 표시 가능).
+  // 성공 경로에서는 이전 실패 마커를 제거한다 (LOW-5).
+  if (hasWhisperRuntimeLibraries()) {
+    clearInstallFailure();
+  } else {
     markInstallFailure('whisper-cpp runtime libraries are missing or broken');
   }
 
@@ -824,6 +838,20 @@ function markInstallFailure(reason) {
     fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
     fs.writeFileSync(markerPath, `WhisperSubTranslate postinstall issue at ${new Date().toISOString()}\n${reason}\n`);
     console.log(`  [WARN] install-failed.txt written: ${reason}`);
+  } catch (_e) {
+    /* ignore */
+  }
+}
+
+// 설치 성공 시 실패 마커 제거: 이전 실패 흔적이 남아 있으면 런타임이
+// 계속 경고를 띄운다 (LOW-5).
+function clearInstallFailure() {
+  try {
+    const markerPath = path.join(WHISPER_CPP_DIR, 'install-failed.txt');
+    if (fs.existsSync(markerPath)) {
+      fs.unlinkSync(markerPath);
+      console.log('  install-failed.txt removed (install succeeded).');
+    }
   } catch (_e) {
     /* ignore */
   }

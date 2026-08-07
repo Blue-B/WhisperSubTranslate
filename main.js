@@ -1084,10 +1084,12 @@ function mergeSrtFiles(srtContents, startTimes) {
   // 시간 + 텍스트 유사도 모두 확인하여 실제 다른 대사는 보존
   const uniqueEntries = [];
   for (const entry of allEntries) {
-    const isDuplicate = uniqueEntries.some((existing) => {
-      const a = existing.text.trim();
-      const b = entry.text.trim();
-      if (!a || !b) return false;
+    const a = entry.text.trim();
+    let duplicate = false;
+    for (let j = 0; j < uniqueEntries.length; j++) {
+      const existing = uniqueEntries[j];
+      const b = existing.text.trim();
+      if (!a || !b) continue;
       // 텍스트가 완전히 같거나 유사도가 매우 높은(≥0.98) 중복만 오버랩 창
       // (OVERLAP_DURATION=5초)까지 확대해 흡수한다. 경계에서 같은 자막이
       // 양쪽 세그먼트에 중복 인식되면 1.5초를 넘겨 떨어질 수 있기 때문(P1-4).
@@ -1097,19 +1099,36 @@ function mergeSrtFiles(srtContents, startTimes) {
       const sim = cueTextSimilarity(a, b);
       const atBoundary = nearSegmentBoundary(existing.startMs) || nearSegmentBoundary(entry.startMs);
       const windowMs = atBoundary && sim >= 0.98 ? OVERLAP_DURATION * 1000 : 1500;
-      if (Math.abs(existing.startMs - entry.startMs) >= windowMs) return false;
+      if (Math.abs(existing.startMs - entry.startMs) >= windowMs) continue;
       // 1ms짜리 초단시간 큐가 오버랩 창 안에 겹치면 중복으로 흡수 (머지 경계 잔재 제거)
       const durMs = entry.endMs ? entry.endMs - entry.startMs : 0;
       const existingDurMs = existing.endMs ? existing.endMs - existing.startMs : 0;
-      // 잔재 큐(5ms 이하)는 부분 포함만으로 흡수한다(머지 경계 잔재 제거).
+      // 잔재 큐(5ms 이하)는 survivor가 될 수 없다 (MED-5):
+      //  - 기존 큐가 잔재면 더 긴 entry로 교체해 잔재를 버린다.
+      //  - entry가 잔재면 기존 큐에 흡수되어 버려진다.
       // 일반 큐끼리는 비율 게이트가 있는 유사도(≥0.85)만 적용해 반복 발화가
       // 지워지지 않게 한다.
-      if (durMs <= 5 || existingDurMs <= 5) {
-        return cueTextSimilarity(a, b, true) > 0;
+      if (existingDurMs <= 5) {
+        if (cueTextSimilarity(a, b, true) > 0) {
+          if (durMs > existingDurMs) uniqueEntries[j] = entry;
+          duplicate = true;
+          break;
+        }
+        continue;
       }
-      return sim >= 0.85;
-    });
-    if (!isDuplicate) {
+      if (durMs <= 5) {
+        if (cueTextSimilarity(a, b, true) > 0) {
+          duplicate = true;
+          break;
+        }
+        continue;
+      }
+      if (sim >= 0.85) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (!duplicate) {
       uniqueEntries.push(entry);
     }
   }
@@ -1242,6 +1261,19 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
         try {
           let content = '';
           if (fs.existsSync(srtPath)) {
+            // 명시 분기 (MED-6): code 0인데 SRT가 존재하고 불완전하면 손상
+            // 출력으로 보고 실패 처리한다. 단, 내용이 전혀 없는 SRT(무음/음악
+            // 전용 구간)는 경고만 남기고 성공으로 허용한다 — 빈 세그먼트를
+            // REJECT하면 분할 전체를 폐기하고 단일 패스 재추출로 2배 시간이
+            // 든다 (F2). 빈 내용은 mergeSrtFiles에서 무해하게 무시된다.
+            if (!isCompleteSrt(srtPath)) {
+              const raw = fs.readFileSync(srtPath, 'utf-8');
+              if (raw.trim()) {
+                reject(new Error('Segment processing produced an incomplete/truncated SRT (code: 0)'));
+                return;
+              }
+              console.warn(`[Segment] Empty SRT (silent segment), accepting: ${path.basename(segmentPath)}`);
+            }
             applyTokenTightTiming(outputBase, srtPath);
             content = fs.readFileSync(srtPath, 'utf-8');
             // 임시 SRT 파일 삭제
@@ -1271,9 +1303,6 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
         }
       } else {
         let segError = `Segment processing failed (code: ${code})`;
-        if (code === 0 && fs.existsSync(srtPath) && !isCompleteSrt(srtPath)) {
-          segError = `Segment processing produced an incomplete/empty SRT (code: ${code})`;
-        }
         if (code === 127 && process.platform !== 'win32') {
           segError +=
             '. Required shared libraries (.so) not found. ' +
@@ -1300,18 +1329,22 @@ function convertToWav(inputPath) {
   return new Promise((resolve, reject) => {
     // 원본 경로가 ASCII인지 확인 (확장자 없는 파일도 원본을 덮어쓰지 않도록)
     const originalWavPath = withoutExt(inputPath) + '.wav';
+    // .wav 직접 입력(MED-3): 사용자 제공 WAV는 16kHz/모노 표준이 아닐 수 있어
+    // 항상 ffmpeg 정규화한다. 원본과 같은 경로로 출력하면 입력을 덮어쓰므로
+    // (재사용 스킵 +) safe temp에 출력한다.
+    const isWavInput = /\.wav$/i.test(inputPath);
     let wavPath;
     let usingSafeTemp = false;
 
-    if (isAsciiPath(inputPath)) {
+    if (isAsciiPath(inputPath) && !isWavInput) {
       // ASCII 경로면 원본 위치에 생성
       wavPath = originalWavPath;
     } else {
-      // 유니코드 경로면 안전한 temp에 생성
+      // 유니코드 경로 또는 .wav 직접 입력: 안전한 temp에 생성
       const safeTempDir = getSafeTempDir();
       wavPath = path.join(safeTempDir, `whisper_${Date.now()}.wav`);
       usingSafeTemp = true;
-      console.log(`[Audio] Unicode path detected, using safe temp: ${wavPath}`);
+      console.log(`[Audio] ${isWavInput ? 'WAV input detected, normalizing to' : 'Unicode path detected, using'} safe temp: ${wavPath}`);
     }
 
     // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크).
@@ -1327,9 +1360,14 @@ function convertToWav(inputPath) {
         // 잘린 WAV(헤더만 있거나 손상)를 mtime이 최신이라고 재사용하면 손상
         // 자막이 재생산된다 (P1). 크기 게이트(1080바이트) 대신 헤더 검증을
         // 쓰면 유효한 작은 WAV(사용자 제공 100바이트대 짧은 클립)도 보존된다.
-        const header = fs.readFileSync(wavPath).subarray(0, 12).toString('latin1');
+        const wavBuf = fs.readFileSync(wavPath);
+        const header = wavBuf.subarray(0, 12).toString('latin1');
         const hasRiffWave = header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE';
-        if (hasRiffWave && wavStat.size >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
+        // RIFF chunk size 필드(4-7바이트 LE)는 '파일 크기 - 8'과 일치해야 한다.
+        // 44B~1KB 크기 게이트만 통과하는 잘린 WAV(헤더만 유효하고 데이터가
+        // 잘린 경우)를 여기서 걸러낸다 (MED-2).
+        const riffSizeOk = wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8;
+        if (hasRiffWave && riffSizeOk && wavBuf.length >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
           // 파일일 수 있으므로 추출 후 정리 단계에서 삭제하지 않는다 (F3).
@@ -1697,6 +1735,23 @@ function get7zaExePath() {
 // .7z 추출: Windows 내장 tar.exe(libarchive, BCJ2 지원) 우선, 실패 시 번들 7za.exe 폴백.
 async function extract7z(archivePath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
+  // 추출 전 존재하던 항목 스냅샷: 실패 시 이 아카이브가 만든 부분 파일만
+  // 지우고 기존 파일(다른 아카이브의 동시 추출 산출물 등)은 보존한다 (LOW-4).
+  const preexisting = new Set();
+  const snapshot = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (_e) {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      preexisting.add(full);
+      if (e.isDirectory()) snapshot(full);
+    }
+  };
+  snapshot(destDir);
   try {
     await execFileAsync('tar.exe', ['-xf', archivePath, '-C', destDir], {
       windowsHide: true,
@@ -1716,14 +1771,33 @@ async function extract7z(archivePath, destDir) {
       maxBuffer: 4 * 1024 * 1024,
     });
   } catch (err) {
-    // 추출 실패 시 destDir에 남은 부분 파일이 '설치됨'으로 오인되지 않게 정리한다.
+    // 추출 실패 시 이 아카이브가 만든 부분 파일만 정리한다. 전체 rmSync는
+    // 같은 디렉터리에 동시 추출 중인 다른 아카이브의 산출물까지 지우므로
+    // 스냅샷에 없던 항목(이번 추출이 만든 것)만 삭제한다 (LOW-4).
     console.warn(`[FasterWhisper] 7z extraction failed, cleaning partial output: ${err.message}`);
-    try {
-      fs.rmSync(destDir, { recursive: true, force: true });
-      fs.mkdirSync(destDir, { recursive: true });
-    } catch (_e) {
-      /* ignore */
-    }
+    const cleanupPartial = (dir) => {
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_e) {
+        return;
+      }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (preexisting.has(full)) continue; // 이번 추출 이전부터 있던 항목은 보존
+        try {
+          if (e.isDirectory()) {
+            cleanupPartial(full);
+            fs.rmdirSync(full);
+          } else {
+            fs.unlinkSync(full);
+          }
+        } catch (_e) {
+          /* ignore */
+        }
+      }
+    };
+    cleanupPartial(destDir);
     throw err;
   }
 }
@@ -3172,6 +3246,9 @@ ipcMain.handle('download-model', async (_event, modelName) => {
       });
       response.data.pipe(writer);
       await new Promise((resolve, reject) => {
+        // 스트림 에러(연결 중단/취소 abort)를 reject로 연결하지 않으면
+        // renderer가 영원히 pending 상태로 남는다 (HIGH-3).
+        response.data.on('error', reject);
         writer.on('finish', () => {
           // content-length가 알려진 경우(전송/연결 중단 등으로) 받은 크기와 다르면
           // 손상 파일로 취급해 부분 파일 삭제 + 실패시킨다.
@@ -3185,6 +3262,10 @@ ipcMain.handle('download-model', async (_event, modelName) => {
           }
         });
         writer.on('error', reject);
+        // writer가 finish/error 없이 닫히는 예외 경로에서도 settle 보장 (HIGH-3)
+        writer.on('close', () => {
+          if (!writer.writableFinished) reject(new Error('Download stream closed before finish'));
+        });
       });
     };
 
@@ -3406,6 +3487,13 @@ ipcMain.handle(
       const failedLangs = [];
       for (let li = 0; li < langs.length; li++) {
         const safeTarget = langs[li];
+        // 사용자 중지 시 남은 언어를 시작하지 않는다. translateSRTFile()이
+        // 호출 시점에 abort 플래그를 리셋하므로 루프 쪽에서 먼저 확인해야
+        // 언어 간 중지가 씹히지 않는다 (HIGH-1b).
+        if (translator._aborted) {
+          console.log(`[Translate] Aborted by user, skipping remaining languages: ${langs.slice(li).join(', ')}`);
+          throw new Error('ABORTED: Translation stopped by user');
+        }
         const outputPath = path.join(fileDir, `${fileName}_${safeTarget}.srt`);
         try {
           const result = await translator.translateSRTFile(
