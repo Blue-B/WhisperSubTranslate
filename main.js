@@ -1896,7 +1896,11 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
       // 취소/abort 시 writer.destroy()가 close만 발생시켜 finish/error 없이
       // 영구 pending 되는 것 방지 — download-model과 동일 패턴 (MED-6).
       writer.on('close', () => {
-        if (!writer.writableFinished) reject(new Error(`${label}: Download stream closed before finish`));
+        if (writer.writableFinished) return;
+        // 취소 시 close가 finish/error보다 먼저 settle할 수 있다 — 취소를
+        // 네트워크 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
+        if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
+        else reject(new Error(`${label}: Download stream closed before finish`));
       });
     });
   } finally {
@@ -3286,7 +3290,11 @@ ipcMain.handle('download-model', async (_event, modelName) => {
         writer.on('error', reject);
         // writer가 finish/error 없이 닫히는 예외 경로에서도 settle 보장 (HIGH-3)
         writer.on('close', () => {
-          if (!writer.writableFinished) reject(new Error('Download stream closed before finish'));
+          if (writer.writableFinished) return;
+          // 취소 시 close가 finish/error보다 먼저 settle한다 — 취소를 네트워크
+          // 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
+          if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
+          else reject(new Error('Download stream closed before finish'));
         });
       });
     };
@@ -3494,7 +3502,14 @@ const TARGET_LANG_RE = /^[a-z]{2,8}$/i;
 ipcMain.handle(
   'translate-subtitle',
   async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId }) => {
+    // ABORTED catch에서 지금까지 성공한 언어 경로를 응답에 담기 위해
+    // 핸들러 스코프로 끌어올린다 (MED).
+    const outputPaths = [];
+    const failedLangs = [];
     try {
+      // 새 요청 시작을 세션 시작으로 표시: 중지 후에도 새 번역이 정상 시작된다.
+      // 이후 중지 감지는 언어 루프의 _aborted 검사가 담당한다 (MAJOR).
+      translator.resetAbort();
       const fileName = path.basename(filePath, path.extname(filePath));
       const fileDir = path.dirname(filePath);
       // 다국어 지원: targetLangs 배열 우선, 없으면 단일 targetLang (구판 호환). 중복/빈값 제거.
@@ -3517,13 +3532,10 @@ ipcMain.handle(
 
       event.sender.send('translation-progress', { stage: 'starting' });
 
-      const outputPaths = [];
-      const failedLangs = [];
       for (let li = 0; li < langs.length; li++) {
         const safeTarget = langs[li];
-        // 사용자 중지 시 남은 언어를 시작하지 않는다. translateSRTFile()이
-        // 호출 시점에 abort 플래그를 리셋하므로 루프 쪽에서 먼저 확인해야
-        // 언어 간 중지가 씹히지 않는다 (HIGH-1b).
+        // 사용자 중지 시 남은 언어를 시작하지 않는다. 플래그는 요청 진입 시
+        // 리셋됐으므로 여기서는 언어 간 중지만 감지한다 (HIGH-1b).
         if (translator._aborted) {
           console.log(`[Translate] Aborted by user, skipping remaining languages: ${langs.slice(li).join(', ')}`);
           throw new Error('ABORTED: Translation stopped by user');
@@ -3598,8 +3610,16 @@ ipcMain.handle(
       return { success: true, outputPath: outputPaths[0], outputPaths, failedLangs };
     } catch (error) {
       if (error.message && error.message.includes('ABORTED')) {
-        event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user' });
-        return { success: false, error: 'Stopped by user', userStopped: true };
+        // MED: 도중 중지여도 완료된 이전 언어 SRT 경로는 응답에 포함한다.
+        // renderer가 읽는 기존 outputPaths 필드도 함께 유지한다.
+        event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user', outputPaths });
+        return {
+          success: false,
+          error: 'Stopped by user',
+          userStopped: true,
+          partialOutputPaths: outputPaths,
+          outputPaths,
+        };
       }
       event.sender.send('translation-progress', { stage: 'error', errorMessage: error.message });
       return { success: false, error: error.message };
@@ -3610,6 +3630,8 @@ ipcMain.handle(
 // 텍스트 직접 번역 (테스트용)
 ipcMain.handle('translate-text', async (_event, { text, method, targetLang }) => {
   try {
+    // translate-subtitle과 동일: 새 요청 시작 시 중지 플래그 리셋 (MAJOR).
+    translator.resetAbort();
     const result = await translator.translateAuto(text, method, targetLang);
     return { success: true, translatedText: result };
   } catch (error) {

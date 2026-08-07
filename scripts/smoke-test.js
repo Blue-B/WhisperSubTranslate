@@ -731,6 +731,73 @@ async function runAbortSurvivesLangLoop() {
   console.log('[AbortLangLoop] stop then new session translation succeeds, in-flight abort throws (ok)');
 }
 
+async function runAbortResetOnNewIpcRequest() {
+  // MAJOR: translate-subtitle 핸들러는 진입 직후(언어 루프 전) resetAbort()하므로
+  // 한 번 중지해도 다음 새 요청이 정상 시작된다. 루프의 _aborted 검사는 언어 간
+  // 중지만 감지한다. main.js는 electron 의존으로 node에서 로드할 수 없어,
+  // 핸들러 제어 흐름(진입 리셋 → 언어 루프 → ABORTED catch)을 그대로 시뮬레이션한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.translateSRTContent = async (content) => content.replace('Hello', '안녕');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-ipc-abort-'));
+  const inputPath = path.join(tmpDir, 'in.srt');
+  fs.writeFileSync(inputPath, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+
+  const simulateHandler = async (langs, { stopAfterLang } = {}) => {
+    const outputPaths = [];
+    const failedLangs = [];
+    try {
+      translator.resetAbort(); // 핸들러 진입 (언어 루프 전)
+      for (let li = 0; li < langs.length; li++) {
+        const safeTarget = langs[li];
+        // 루프의 중지 검사: 진입 시 리셋됐으므로 언어 간 중지만 감지한다.
+        if (translator._aborted) throw new Error('ABORTED: Translation stopped by user');
+        const outputPath = path.join(tmpDir, `out_${safeTarget}.srt`);
+        try {
+          const result = await translator.translateSRTFile(inputPath, outputPath, 'mymemory', safeTarget, null, 'en');
+          outputPaths.push(result);
+          if (stopAfterLang !== undefined && li === stopAfterLang) translator._aborted = true;
+        } catch (langErr) {
+          if (String(langErr?.message || '').includes('ABORTED')) throw langErr;
+          failedLangs.push(safeTarget);
+        }
+      }
+      return { success: true, outputPaths, failedLangs };
+    } catch (error) {
+      if (error.message && error.message.includes('ABORTED')) {
+        // MED: 도중 중지여도 완료된 이전 언어 outputPaths를 응답에 포함한다.
+        return {
+          success: false,
+          error: 'Stopped by user',
+          userStopped: true,
+          partialOutputPaths: outputPaths,
+          outputPaths,
+        };
+      }
+      throw error;
+    }
+  };
+
+  try {
+    // 1) MAJOR: 중지 후 새 translate-subtitle 요청이 루프 경로 포함해 정상 시작된다.
+    translator._aborted = true; // 직전 요청이 사용자 중지로 끝난 상태
+    const res = await simulateHandler(['ko', 'ja']);
+    assert.strictEqual(res.success, true, 'new request after stop must not be blocked');
+    assert.strictEqual(res.outputPaths.length, 2, 'all languages must run after entry reset');
+    assert.ok(fs.existsSync(path.join(tmpDir, 'out_ko.srt')));
+    assert.ok(fs.existsSync(path.join(tmpDir, 'out_ja.srt')));
+
+    // 2) MED: 2번째 언어 도중 중지 → 1번째 언어 SRT가 partialOutputPaths에 포함된다.
+    const partial = await simulateHandler(['ko', 'ja'], { stopAfterLang: 0 });
+    assert.strictEqual(partial.success, false);
+    assert.strictEqual(partial.userStopped, true);
+    assert.deepStrictEqual(partial.partialOutputPaths, [path.join(tmpDir, 'out_ko.srt')]);
+    assert.deepStrictEqual(partial.outputPaths, [path.join(tmpDir, 'out_ko.srt')]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  console.log('[AbortResetOnNewIpcRequest] stop-then-new-request starts, partial langs in abort response (ok)');
+}
+
 async function runParallelLastWindowAbort() {
   // 남은-2: 병렬 루프의 마지막 윈도우에서 abort가 감지되면 원문 push 없이
   // ABORTED를 throw해 Promise.all이 상위로 전파해야 한다 (부분 파일 success 방지).
@@ -896,6 +963,7 @@ async function run() {
   await runAbortSafeRetry();
   await runCustomPromptFingerprint();
   await runAbortSurvivesLangLoop();
+  await runAbortResetOnNewIpcRequest();
   await runParallelLastWindowAbort();
   await runParallelRetryDedupe();
   await runThrottleTiers();
