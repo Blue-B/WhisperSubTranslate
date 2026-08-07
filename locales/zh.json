@@ -44,6 +44,7 @@
   "translationTranslating": "翻译中...",
   "translationCompleted": "翻译完成！",
   "translationFailed": "翻译失败: ",
+  "insecureStorageWarning": "[安全警告] 由于操作系统钥匙串（safeStorage）不可用，API密钥未经过操作系统级加密保存。能访问此设备的程序可能读取到它们。",
   "myMemoryQuotaExceeded": "MyMemory 每日配额已用完。请明天重试或使用 DeepL/OpenAI。",
   "errorGpuMemory": "GPU 内存不足或驱动问题",
   "errorProcessCrash": "进程异常终止（可能内存不足）",

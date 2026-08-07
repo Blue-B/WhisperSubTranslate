@@ -1046,6 +1046,7 @@ async function continueProcessing() {
         targetLangs: targetLangs,
         device: document.getElementById('deviceSelect')?.value || 'auto',
         localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
+        sessionId: _processingEpoch,
       });
 
       // 중지 후 재시작된 세션이면 이 결과를 반영하지 않는다 (stale 콜백 방지).
@@ -1256,6 +1257,11 @@ async function continueProcessing() {
         setProgressTarget(100, I18N[currentUiLang].allFailed || 'Processing failed');
       }
       updateQueueDisplay();
+      // 추출 실패도 다음 파일로 계속 진행 (다운로드 실패 경로와 동일).
+      // autoRetryFailed 상호작용: 배치에 성공 파일이 있으면 후속 tail에서 error 항목이
+      // 재시도되고, 전부 실패하면 여기서 배치가 끝나 재시도 없이 종료된다.
+      setTimeout(() => continueProcessing(), 100);
+      return;
     } else {
       addOutput(`${I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName)}\n`);
 
@@ -1296,6 +1302,7 @@ async function continueProcessing() {
             targetLangs: targetLangs,
             device: document.getElementById('deviceSelect')?.value || 'auto',
             localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
+            sessionId: _processingEpoch,
           });
           translationDelegated = true;
 
@@ -2812,27 +2819,21 @@ if (window?.electronAPI) {
   }
   const origOnTranslation = window.electronAPI.onTranslationProgress;
   if (typeof origOnTranslation === 'function') {
-    // 이 이벤트 스트림이 속한 세션 epoch. main은 translate-subtitle IPC마다
-    // 'starting'부터 이벤트를 보내므로, 현재 세션의 'starting'을 받은 뒤의
-    // completed/error만 처리한다. 중지 후 재시작 시 이전 세션의 stale
-    // completed/error가 새 배치를 오염시키지 않도록 막는다.
-    let _translationStreamEpoch = -1;
+    // 세션 ID 기반 가드: renderer는 translate-subtitle invoke마다 현재 _processingEpoch를
+    // sessionId로 실어 보내고, main이 translation-progress 이벤트에 그대로 에코한다.
+    // 중지→즉시 재실행 시 이전 세션의 지연 completed/error는 sessionId 불일치로 즉시 차단된다.
+    // (기존 'starting' 재무장 방식은 이전 세션의 completed가 새 세션 'starting'보다 먼저
+    //  도착하면 걸러내지 못해 새 세션을 오염시켰다)
     window.electronAPI.onTranslationProgress((data) => {
       const methodNow = document.getElementById('translationSelect')?.value;
       // 번역 비활성(none) 시 무시하되, completed/error는 예외 — 이벤트가 도착했다는 건
       // 실제 번역 세션이 있었던 것이고, completed가 자동-다음파일 트리거를 담당하므로
-      // 버리면 99%에서 동결된다 (F2). stale 이벤트는 아래 epoch 가드가 걸러낸다.
+      // 버리면 99%에서 동결된다 (F2). stale 이벤트는 아래 sessionId 가드가 걸러낸다.
       const isTerminalStage = data?.stage === 'completed' || data?.stage === 'error';
       if ((!methodNow || methodNow === 'none') && !isTerminalStage) return;
 
-      // 이전 세션에서 남은 이벤트는 새 세션이 'starting'을 보낼 때까지 무시.
-      // (세션 시작 시 _processingEpoch가 증가하므로 stale 스트림의 completed/error는
-      //  여기서 걸러진다)
-      if (data?.stage === 'starting') {
-        _translationStreamEpoch = _processingEpoch;
-      } else if (_translationStreamEpoch !== _processingEpoch) {
-        return;
-      }
+      // 이전 세션에서 남은 이벤트는 sessionId 불일치로 무시한다.
+      if (data?.sessionId !== _processingEpoch) return;
 
       // completed 단계는 항상 처리해야 함 (자동 처리 로직 실행을 위해)
       if (!translationSessionActive && data?.stage !== 'completed') return; // 완료 이후 추가 이벤트 무시
@@ -4805,10 +4806,8 @@ async function saveApiKeys() {
         status.className = 'api-status success';
         status.textContent = successMsg[currentUiLang] || successMsg.ko;
         if (res.insecure) {
-          // safeStorage/OS 키링 부재로 AES 폴백 저장됨 — 하드코딩 키라 노출 가능 (locales 키 추가 금지라 하드코딩)
-          showToast(
-            '[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다.'
-          );
+          // safeStorage/OS 키링 부재로 AES 폴백 저장됨 — 하드코딩 키라 노출 가능
+          showToast(I18N[currentUiLang].insecureStorageWarning || I18N.en.insecureStorageWarning);
         }
       } else {
         status.className = 'api-status error';

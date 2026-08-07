@@ -2984,9 +2984,9 @@ ipcMain.handle('secure-clear-history', async (event) => {
           const st = fs.statSync(fp);
           fs.writeFileSync(fp, Buffer.alloc(Math.min(st.size, 4 * 1024 * 1024), 0));
         } catch (_) {}
-        try {
-          fs.unlinkSync(fp);
-        } catch (_) {}
+        // unlink 실패를 삼키지 않는다: 상위 catch로 전파해 { success: false, error }를 반환
+        // (히스토리 파일이 남으면 재시작 시 기록이 부활하므로 정직하게 실패를 알린다)
+        fs.unlinkSync(fp);
       }
     } catch (_) {}
     return { success: true };
@@ -3493,7 +3493,7 @@ ipcMain.handle('validate-api-keys', async (_event, tempKeys) => {
 const TARGET_LANG_RE = /^[a-z]{2,8}$/i;
 ipcMain.handle(
   'translate-subtitle',
-  async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId }) => {
+  async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId, sessionId }) => {
     try {
       const fileName = path.basename(filePath, path.extname(filePath));
       const fileDir = path.dirname(filePath);
@@ -3515,7 +3515,7 @@ ipcMain.handle(
       translator.localDevice = device === 'cpu' ? 'cpu' : 'auto';
       translator.localModelId = localModelId || '1.8b';
 
-      event.sender.send('translation-progress', { stage: 'starting' });
+      event.sender.send('translation-progress', { stage: 'starting', sessionId });
 
       const outputPaths = [];
       const failedLangs = [];
@@ -3549,6 +3549,7 @@ ipcMain.handle(
                   lang: safeTarget,
                   langIndex: li + 1,
                   langTotal: langs.length,
+                  sessionId,
                 });
               } catch (_) {
                 /* noop */
@@ -3593,15 +3594,16 @@ ipcMain.handle(
         outputPath: outputPaths[0],
         outputPaths,
         failedLangs,
+        sessionId,
       });
 
       return { success: true, outputPath: outputPaths[0], outputPaths, failedLangs };
     } catch (error) {
       if (error.message && error.message.includes('ABORTED')) {
-        event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user' });
+        event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user', sessionId });
         return { success: false, error: 'Stopped by user', userStopped: true };
       }
-      event.sender.send('translation-progress', { stage: 'error', errorMessage: error.message });
+      event.sender.send('translation-progress', { stage: 'error', errorMessage: error.message, sessionId });
       return { success: false, error: error.message };
     }
   }

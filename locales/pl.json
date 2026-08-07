@@ -44,6 +44,7 @@
   "translationTranslating": "Tłumaczenie...",
   "translationCompleted": "Tłumaczenie zakończone!",
   "translationFailed": "Tłumaczenie nieudane: ",
+  "insecureStorageWarning": "[Ostrzeżenie bezpieczeństwa] Magazyn kluczy OS (safeStorage) jest niedostępny, więc klucze API zostały zapisane bez szyfrowania na poziomie systemu operacyjnego. Programy mające dostęp do tego urządzenia mogą je odczytać.",
   "myMemoryQuotaExceeded": "Dzienny limit MyMemory został przekroczony. Spróbuj jutro lub użyj DeepL/OpenAI.",
   "errorGpuMemory": "Brak pamięci GPU lub problem ze sterownikiem",
   "errorProcessCrash": "Proces zakończony nieprawidłowo (możliwy brak pamięci)",

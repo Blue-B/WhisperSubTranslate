@@ -54,6 +54,8 @@ const I18N = {
     translationTranslating: '번역 중...',
     translationCompleted: '번역 완료!',
     translationFailed: '번역 실패: ',
+    insecureStorageWarning:
+      '[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다. 이 기기에 접근할 수 있는 프로그램이 키를 읽을 수 있습니다.',
     myMemoryQuotaExceeded: 'MyMemory 일일 한도 초과. 내일 다시 시도하거나 DeepL/OpenAI를 사용하세요.',
     errorGpuMemory: 'GPU 메모리 부족 또는 드라이버 문제',
     errorProcessCrash: '프로세스가 비정상적으로 종료됨 (메모리 부족 가능성)',
@@ -452,6 +454,8 @@ const I18N = {
     translationTranslating: 'Translating...',
     translationCompleted: 'Translation completed!',
     translationFailed: 'Translation failed: ',
+    insecureStorageWarning:
+      '[Security warning] OS keyring (safeStorage) unavailable, API keys were saved without OS-level encryption. Any program with access to this device may be able to read them.',
     myMemoryQuotaExceeded: 'MyMemory daily quota exceeded. Try again tomorrow or use DeepL/OpenAI.',
     errorGpuMemory: 'GPU memory shortage or driver issue',
     errorProcessCrash: 'Process terminated abnormally (possible memory shortage)',
@@ -855,6 +859,8 @@ const I18N = {
     translationTranslating: '翻訳中...',
     translationCompleted: '翻訳完了！',
     translationFailed: '翻訳失敗: ',
+    insecureStorageWarning:
+      '[セキュリティ警告] OSキーリング(safeStorage)が利用できないため、APIキーがOSレベルの暗号化なしで保存されました。このデバイスにアクセスできるプログラムがキーを読み取る可能性があります。',
     myMemoryQuotaExceeded: 'MyMemory の1日の上限を超えました。明日再試行するか、DeepL/OpenAI をご利用ください。',
     errorGpuMemory: 'GPUメモリ不足またはドライバーの問題',
     errorProcessCrash: 'プロセスが異常終了しました（メモリ不足の可能性）',
@@ -1252,6 +1258,8 @@ const I18N = {
     translationTranslating: '翻译中...',
     translationCompleted: '翻译完成！',
     translationFailed: '翻译失败: ',
+    insecureStorageWarning:
+      '[安全警告] 由于操作系统钥匙串（safeStorage）不可用，API密钥未经过操作系统级加密保存。能访问此设备的程序可能读取到它们。',
     myMemoryQuotaExceeded: 'MyMemory 每日配额已用完。请明天重试或使用 DeepL/OpenAI。',
     errorGpuMemory: 'GPU 内存不足或驱动问题',
     errorProcessCrash: '进程异常终止（可能内存不足）',
@@ -1645,6 +1653,8 @@ const I18N = {
     translationTranslating: 'Tłumaczenie...',
     translationCompleted: 'Tłumaczenie zakończone!',
     translationFailed: 'Tłumaczenie nieudane: ',
+    insecureStorageWarning:
+      '[Ostrzeżenie bezpieczeństwa] Magazyn kluczy OS (safeStorage) jest niedostępny, więc klucze API zostały zapisane bez szyfrowania na poziomie systemu operacyjnego. Programy mające dostęp do tego urządzenia mogą je odczytać.',
     myMemoryQuotaExceeded: 'Dzienny limit MyMemory został przekroczony. Spróbuj jutro lub użyj DeepL/OpenAI.',
     errorGpuMemory: 'Brak pamięci GPU lub problem ze sterownikiem',
     errorProcessCrash: 'Proces zakończony nieprawidłowo (możliwy brak pamięci)',
