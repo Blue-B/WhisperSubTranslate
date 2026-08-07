@@ -38,7 +38,9 @@ if (process.platform === 'linux') {
     needNoSandbox = true;
   }
   if (needNoSandbox) {
-    console.warn('[start] chrome-sandbox lacks setuid bit — launching with --no-sandbox (reduced security). To fix: sudo chown root:root <electron>/chrome-sandbox && sudo chmod 4755 <electron>/chrome-sandbox');
+    console.warn(
+      '[start] chrome-sandbox lacks setuid bit — launching with --no-sandbox (reduced security). To fix: sudo chown root:root <electron>/chrome-sandbox && sudo chmod 4755 <electron>/chrome-sandbox'
+    );
     args.unshift('--no-sandbox');
   }
 }

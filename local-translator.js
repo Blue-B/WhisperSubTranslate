@@ -485,9 +485,7 @@ async function _downloadModelImpl(signal, modelId) {
             try {
               // 잘린 다운로드 방지: content-length가 주어졌고 받은 양이 다르면 실패 (MED 4).
               if (res.headers['content-length'] && downloaded !== total) {
-                return fail(
-                  new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`)
-                );
+                return fail(new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`));
               }
               fs.renameSync(tmp, dest);
               settled = true;
@@ -562,9 +560,7 @@ async function loadModelUnlocked(device = 'auto', modelId = DEFAULT_MODEL_ID, si
     }
     _currentGpuMode = mode;
     _currentModelId = modelId;
-    console.log(
-      `[Local] 모델 로드 완료 (id=${modelId}, device=${mode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`
-    );
+    console.log(`[Local] 모델 로드 완료 (id=${modelId}, device=${mode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`);
   })().finally(() => {
     _loadPromise = null;
   });

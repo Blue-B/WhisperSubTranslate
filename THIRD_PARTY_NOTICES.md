@@ -21,7 +21,7 @@ WhisperSubTranslate itself.
 | Package | Version | License |
 | --- | --- | --- |
 | 7zip-bin | 5.2.0 | MIT |
-| axios | 1.16.1 | MIT |
+| axios | 1.19.0 | MIT |
 | deepl-node | 1.27.0 | MIT |
 | ffmpeg-static | 5.3.0 | GPL-3.0-or-later (bundles FFmpeg build) |
 | ffprobe-static | 3.1.0 | MIT |

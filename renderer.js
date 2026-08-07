@@ -2754,9 +2754,7 @@ if (window?.electronAPI) {
         const translationPct = Math.max(0, Math.min(100, data.progress));
         // 추출이 없던 세션(SRT 단독 번역)은 main이 보낸 0-100을 그대로 쓴다.
         // 추출이 있었던 세션은 번역이 50-100% 구간이다.
-        let overallPct = _translationProgressFromZero
-          ? translationPct
-          : 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
+        let overallPct = _translationProgressFromZero ? translationPct : 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
         // 'translating' 단계에서는 100%(="완료!")에 도달하지 않도록 99%로 상한 제한.
         // 마지막 배치가 current===total로 progress=100을 보내더라도, SRT 조립·파일 저장 등
         // 후처리가 아직 남아 있으므로 진짜 완료(=completed 단계)에서만 100%로 마무리한다.

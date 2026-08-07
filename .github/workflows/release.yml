@@ -18,13 +18,28 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: npm
+
+      # 태그(v*)와 package.json 버전이 어긋나면 릴리스 산출물 이름과 body가
+      # 불일치하므로 빌드 전에 검증한다.
+      - name: Verify tag matches package.json version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $pkg = node -p "require('./package.json').version"
+          if (-not $tag.StartsWith('v')) { Write-Error "Tag must start with 'v', got: $tag"; exit 1 }
+          $tagVer = $tag.Substring(1)
+          if ($tagVer -ne $pkg) {
+            Write-Error "Tag version ($tagVer) does not match package.json version ($pkg)"
+            exit 1
+          }
+          Write-Host "Tag $tag matches package.json version $pkg"
 
       # postinstall.js downloads the prebuilt whisper.cpp (whisper-cli.exe).
       # GITHUB_TOKEN raises the GitHub API rate limit used during that fetch.
@@ -55,9 +70,15 @@ jobs:
             Get-ChildItem -Recurse whisper-cpp -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
+          # postinstall이 실패 흔적(install-failed.txt)을 남겼으면 abort.
+          if (Test-Path "whisper-cpp/install-failed.txt") {
+            Write-Error "postinstall recorded a failure (whisper-cpp/install-failed.txt); aborting release"
+            Get-Content "whisper-cpp/install-failed.txt"
+            exit 1
+          }
 
-      - name: Lint + smoke test
-        run: npm run check
+      - name: Lint + smoke test + e2e
+        run: npm run check:full
 
       - name: Build Windows app (electron-builder, dir target)
         run: npm run build-win
@@ -74,7 +95,7 @@ jobs:
         run: node scripts/release-notes.js ${{ github.ref_name }}
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: WhisperSubTranslate ${{ github.ref_name }}
           body_path: RELEASE_BODY.md
