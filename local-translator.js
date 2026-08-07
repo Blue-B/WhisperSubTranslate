@@ -755,6 +755,7 @@ module.exports = {
   translateLocal,
   buildTranslationPrompt,
   isEffectivelySameText,
+  hasProperNounOnlyPattern,
   looksUntranslated,
   withTimeout,
   abortTranslation,
