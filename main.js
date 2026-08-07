@@ -1233,9 +1233,29 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       if (isUserStopped) {
         return reject(new Error('Stopped by user'));
       }
-      // 부분/빈 SRT는 성공으로 취급하지 않는다: 단일 파일 경로와 동일하게
-      // isCompleteSrt(큐 ≥1개 + 끝에 개행)로 검증한다 (P1).
-      if ((code === 0 || fs.existsSync(srtPath)) && fs.existsSync(srtPath) && isCompleteSrt(srtPath)) {
+      // 세그먼트 성공 판정 (F2):
+      // - code 0: 정상 종료. SRT가 비어 있어도(무음/음악 전용 구간) 허용한다.
+      //   빈 세그먼트를 REJECT하면 분할 전체를 폐기하고 파일 전체를 단일 패스로
+      //   재추출해 2배 시간이 든다. 빈 내용은 mergeSrtFiles에서 무해하게 무시된다.
+      // - code !== 0: SRT가 존재하고 isCompleteSrt(큐 ≥1 + 끝 개행)일 때만 성공.
+      if (code === 0) {
+        try {
+          let content = '';
+          if (fs.existsSync(srtPath)) {
+            applyTokenTightTiming(outputBase, srtPath);
+            content = fs.readFileSync(srtPath, 'utf-8');
+            // 임시 SRT 파일 삭제
+            try {
+              fs.unlinkSync(srtPath);
+            } catch (_e) {
+              /* ignore */
+            }
+          }
+          resolve(content);
+        } catch (err) {
+          reject(new Error(`Failed to read segment SRT: ${err.message}`));
+        }
+      } else if (fs.existsSync(srtPath) && isCompleteSrt(srtPath)) {
         try {
           applyTokenTightTiming(outputBase, srtPath);
           const content = fs.readFileSync(srtPath, 'utf-8');
@@ -1302,18 +1322,22 @@ function convertToWav(inputPath) {
       try {
         const wavStat = fs.statSync(wavPath);
         const srcStat = fs.statSync(inputPath);
-        // 최소 크기 검증: 44바이트 WAV 헤더 + 1KB 이상이어야 온전한 PCM 스트림.
-        // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV(0바이트 ~ 수 KB)를 mtime이
-        // 최신이라고 재사용하면 손상 자막이 재생산된다 (P1).
-        if (wavStat.size >= 1080 && wavStat.mtimeMs >= srcStat.mtimeMs) {
+        // RIFF/WAVE 매직 헤더 검증: ffmpeg가 만드는 WAV는 항상 12바이트
+        // 'RIFF' + 'WAVE' 헤더로 시작한다. 이전 세션에서 ffmpeg가 죽어 남은
+        // 잘린 WAV(헤더만 있거나 손상)를 mtime이 최신이라고 재사용하면 손상
+        // 자막이 재생산된다 (P1). 크기 게이트(1080바이트) 대신 헤더 검증을
+        // 쓰면 유효한 작은 WAV(사용자 제공 100바이트대 짧은 클립)도 보존된다.
+        const header = fs.readFileSync(wavPath).subarray(0, 12).toString('latin1');
+        const hasRiffWave = header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE';
+        if (hasRiffWave && wavStat.size >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
           // 파일일 수 있으므로 추출 후 정리 단계에서 삭제하지 않는다 (F3).
           resolve({ wavPath, usingSafeTemp, originalWavPath, reused: true });
           return;
         }
-        // 스테일/잘린 WAV: 삭제 후 아래에서 재변환
-        console.log(`[Audio] WAV stale (source newer or empty), re-converting: ${path.basename(wavPath)}`);
+        // 스테일/잘린 WAV (헤더 검증 실패 또는 소스가 더 새로움): 삭제 후 재변환
+        console.log(`[Audio] WAV stale (bad header or source newer), re-converting: ${path.basename(wavPath)}`);
         try {
           fs.unlinkSync(wavPath);
         } catch (_e) {}
@@ -2438,6 +2462,18 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
         // SRT가 존재하면서 파싱 가능한 큐 1개 이상 + 끝 개행으로 온전할 때만 성공.
         const srtComplete = srtExists && isCompleteSrt(srtPath);
         if (code === 0 || srtComplete) {
+          // F1: code 0 + 빈/미생성 SRT는 무음 영상의 정상 케이스일 수 있으므로
+          // 성공은 유지하되, 조용히 넘어가지 않게 명시적으로 경고를 남긴다.
+          // (code !== 0 이면서 SRT가 온전하지 않으면 아래 else에서 실패 처리)
+          if (code === 0 && srtExists && !srtComplete) {
+            console.warn(
+              `[WARN] ${path.basename(filePath)} exited 0 but SRT is empty/incomplete (silent video?)`
+            );
+            mainWindow.webContents.send(
+              'output-update',
+              `[Warning] Subtitle file is empty (no speech detected in this video/audio).\n`
+            );
+          }
           let finalSrtPath = srtPath;
 
           // 유니코드 경로면 temp에서 원본 위치로 복사
