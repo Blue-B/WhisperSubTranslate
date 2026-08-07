@@ -2,7 +2,7 @@
   "titleText": "WhisperSubTranslate",
   "dropTitle": "ここにファイルをドロップ",
   "dropHint1": "動画を渡せば、言葉はこちらで。抽出から翻訳まで、ひと続きの流れで。",
-  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · SRT",
+  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · TS · MTS · MPG · 3GP · SRT",
   "queueTitle": "キュー",
   "clearQueueBtn": "キューを削除",
   "clearCompletedBtn": "完了を削除",

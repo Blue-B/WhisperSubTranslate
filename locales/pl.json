@@ -2,7 +2,7 @@
   "titleText": "WhisperSubTranslate",
   "dropTitle": "Upuść pliki tutaj",
   "dropHint1": "Ty dajesz wideo. My — słowa. Wyodrębnianie i tłumaczenie w jednym przepływie.",
-  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · SRT",
+  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · TS · MTS · MPG · 3GP · SRT",
   "queueTitle": "Kolejka",
   "clearQueueBtn": "Wyczyść",
   "clearCompletedBtn": "Usuń ukończone",

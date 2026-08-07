@@ -1486,10 +1486,14 @@ ${lines}`;
           if (preferredMethod === 'local') {
             const message = String(error?.message || error);
             // 모델 로드/추론 실패와 사용자 중지는 모든 세그먼트에서 반복하지 말고 즉시 알린다.
-            if (!message.includes('LOCAL_UNTRANSLATED')) throw error;
+            // 컨텍스트 초과(LOCAL_TEXT_TOO_LONG)는 원문 유지로 처리해 파일 전체 중단을 막는다.
+            if (!message.includes('LOCAL_UNTRANSLATED') && !message.includes('LOCAL_TEXT_TOO_LONG')) throw error;
 
             localProcessed++;
             localUntranslated++;
+            if (message.includes('LOCAL_TEXT_TOO_LONG')) {
+              console.warn(`[Local] segment too long for context, keeping original: ${i + 1}/${texts.length}`);
+            }
             const failureSample = Math.min(5, texts.length);
             if (localProcessed >= failureSample && localUntranslated / localProcessed >= 0.8) {
               throw new Error(

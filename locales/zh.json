@@ -2,7 +2,7 @@
   "titleText": "WhisperSubTranslate",
   "dropTitle": "将文件拖到这里",
   "dropHint1": "你交出视频，我们交付文字 — 从提取到翻译，一气呵成。",
-  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · SRT",
+  "dropHint2": "MP4 · AVI · MKV · MOV · WMV · WEBM · TS · MTS · MPG · 3GP · SRT",
   "queueTitle": "队列",
   "clearQueueBtn": "清空队列",
   "clearCompletedBtn": "清除已完成",
