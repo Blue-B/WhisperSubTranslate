@@ -140,7 +140,22 @@ function sleep(ms) {
 }
 
 // Supported video extensions (지원되는 비디오 파일 확장자)
-const SUPPORTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.3gp'];
+const SUPPORTED_EXTENSIONS = [
+  '.mp4',
+  '.avi',
+  '.mkv',
+  '.mov',
+  '.wmv',
+  '.flv',
+  '.webm',
+  '.m4v',
+  '.ts',
+  '.mts',
+  '.m2ts',
+  '.mpg',
+  '.mpeg',
+  '.3gp',
+];
 
 function isVideoFile(filePath) {
   const ext = filePath.toLowerCase().substr(filePath.lastIndexOf('.'));
@@ -610,11 +625,42 @@ async function selectFile() {
       filters: [
         {
           name: 'Video & Subtitle Files',
-          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'mts', 'm2ts', 'mpg', 'mpeg', '3gp', 'srt'],
+          extensions: [
+            'mp4',
+            'avi',
+            'mkv',
+            'mov',
+            'wmv',
+            'flv',
+            'webm',
+            'm4v',
+            'ts',
+            'mts',
+            'm2ts',
+            'mpg',
+            'mpeg',
+            '3gp',
+            'srt',
+          ],
         },
         {
           name: 'Video Files',
-          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'mts', 'm2ts', 'mpg', 'mpeg', '3gp'],
+          extensions: [
+            'mp4',
+            'avi',
+            'mkv',
+            'mov',
+            'wmv',
+            'flv',
+            'webm',
+            'm4v',
+            'ts',
+            'mts',
+            'm2ts',
+            'mpg',
+            'mpeg',
+            '3gp',
+          ],
         },
         { name: 'Subtitle Files (SRT)', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] },
@@ -1835,7 +1881,6 @@ function getLocalizedError(errorMessage) {
 
 // 모델 이름 현지화 — select 드롭다운 욵은 한 줄이라 길면 잘린다. 여긴 이름+용량+추천마크만 짧게.
 // 긴 설명은 MODEL_DESC_I18N으로 분리해 select 아래 줄에서 풀로 보여준다.
-
 
 // 장치/번역 메서드 옵션 현지화
 const DEVICE_OPTIONS_I18N = (lang) => ({

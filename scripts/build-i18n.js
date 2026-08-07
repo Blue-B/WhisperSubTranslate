@@ -76,18 +76,37 @@ function build() {
 // checkouts may rewrite LF -> CRLF, which must not be treated as "out of sync".
 const normalizeEol = (s) => s.replace(/\r\n/g, '\n');
 
-const generated = build();
-const target = path.join(localesDir, 'i18n.js');
-
-if (process.argv.includes('--check')) {
-  const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
-  if (normalizeEol(current) !== normalizeEol(generated)) {
-    console.error('[i18n] locales/i18n.js is OUT OF SYNC with its sources. Run: npm run i18n:build');
-    process.exit(1);
+// 생성물을 prettier로 포맷해 "npm run format"과 순서에 무관하게 일관되게 한다.
+// (prettier는 devDependency — 미설치면 원본 생성물 그대로 사용)
+async function formatWithPrettier(code) {
+  try {
+    const prettier = require('prettier');
+    // prettier 3.x의 format은 async이다.
+    return await prettier.format(code, { parser: 'babel', singleQuote: true, printWidth: 120 });
+  } catch (_e) {
+    return code;
   }
-  console.log('[i18n] locales/i18n.js is in sync with JSON + functions.');
-  process.exit(0);
 }
 
-fs.writeFileSync(target, generated, 'utf8');
-console.log(`[i18n] wrote ${path.relative(path.join(__dirname, '..'), target)} (${generated.length} bytes)`);
+async function main() {
+  const generated = await formatWithPrettier(build());
+  const target = path.join(localesDir, 'i18n.js');
+
+  if (process.argv.includes('--check')) {
+    const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (normalizeEol(current) !== normalizeEol(generated)) {
+      console.error('[i18n] locales/i18n.js is OUT OF SYNC with its sources. Run: npm run i18n:build');
+      process.exit(1);
+    }
+    console.log('[i18n] locales/i18n.js is in sync with JSON + functions.');
+    process.exit(0);
+  }
+
+  fs.writeFileSync(target, generated, 'utf8');
+  console.log(`[i18n] wrote ${path.relative(path.join(__dirname, '..'), target)} (${generated.length} bytes)`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
