@@ -52,6 +52,9 @@ function getModelUrl(modelId) {
 
 // Language name map for prompt — Hy-MT2 officially supports 33+ languages.
 // Use FULL language names in the prompt (per Tencent Hy-MT2 model card).
+// 참고: 'zh-Hant'/'yue'는 main.js TARGET_LANG_RE(소문자 2~8자)로 UI 드롭다운에서
+// 도달 불가지만, local-translate IPC는 검증 없이 targetLang을 받으므로
+// 직접 호출 경로를 위해 유지한다.
 const LANG_NAMES = {
   ko: 'Korean',
   en: 'English',
@@ -608,6 +611,20 @@ async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAU
 }
 
 async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
+  // 컨텍스트 사전 체크: Hy-MT2는 contextSize 2048 고정이고 출력에 maxTokens 1024를
+  // 쓰므로, 입력이 길면 조용히 잘리는 대신 명확한 에러로 알린다 (모델 로드/다운로드 전에).
+  // 대략 토큰 수: 라틴 계열 ~4글자당 1토큰 + CJK 글자당 ~1토큰 (문자 수 상한 추정).
+  // 안전하게 입력 예산을 900토큰으로 잡는다 (2048 - 1024 출력 - 마진).
+  const precheckPrompt = buildTranslationPrompt(text, targetLang);
+  const cjkChars = (precheckPrompt.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) || []).length;
+  const approxTokens = Math.ceil(precheckPrompt.length / 4) + cjkChars;
+  if (approxTokens > 900) {
+    throw new Error(
+      `LOCAL_TEXT_TOO_LONG: 입력 자막이 로컬 모델 컨텍스트(2048)를 초과할 수 있습니다 ` +
+        `(추정 ${approxTokens} 토큰). 문장을 짧게 나눠 다시 시도하세요.`
+    );
+  }
+
   _maybeCleanupLegacy();
   if (!isModelInstalled(modelId)) {
     console.log(`[Local] 모델 미설치 감지 (${modelId}) → 자동 다운로드 시작...`);

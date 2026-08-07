@@ -120,6 +120,11 @@ const PROVIDER_FORMATS = ['openai', 'anthropic', 'gemini'];
 const CUSTOM_PROVIDER_PREFIX = 'custom:';
 const ANTHROPIC_API_VERSION = '2023-06-01';
 
+// DeepL이 지원하지 않는 타깃 언어 (2026-08 기준). fa(페르시아어)는 UI에서
+// 선택 가능하지만 DeepL API가 미지원이라, 매 줄 3회 재시도+백오프 후 폴백하던
+// 낭비를 막기 위해 mapToDeepLLang이 null을 돌려주고 deepl 분기에서 건너뛴다.
+const DEEPL_UNSUPPORTED_TARGETS = new Set(['fa', 'hi', 'th', 'vi', 'bo', 'kk', 'mn', 'ug', 'yue', 'ps', 'ne']);
+
 // 429/할당량 초과 판정. 'quota' 단독 부분매칭은 네트워크 오류 메시지에
 // 우연히 걸릴 수 있어 단어 경계 + 명시 문구로 정밀하게 매치한다.
 // (직렬/병렬/translateAuto 재시도 경로가 같은 규칙을 공유한다)
@@ -380,17 +385,6 @@ class EnhancedSubtitleTranslator {
 
   resetAbort() {
     this._aborted = false;
-  }
-
-  // MainWindow에 메시지 전송 헬퍼
-  sendToMainWindow(channel, data) {
-    try {
-      if (this.mainWindow && this.mainWindow.webContents) {
-        this.mainWindow.webContents.send(channel, data);
-      }
-    } catch (error) {
-      console.log(`[UI Update Failed] ${error.message}`);
-    }
   }
 
   // MainWindow 설정
@@ -1079,24 +1073,6 @@ class EnhancedSubtitleTranslator {
     }
   }
 
-  // OpenAI 번역 (모델·엔드포인트·프롬프트 전부 설정에서 변경 가능)
-  // 참고: https://platform.openai.com/docs/models
-  async translateWithChatGPT(text, targetLang = 'Korean', sourceLang = null) {
-    return this.translateWithLLM(text, targetLang, this.resolveProvider('chatgpt'), sourceLang);
-  }
-
-  // Anthropic Claude 번역
-  // 참고: https://docs.anthropic.com/en/api/messages
-  async translateWithClaude(text, targetLang = 'Korean', sourceLang = null) {
-    return this.translateWithLLM(text, targetLang, this.resolveProvider('claude'), sourceLang);
-  }
-
-  // Google Gemini 번역
-  // 참고: https://ai.google.dev/gemini-api
-  async translateWithGemini(text, targetLang = 'Korean', sourceLang = null) {
-    return this.translateWithLLM(text, targetLang, this.resolveProvider('gemini'), sourceLang);
-  }
-
   // 개선된 MyMemory 번역
   async translateWithMyMemory(text, targetLang = 'ko', sourceLang = 'auto') {
     // 캐시 확인
@@ -1176,7 +1152,7 @@ class EnhancedSubtitleTranslator {
               text
             );
           case 'deepl':
-            if (this.apiKeys.deepl && this.apiKeys.deepl.trim()) {
+            if (this.apiKeys.deepl && this.apiKeys.deepl.trim() && m.lang) {
               return await this.translateWithRetry(
                 (t) => this.translateWithDeepL(t, m.lang, sourceLang, context),
                 text
@@ -1231,6 +1207,10 @@ class EnhancedSubtitleTranslator {
   }
 
   mapToDeepLLang(targetLang) {
+    // DeepL이 미지원하는 언어는 null을 돌려준다 — translateAuto의 deepl 분기에서
+    // null이면 재시도 낭비 없이 다음 서비스로 넘어간다 (fa 등은 매 줄 3회
+    // 재시도+백오프 후 폴백하던 기존 동작 제거).
+    if (DEEPL_UNSUPPORTED_TARGETS.has(targetLang)) return null;
     const map = {
       ko: 'KO',
       en: 'EN-US',
@@ -1271,13 +1251,10 @@ class EnhancedSubtitleTranslator {
       hi: 'Hindi (हिन्दी)',
       th: 'Thai (ไทย)',
       vi: 'Vietnamese (Tiếng Việt)',
+      // translateAuto 기본값이 'KO'(대문자)로 올 수 있어 유지.
+      // 하이픈/영문 키(ko-KR, en-US, zh-CN 등)는 main.js TARGET_LANG_RE가
+      // 소문자 2~8자만 허용하므로 도달 불가 — 별도 키를 둘 필요 없다.
       KO: 'Korean (한국어)',
-      'ko-KR': 'Korean (한국어)',
-      korean: 'Korean (한국어)',
-      'en-US': 'English',
-      'ja-JP': 'Japanese (日本語)',
-      'zh-CN': 'Chinese (中文)',
-      'zh-TW': 'Traditional Chinese (繁體中文)',
     };
     return map[targetLang] || targetLang;
   }
@@ -2015,20 +1992,6 @@ ${lines}`;
         }
         return `${errorMsg.connectionError}: ${message}`;
     }
-  }
-
-  // 캐시 관리
-  clearCache() {
-    this.translationCache.clear();
-    console.log('Translation cache cleared.');
-  }
-
-  getCacheStats() {
-    return {
-      size: this.translationCache.size,
-      maxSize: 1000,
-      hitRate: this.cacheHits / (this.cacheHits + this.cacheMisses) || 0,
-    };
   }
 }
 

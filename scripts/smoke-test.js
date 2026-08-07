@@ -530,6 +530,45 @@ async function runLoopLevelQuotaContinue() {
   console.log('[LoopLevel] quota continues to next service, propagates only when all fail (ok)');
 }
 
+async function runDeepLUnsupportedTargetSkip() {
+  // fa(페르시아어)는 DeepL 미지원 — mapToDeepLLang이 null을 돌려주고,
+  // deepl 분기가 재시도 낭비 없이 다음 서비스로 건너뛰어야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    preferredService: 'deepl',
+    deepl: 'test-key',
+  };
+  translator.maxRetries = 1;
+  let deepLCalled = false;
+  translator.translateWithDeepL = async () => {
+    deepLCalled = true;
+    return 'nope';
+  };
+  translator.translateWithMyMemory = async () => 'mymemory-fallback';
+  // deepl이 null 랭귀지로 호출되는지 여부만 검증: translateAuto가 deepl 대신
+  // 폴백(mymemory)으로 가는지 확인한다.
+  const result = await translator.translateAuto('hello', 'deepl', 'fa');
+  assert.strictEqual(deepLCalled, false, 'DeepL must not be called for unsupported target fa');
+  assert.strictEqual(result, 'mymemory-fallback', 'fallback service handles fa');
+  assert.strictEqual(translator.mapToDeepLLang('fa'), null, 'fa must map to null');
+  // DeepL 지원 언어는 여전히 정상 매핑 (회귀 방지)
+  assert.strictEqual(translator.mapToDeepLLang('ko'), 'KO');
+  assert.strictEqual(translator.mapToDeepLLang('en'), 'EN-US');
+  console.log('[DeepLSkip] fa target skips DeepL without retry waste (ok)');
+}
+
+async function runLocalContextPrecheck() {
+  // LOCAL_TEXT_TOO_LONG: 컨텍스트 2048을 초과할 만한 긴 입력은 번역 전에 명확한 에러.
+  const localTranslator = require('../local-translator');
+  const longText = '가'.repeat(4000); // 라틴 4글자/토큰 + CJK 1글자/토큰 → 4000+ 토큰 추정
+  await assert.rejects(
+    () => localTranslator.translateLocal(longText, 'en', 'cpu', '1.8b'),
+    /LOCAL_TEXT_TOO_LONG/,
+    'overlong input must fail fast with LOCAL_TEXT_TOO_LONG'
+  );
+  console.log('[LocalPrecheck] overlong input rejected before model load (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -582,6 +621,8 @@ async function run() {
   await runFinalFallbackQuotaPropagation();
   await runParallelPathSourceLang();
   await runLoopLevelQuotaContinue();
+  await runDeepLUnsupportedTargetSkip();
+  await runLocalContextPrecheck();
 
   console.log('Smoke tests passed.');
 }
