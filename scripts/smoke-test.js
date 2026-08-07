@@ -465,6 +465,71 @@ async function runFinalFallbackQuotaPropagation() {
   console.log('[FinalFallback] quota in final fallback is propagated (ok)');
 }
 
+async function runParallelPathSourceLang() {
+  // F1: 병렬(기본) 배치 경로가 _sourceLang을 translateAuto에 전달해야 한다.
+  // 직렬 경로와 같은 힌트/캐시 키를 쓰도록 검증한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    preferredService: 'mymemory',
+    batchTranslation: true, // 병렬 경로 강제
+    maxConcurrent: 2,
+  };
+  let receivedSourceLang = null;
+  translator.translateAuto = async (text, method, targetLang, sourceLang) => {
+    receivedSourceLang = sourceLang;
+    return 'translated';
+  };
+  await translator.translateBatch(['a', 'b'], 'mymemory', 'ko', 'ja', null);
+  assert.strictEqual(
+    receivedSourceLang,
+    'ja',
+    'parallel batch path must forward _sourceLang to translateAuto'
+  );
+  console.log('[ParallelPath] sourceLang forwarded in parallel batch (ok)');
+}
+
+async function runLoopLevelQuotaContinue() {
+  // F2: 한 서비스(MyMemory)의 쿼터가 루프를 중단시키면 안 된다 — 뒤에 설정된
+  // 서비스(DeepL)를 계속 시도해야 한다. 전 서비스가 실패한 경우에만 쿼터 전파.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    preferredService: 'mymemory',
+    deepl: 'test-key', // 뒤에 DeepL이 설정됨
+  };
+  translator.maxRetries = 1;
+  let deepLCalled = false;
+  translator.translateWithMyMemory = async () => {
+    throw new Error('MyMemory daily quota exceeded (status 429)');
+  };
+  translator.translateWithDeepL = async () => {
+    deepLCalled = true;
+    return 'DeepL translation';
+  };
+  const result = await translator.translateAuto('hello', 'mymemory', 'ko');
+  assert.strictEqual(deepLCalled, true, 'DeepL must be attempted after MyMemory quota');
+  assert.strictEqual(result, 'DeepL translation', 'successful later service wins over quota');
+
+  // 반대: 전부 쿼터 실패면 전파되어야 한다 (원문 삼킴 금지).
+  const translatorAllQuota = new EnhancedSubtitleTranslator();
+  translatorAllQuota.apiKeys = {
+    preferredService: 'mymemory',
+    deepl: 'test-key',
+  };
+  translatorAllQuota.maxRetries = 1;
+  translatorAllQuota.translateWithMyMemory = async () => {
+    throw new Error('MyMemory daily quota exceeded (status 429)');
+  };
+  translatorAllQuota.translateWithDeepL = async () => {
+    throw new Error('DeepL too many requests');
+  };
+  await assert.rejects(
+    () => translatorAllQuota.translateAuto('hello', 'mymemory', 'ko'),
+    /API_QUOTA_EXCEEDED/,
+    'quota must propagate when all services are exhausted'
+  );
+  console.log('[LoopLevel] quota continues to next service, propagates only when all fail (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -515,6 +580,8 @@ async function run() {
   await runSrtFileNoOutputOn429();
   await runQuotaClassification();
   await runFinalFallbackQuotaPropagation();
+  await runParallelPathSourceLang();
+  await runLoopLevelQuotaContinue();
 
   console.log('Smoke tests passed.');
 }
