@@ -184,27 +184,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localModelDelete: (modelId) => ipcRenderer.invoke('local-model-delete', modelId),
   localTranslate: (data) => ipcRenderer.invoke('local-translate', data),
   onLocalModelProgress: (callback) => {
-    ipcRenderer.on('local-model-progress', (_event, data) => callback(data));
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('local-model-progress', handler);
+    return () => ipcRenderer.removeListener('local-model-progress', handler);
   },
 
   // 진행률 업데이트 리스너
   onProgressUpdate: (callback) => {
-    ipcRenderer.on('progress-update', (_event, data) => callback(data));
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('progress-update', handler);
+    return () => ipcRenderer.removeListener('progress-update', handler);
   },
 
   // 출력 업데이트 리스너
   onOutputUpdate: (callback) => {
-    ipcRenderer.on('output-update', (_event, data) => callback(data));
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('output-update', handler);
+    return () => ipcRenderer.removeListener('output-update', handler);
   },
 
   // 번역 진행률 리스너
   onTranslationProgress: (callback) => {
-    ipcRenderer.on('translation-progress', (_event, data) => callback(data));
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('translation-progress', handler);
+    return () => ipcRenderer.removeListener('translation-progress', handler);
   },
 
   // 업데이트 알림 리스너 (main → renderer 푸시)
   onUpdateAvailable: (callback) => {
-    ipcRenderer.on('update-available', (_event, data) => callback(data));
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('update-available', handler);
+    return () => ipcRenderer.removeListener('update-available', handler);
   },
 
   // 리스너 정리 (메모리 누수 방지)

@@ -18,7 +18,11 @@ let _extractionMaxProgress = 95; // 현재 파일 추출 단계가 차지하는 
 let _extractionWarmupProgress = 0; // 의사 진행률(모델 로딩 구간)이 기어갈 상한. 실제 -pp 값은 이 위에서 이어받는다.
 let _currentPhase = null;
 let translationSessionActive = false; // translation in progress (번역 진행 상태)
+let _translationProgressFromZero = false; // 추출 없이 번역만 하는(SRT 단독) 세션이면 0-100 그대로 사용
 let _stoppedAt = 0; // timestamp when stopProcessing() was called
+// 세션 epoch: startProcessing 진입 시 증가. 이전 세션의 비동기 콜백/이벤트는
+// 캠처한 epoch와 현재 epoch가 다르면 무시한다 (중지 후 재시작 stale 이벤트 방지).
+let _processingEpoch = 0;
 let _maxTranslatedCurrent = 0; // monotonic counter for parallel translation progress display
 let _curLangIndex = 0; // 다국어 번역 시 현재 언어 순번(변경되면 X/total 카운터 리셋)
 
@@ -239,8 +243,12 @@ function updateUIMode() {
     }
 
     // translationStatus 재동기화 (SRT 추가/제거 시 상태 표시 갱신)
+    // 값이 실제로 바뀌었을 때만 change를 강제 dispatch한다 (설정 파일 IPC 쓰기 증폭 방지).
     const ts = document.getElementById('translationSelect');
-    if (ts) ts.dispatchEvent(new Event('change', { bubbles: true }));
+    if (ts && ts.dataset.lastSyncedValue !== ts.value) {
+      ts.dataset.lastSyncedValue = ts.value;
+      ts.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   } finally {
     _updateUIModeInProgress = false;
   }
@@ -582,6 +590,7 @@ function clearOutput() {
   const output = document.getElementById('output');
   if (output) output.textContent = '';
   _lastLog = { cat: null, count: 0, groupEl: null };
+  _translatingLineEl = null; // 진행 줄 참조도 초기화 (이전 세션 div는 이미 제거됨)
 }
 
 // File selector (multi-select) (파일 선택 함수, 다중 선택 지원)**
@@ -741,7 +750,10 @@ function stopProcessing() {
     isProcessing = false;
     translationSessionActive = false;
     _stoppedAt = Date.now();
+    // 진행 중인 비동기 콜백을 무효화: 캠처한 epoch와 달라져 stale 이벤트가 무시된다.
+    _processingEpoch++;
     stopIndeterminate();
+    stopProgressAnimation(); // 진행률 애니메이션 interval도 함께 정지 (타이머 누수 방지)
     addOutput(`\n${I18N[currentUiLang].stopRequested}\n`);
 
     // force-stop current work (현재 진행 작업 강제 중지)
@@ -916,6 +928,8 @@ async function continueProcessing() {
     file.status = 'translating';
     file.progress = 0;
     updateQueueDisplay();
+    const srtEpoch = _processingEpoch; // 세션 epoch 캠처 (중지/재시작 후 stale 콜백 방지)
+    _translationProgressFromZero = true; // 추출 없이 번역만 하므로 0-100 그대로 표시
 
     // 프로그래스바 초기화
     resetProgress('prepare');
@@ -951,6 +965,12 @@ async function continueProcessing() {
         device: document.getElementById('deviceSelect')?.value || 'auto',
         localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
       });
+
+      // 중지 후 재시작된 세션이면 이 결과를 반영하지 않는다 (stale 콜백 방지).
+      if (srtEpoch !== _processingEpoch) {
+        console.log('[continueProcessing] Stale SRT translation result ignored (epoch changed)');
+        return;
+      }
 
       if (translationResult.success) {
         // 성공: 파일 상태만 갱신. 완료 토스트/사운드/allTasksComplete는
@@ -1033,6 +1053,9 @@ async function continueProcessing() {
     const hasTranslation = methodAtStart && methodAtStart !== 'none';
     const extractionMaxProgress = hasTranslation ? 50 : 95;
     _extractionMaxProgress = extractionMaxProgress;
+    // 번역 진행률 매핑 기준: 추출 단계가 있었으면 50-100% 구간 매핑, 없었으면(SRT 단독
+    // 번역) main이 보낸 0-100을 그대로 쓴다 (50% 점프 방지).
+    _translationProgressFromZero = !hasTranslation;
     // 의사 진행률은 "모델 로딩" 구간만 채우도록 낮은 상한까지만 기어가게 한다.
     // (추출 예산 전체를 의사 진행률로 써버리면 실제 -pp 값이 이미 차버린 지점을 넘지 못해
     //  진행바가 그 상한(예: 50%)에서 멈춰버린다. 실제 원인이었던 버그.)
@@ -1040,6 +1063,7 @@ async function continueProcessing() {
     startIndeterminate(_extractionWarmupProgress, 'extract');
 
     console.log('[continueProcessing] extractSubtitles call started');
+    const myEpoch = _processingEpoch; // 세션 epoch 캠처 (중지/재시작 후 이 콜백이 실행되면 무시)
     const result = await window.electronAPI.extractSubtitles({
       filePath: file.path,
       model: model,
@@ -1051,6 +1075,12 @@ async function continueProcessing() {
       // 자연 문장 단위 전사는 항상 ON (main.js 기본값). 별도 토글 없음.
       // 싱크 엔진은 model='large-v2-sync' 하나로 결정된다(별도 플래그 없음).
     });
+
+    // 중지 후 재시작된 세션의 콜백은 상태를 덮어쓰지 않도록 여기서 중단한다.
+    if (myEpoch !== _processingEpoch) {
+      console.log('[continueProcessing] Stale extract result ignored (epoch changed)');
+      return;
+    }
 
     // 추출 단계 종료 → 의사 진행률 중지하고 현재 진행률 고정
     stopIndeterminate();
@@ -1134,6 +1164,12 @@ async function continueProcessing() {
             localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
           });
           translationDelegated = true;
+
+          // 중지 후 재시작된 세션이면 이 결과를 반영하지 않는다 (stale 콜백 방지).
+          if (myEpoch !== _processingEpoch) {
+            console.log('[continueProcessing] Stale video translation result ignored (epoch changed)');
+            return;
+          }
 
           // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
 
@@ -1372,8 +1408,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (files.length > 0) {
       const paths = [];
+      let rejectedCount = 0;
 
       files.forEach((file) => {
+        // 폴더/지원하지 않는 확장자는 큐에 넣기 전에 거부한다 (안내 로그만).
+        const name = file.name || '';
+        const dot = name.lastIndexOf('.');
+        const ext = dot >= 0 ? name.slice(dot).toLowerCase() : '';
+        const isDir = file.type === '' && ext === '' && (file.size === 0 || file.size === undefined);
+        if (isDir || !(SUPPORTED_EXTENSIONS.includes(ext) || ext === '.srt')) {
+          console.log('[DragDrop] Rejected unsupported drop:', name, '(dir:', isDir + ')');
+          rejectedCount++;
+          return;
+        }
+
         let extractedPath = null;
         if (file.path && typeof file.path === 'string' && file.path.trim()) {
           extractedPath = file.path;
@@ -1392,13 +1440,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
+      if (rejectedCount > 0) {
+        addOutput(`${I18N[currentUiLang].unsupportedFormat(rejectedCount + ' file(s)')}\n`);
+      }
+
       if (paths.length > 0) {
         addToQueueBatch(paths);
         addOutput(`${I18N[currentUiLang].filesAddedToQueue(paths.length)}\n`);
       }
     } else {
       console.log('No files dropped');
-      addOutput(`${I18N[currentUiLang].dropHint1}\n`);
+      // 빈 드롭(폴더 등)은 안내 문구를 처리 로그에 남기지 않고 조용히 무시한다.
     }
   };
 
@@ -1411,6 +1463,9 @@ document.addEventListener('DOMContentLoaded', () => {
     _maxTranslatedCurrent = 0;
     translationSessionActive = false;
     currentProcessingIndex = -1;
+    _translationProgressFromZero = false; // 배치 시작 시 리셋 (비디오+번역이 기본 가정)
+    // 세션 epoch 증가: 이전 세션에서 도착하는 stale 이벤트/콜백을 새 배치가 무시하게 한다.
+    _processingEpoch++;
     // 새 런 시작 시 자동 재시도 카운트 리셋 — 이전 런에서 소진한 기회가 이월되지 않게
     fileQueue.forEach((f) => {
       f.autoRetryCount = 0;
@@ -1724,54 +1779,54 @@ function getLocalizedError(errorMessage) {
 // 긴 설명은 MODEL_DESC_I18N으로 분리해 select 아래 줄에서 풀로 보여준다.
 const MODEL_I18N = {
   ko: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐추천',
+    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐추천',
     'large-v2-sync': 'large-v2 싱크 (싱크 문제 해결용, 매우 느림)',
     'large-v2-sync-lite': 'large-v2 싱크 라이트 (int8, 저사양/저VRAM)',
-    'large-v3': 'large-v3 (1550MB)',
-    medium: 'medium (769MB)',
-    small: 'small (244MB)',
-    base: 'base (74MB)',
-    tiny: 'tiny (39MB)',
+    'large-v3': 'large-v3 (3.1GB)',
+    medium: 'medium (1.5GB)',
+    small: 'small (466MB)',
+    base: 'base (142MB)',
+    tiny: 'tiny (75MB)',
   },
   en: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐Recommended',
+    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Recommended',
     'large-v2-sync': 'large-v2 Sync (fix bad sync, very slow)',
     'large-v2-sync-lite': 'large-v2 Sync Lite (int8, low VRAM)',
-    'large-v3': 'large-v3 (1550MB)',
-    medium: 'medium (769MB)',
-    small: 'small (244MB)',
-    base: 'base (74MB)',
-    tiny: 'tiny (39MB)',
+    'large-v3': 'large-v3 (3.1GB)',
+    medium: 'medium (1.5GB)',
+    small: 'small (466MB)',
+    base: 'base (142MB)',
+    tiny: 'tiny (75MB)',
   },
   ja: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐推奨',
+    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推奨',
     'large-v2-sync': 'large-v2 同期 (同期ずれ対策, 非常に低速)',
     'large-v2-sync-lite': 'large-v2 同期 ライト (int8, 低VRAM)',
-    'large-v3': 'large-v3 (1550MB)',
-    medium: 'medium (769MB)',
-    small: 'small (244MB)',
-    base: 'base (74MB)',
-    tiny: 'tiny (39MB)',
+    'large-v3': 'large-v3 (3.1GB)',
+    medium: 'medium (1.5GB)',
+    small: 'small (466MB)',
+    base: 'base (142MB)',
+    tiny: 'tiny (75MB)',
   },
   zh: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐推荐',
+    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推荐',
     'large-v2-sync': 'large-v2 同步 (修复错位, 非常慢)',
     'large-v2-sync-lite': 'large-v2 同步 轻量 (int8, 低显存)',
-    'large-v3': 'large-v3 (1550MB)',
-    medium: 'medium (769MB)',
-    small: 'small (244MB)',
-    base: 'base (74MB)',
-    tiny: 'tiny (39MB)',
+    'large-v3': 'large-v3 (3.1GB)',
+    medium: 'medium (1.5GB)',
+    small: 'small (466MB)',
+    base: 'base (142MB)',
+    tiny: 'tiny (75MB)',
   },
   pl: {
-    'large-v3-turbo': 'large-v3-turbo (809MB) ⭐Zalecany',
+    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Zalecany',
     'large-v2-sync': 'large-v2 Sync (naprawa złej synch., bardzo wolny)',
     'large-v2-sync-lite': 'large-v2 Sync Lite (int8, niski VRAM)',
-    'large-v3': 'large-v3 (1550MB)',
-    medium: 'medium (769MB)',
-    small: 'small (244MB)',
-    base: 'base (74MB)',
-    tiny: 'tiny (39MB)',
+    'large-v3': 'large-v3 (3.1GB)',
+    medium: 'medium (1.5GB)',
+    small: 'small (466MB)',
+    base: 'base (142MB)',
+    tiny: 'tiny (75MB)',
   },
 };
 
@@ -2720,25 +2775,27 @@ function appendOutputRaw(text) {
   addOutput(text);
 }
 
-// translating 단계 진행 줄을 마지막 줄에서 업데이트 (새 줄 추가 대신)
+// translating 단계 진행 줄: div 로그와 같은 방식으로 추가하고, 다음 이벤트에서 같은 div만 교체한다.
+// (이전 구현은 output.textContent.split('\n')로 전체 로그를 textContent로 바꿔 기존 div 로그를 소멸시킴)
+let _translatingLineEl = null;
 function updateTranslatingLine(text) {
   const output = document.getElementById('output');
   if (!output) return;
-  const lines = output.textContent.split('\n');
-  // 마지막 비어있지 않은 줄이 translating 줄이면 교체, 아니면 추가
-  let lastNonEmpty = lines.length - 1;
-  while (lastNonEmpty > 0 && lines[lastNonEmpty].trim() === '') lastNonEmpty--;
-  if (
-    lines[lastNonEmpty].includes('번역 진행') ||
-    lines[lastNonEmpty].includes('Translation progress') ||
-    lines[lastNonEmpty].includes('翻訳進行') ||
-    lines[lastNonEmpty].includes('翻译进行') ||
-    lines[lastNonEmpty].includes('Postęp tłumaczenia')
-  ) {
-    lines[lastNonEmpty] = text.replace(/\n$/, '');
-    output.textContent = lines.join('\n');
+  const clean = String(text).replace(/\n$/, '');
+  if (_translatingLineEl && output.contains(_translatingLineEl)) {
+    // 같은 진행 줄 갱신 (타임스탬프 유지)
+    _translatingLineEl.textContent = clean;
+    _translatingLineEl.title = clean;
   } else {
-    output.textContent += text;
+    // 새 진행 줄 추가
+    const el = document.createElement('div');
+    el.className = 'log-line log-translating';
+    el.textContent = clean;
+    el.title = clean;
+    output.appendChild(el);
+    _translatingLineEl = el;
+    // DOM 가벌게 유지 (addOutput과 동일한 프루닝)
+    while (output.childNodes.length > 500) output.removeChild(output.firstChild);
   }
   output.scrollTop = output.scrollHeight;
 }
@@ -2764,9 +2821,23 @@ if (window?.electronAPI) {
   }
   const origOnTranslation = window.electronAPI.onTranslationProgress;
   if (typeof origOnTranslation === 'function') {
+    // 이 이벤트 스트림이 속한 세션 epoch. main은 translate-subtitle IPC마다
+    // 'starting'부터 이벤트를 보내므로, 현재 세션의 'starting'을 받은 뒤의
+    // completed/error만 처리한다. 중지 후 재시작 시 이전 세션의 stale
+    // completed/error가 새 배치를 오염시키지 않도록 막는다.
+    let _translationStreamEpoch = -1;
     window.electronAPI.onTranslationProgress((data) => {
       const methodNow = document.getElementById('translationSelect')?.value;
       if (!methodNow || methodNow === 'none') return; // 번역 비활성 시 무시
+
+      // 이전 세션에서 남은 이벤트는 새 세션이 'starting'을 보낼 때까지 무시.
+      // (세션 시작 시 _processingEpoch가 증가하므로 stale 스트림의 completed/error는
+      //  여기서 걸러진다)
+      if (data?.stage === 'starting') {
+        _translationStreamEpoch = _processingEpoch;
+      } else if (_translationStreamEpoch !== _processingEpoch) {
+        return;
+      }
 
       // completed 단계는 항상 처리해야 함 (자동 처리 로직 실행을 위해)
       if (!translationSessionActive && data?.stage !== 'completed') return; // 완료 이후 추가 이벤트 무시
@@ -2813,11 +2884,14 @@ if (window?.electronAPI) {
           addOutput(`${I18N[currentUiLang].translationProgress}${msg}\n`);
         }
       }
-      // 진행률 갱신 - 번역 진행률(0-100)을 전체 진행률(50-100)로 변환
+      // 진행률 갱신 - 번역 진행률(0-100)을 전체 진행률로 변환
       if (typeof data?.progress === 'number') {
-        // 번역은 전체 작업의 50-100% 구간 (추출이 0-50%)
         const translationPct = Math.max(0, Math.min(100, data.progress));
-        let overallPct = 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
+        // 추출이 없던 세션(SRT 단독 번역)은 main이 보낸 0-100을 그대로 쓴다.
+        // 추출이 있었던 세션은 번역이 50-100% 구간이다.
+        let overallPct = _translationProgressFromZero
+          ? translationPct
+          : 50 + (translationPct / 100) * 50; // 50-100 범위로 매핑
         // 'translating' 단계에서는 100%(="완료!")에 도달하지 않도록 99%로 상한 제한.
         // 마지막 배치가 current===total로 progress=100을 보내더라도, SRT 조립·파일 저장 등
         // 후처리가 아직 남아 있으므로 진짜 완료(=completed 단계)에서만 100%로 마무리한다.
@@ -3498,13 +3572,24 @@ function buildCustomSelect(selectEl) {
     clickArea.style.cursor = 'pointer';
   }
 
-  document.addEventListener(
-    'mousedown',
-    (e) => {
-      if (!wrapper.contains(e.target) && !(clickArea && clickArea.contains(e.target))) close();
-    },
-    true
-  );
+  // 바깥 클릭 닫기 리스너는 문서당 한 번만 등록한다 (buildCustomSelect는 모델
+  // 목록 갱신마다 재호출돼 여기서 등록하면 리스너가 계속 쌓인다).
+  // 열려 있는 wrapper 중 클릭 지점을 포함하지 않는 것만 닫는다.
+  if (!document.body.dataset.customSelectMousedownBound) {
+    document.body.dataset.customSelectMousedownBound = '1';
+    document.addEventListener(
+      'mousedown',
+      (e) => {
+        document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
+          const area = w.closest('#localModelGroup, .setting-card');
+          if (!w.contains(e.target) && !(area && area.contains(e.target))) {
+            w.classList.remove('open');
+          }
+        });
+      },
+      true
+    );
+  }
 
   // Sync when native select changes (e.g. from loadSavedSettings)
   selectEl.addEventListener('change', updateValue);
@@ -5381,7 +5466,7 @@ async function renderModels() {
       name: 'Whisper · Tiny',
       desc: 'Smallest and fastest.',
       size: '~75 MB',
-      vram: '~512 MB',
+      vram: '~1 GB',
       speedKey: 'extreme',
       category: 'asr',
       tag: 'ASR',
@@ -5392,7 +5477,7 @@ async function renderModels() {
       name: 'Whisper · Base',
       desc: 'More accurate than Tiny.',
       size: '~142 MB',
-      vram: '~700 MB',
+      vram: '~1 GB',
       speedKey: 'veryFast',
       category: 'asr',
       tag: 'ASR',
@@ -5414,7 +5499,7 @@ async function renderModels() {
       name: 'Whisper · Medium',
       desc: 'Balanced accuracy and speed.',
       size: '~1.5 GB',
-      vram: '~3 GB',
+      vram: '~2 GB',
       speedKey: 'medium',
       category: 'asr',
       tag: 'ASR',
@@ -5425,7 +5510,7 @@ async function renderModels() {
       name: 'Whisper · Large v3 Turbo',
       desc: 'Large accuracy with 8x speed.',
       size: '~1.6 GB',
-      vram: '~4 GB',
+      vram: '~2 GB',
       speedKey: 'fast',
       category: 'asr',
       tag: 'ASR',
