@@ -135,7 +135,9 @@ const DEEPL_UNSUPPORTED_TARGETS = new Set(['fa', 'hi', 'th', 'vi', 'bo', 'kk', '
 function isQuotaError(message) {
   const msg = String(message || '');
   const lower = msg.toLowerCase();
-  if (/(^|\D)(429)(\D|$)/.test(msg)) return true; // '429', 'status 429' 등
+  // LOW-2: '429'·'status 429'처럼 단독 토큰일 때만 매칭한다. 비슷한 숫자
+  // (4290)나 문자에 둘러싸인 부분일치(x429x)는 오탐이라 제외한다.
+  if (/\b429\b/.test(msg)) return true;
   if (/\bquota\b|daily limit|too many requests|rate limit/.test(lower)) return true;
   if (lower.includes('resource_exhausted') || lower.includes('api_quota_exceeded')) return true;
   return false;
@@ -368,6 +370,7 @@ class EnhancedSubtitleTranslator {
     this.translationCache = new Map();
     this.currentFileId = null; // 현재 처리 중인 파일 ID (파일별 캐시 격리용)
     this.lastRequestTime = 0;
+    this._throttleMultipliers = new Map(); // 공급자별 429 배가 배율 (MED-4)
     this.maxRetries = 3; // 번역 실패 최소화를 위해 재시도 횟수 증가
     this.batchSize = 5; // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null; // mainWindow 참조 저장
@@ -403,19 +406,22 @@ class EnhancedSubtitleTranslator {
     }
   }
 
-  // 파일 처리 완료 시 캐시 정리 (선택적)
+  // 파일 처리 완료 시 캐시 정리: 현재 파일 ID 외 키만 삭제한다 (LOW-3).
+  // 방금 번역한 파일은 설정을 바꿔 재실행할 때 캐시 적중이 가장 유용하므로
+  // 남겨두고, 이전 파일들의 키는 LRU 한도(1000)를 점유하는 죽은 데이터라
+  // 정리한다. 나머지 캐시는 LRU 한도 내에서 유지된다.
   clearFileCache() {
     if (this.currentFileId) {
-      console.log(`[Cache] Clearing cache for file: ${this.currentFileId}`);
-      // 현재 파일의 캐시만 삭제
       const keysToDelete = [];
       for (const key of this.translationCache.keys()) {
-        if (key.startsWith(`${this.currentFileId}_`)) {
+        if (!key.startsWith(`${this.currentFileId}_`)) {
           keysToDelete.push(key);
         }
       }
       keysToDelete.forEach((key) => this.translationCache.delete(key));
-      console.log(`[Cache] Removed ${keysToDelete.length} cached translations for ${this.currentFileId}`);
+      console.log(
+        `[Cache] Removed ${keysToDelete.length} stale entries, kept ${this.translationCache.size} for ${this.currentFileId}`
+      );
     }
     this.currentFileId = null;
   }
@@ -678,12 +684,22 @@ class EnhancedSubtitleTranslator {
   // Promise 체인으로 직렬화: 동시 진입한 여러 호출(병렬 배치)이 lastRequestTime을
   // 함께 읽어 같은 시각에 발사되는 경합을 막는다. 각 호출은 이전 호출이
   // 최소 간격을 확보하고 끝난 뒤에만 진행된다.
-  // 서비스별 최소 간격: 무료 MyMemory는 IP당 ~1req/s라 20ms로 두면 403/쿼터를
-  // 유발한다. DeepL/LLM은 유료 티어 RPM 안전권(500RPM)에 맞춘다.
+  // 공급자별 최소 간격 (MED-4): 무료 MyMemory는 IP당 ~1req/s(1000ms),
+  // DeepL/OpenAI 호환은 유료 티어 RPM 안전권(200ms ≈ 300RPM), Gemini/Claude는
+  // 무료 티어 RPM이 낮아 보수적으로 700ms(~85RPM)를 준다. 429 발생 시
+  // _adjustThrottleOnQuota가 간격을 배가하고, 성공 시 1로 리셋한다 (AIMD).
   getThrottleInterval(service) {
-    if (service === 'mymemory') return 1000;
-    if (service === 'deepl' || service === 'llm') return 200;
-    return 50;
+    const baseIntervals = { mymemory: 1000, deepl: 200, openai: 200, llm: 200, gemini: 700, anthropic: 700 };
+    const base = baseIntervals[service];
+    if (base === undefined) return 50;
+    return base * (this._throttleMultipliers.get(service) || 1);
+  }
+
+  // 429/쿼터 발생 시 공급자별 간격 배가(최대 8배), 성공 시 1로 리셋 (MED-4).
+  _adjustThrottleOnQuota(service, isQuota) {
+    const current = this._throttleMultipliers.get(service) || 1;
+    const next = isQuota ? Math.min(current * 2, 8) : 1;
+    this._throttleMultipliers.set(service, next);
   }
 
   async throttleRequest(service = null) {
@@ -749,14 +765,15 @@ class EnhancedSubtitleTranslator {
         this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed`, error);
 
         // Do not retry on permanent errors (영구적 오류는 재시도 안함)
+        // LOW-1: isQuotaError와 판정을 통일한다 — 소문자 'daily limit'/'rate
+        // limit'/'resource_exhausted'가 여기서 재시도되던 불일치를 제거.
+        // 401/403(인증·권한)과 MyMemory 영구 오류(입력/설정, 이메일을 바꿔도
+        // 성공 불가)도 즉시 전파한다.
         if (
           error.message.includes('401') ||
           error.message.includes('403') ||
-          error.message.includes('429') ||
-          error.message.includes('quota') ||
-          error.message.toLowerCase().includes('too many requests') ||
-          error.message.includes('RESOURCE_EXHAUSTED') ||
-          // MyMemory 영구 오류(입력/설정 오류, 이메일을 바꿔도 성공 불가)도 즉시 전파
+          isQuotaError(error.message) ||
+          // MyMemory 영구 오류(입력/설정 오류)도 즉시 전파
           error.message.includes('permanent, not retried')
         ) {
           // 429 에러는 API 할당량 초과이므로 재시도 무의미
@@ -1033,7 +1050,8 @@ class EnhancedSubtitleTranslator {
     }
 
     console.log(`[${provider.label}] "${text.substring(0, 40)}..." → ${targetLang}`);
-    await this.throttleRequest('llm');
+    // MED-4: 공급자 포맷(openai/anthropic/gemini)별 스로틀 간격을 쓴다.
+    await this.throttleRequest(provider.format);
 
     const startTime = Date.now();
     const system = renderPrompt(provider.prompt || DEFAULT_SYSTEM_PROMPT, { targetLang });
@@ -1052,6 +1070,9 @@ class EnhancedSubtitleTranslator {
         temperature: 0.7,
         timeout: 30000,
       });
+
+      // 성공 시 429 배가 배율을 1로 리셋 (일시 429 스파이크가 영구히 느려지지 않게)
+      this._adjustThrottleOnQuota(provider.format, false);
 
       if (finishReason === 'length' || finishReason === 'MAX_TOKENS' || finishReason === 'max_tokens') {
         console.warn(`[${provider.label} Warning] Response truncated by token limit`);
@@ -1087,6 +1108,8 @@ class EnhancedSubtitleTranslator {
         data: error.response?.data,
         code: error.code,
       });
+      // 429/쿼터면 공급자 간격을 배가해 다음 요청부터 넓힌다 (MED-4)
+      if (isQuotaError(error)) this._adjustThrottleOnQuota(provider.format, true);
       this.logError(`${provider.label} translation failed`, error);
       throw error;
     }
@@ -1422,7 +1445,8 @@ ${lines}`;
         // 결과가 그대로 서빙될 위험이 있어, 읽기 경로는 비활성화한다 (쓰기만 유지).
         // 지문(summary+glossary 해시)을 키에 넣는 완전한 해법은 추후 별도 PR로.
         // (getCachedTranslation(ctx:1)은 여기서 호출하지 않음 — 회귀 방지)
-        await this.throttleRequest('llm');
+        // MED-4: 컨텍스트 배치도 선택된 공급자 티어의 스로틀 간격을 따른다.
+        await this.throttleRequest(this.resolveProvider(selectedMethod)?.format || 'llm');
         const parsed = await this.translateContextAwareChunk(batch, selectedMethod, targetLang, context);
         const translations = Array.isArray(parsed.translations) ? parsed.translations : [];
 
@@ -1685,19 +1709,60 @@ ${lines}`;
               throw new Error('API_QUOTA_EXCEEDED: ' + error.message);
             }
 
-            // 다른 실패한 텍스트에 대해 재시도 (1회)
+            // 다른 실패한 텍스트에 대해 재시도 (1회): HIGH-2 — translateAuto
+            // (전체 폴백 체인)를 재호출하지 않고, 직렬 경로와 동일하게 폴백
+            // 서비스(mymemory → chatgpt)만 직접 호출한다. translateAuto를
+            // 재호출하면 이미 실패한 유료 서비스(DeepL/LLM)까지 다시 호출돼
+            // 과청구가 난다 (P1).
             let retryResult = text; // 기본값은 원문
-            try {
-              console.log(`[Parallel Retry] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
-              await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 대기
-              retryResult = await this.translateAuto(text, method, targetLang, _sourceLang);
-              console.log(
-                `[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`
-              );
-            } catch (retryError) {
-              console.error(
-                `[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - keeping original`
-              );
+            const retryCandidates = [];
+            if (preferredMethod !== 'mymemory') retryCandidates.push('mymemory');
+            if (preferredMethod !== 'chatgpt' && this.resolveProvider('chatgpt')?.apiKey) {
+              retryCandidates.push('chatgpt');
+            }
+            for (const fallbackMethod of retryCandidates) {
+              // 사용자가 중지한 뒤에는 API를 다시 호출하지 않는다 (F4).
+              if (this._aborted) break;
+              try {
+                console.log(`[Parallel Retry] ${currentIndex}/${texts.length}: ${fallbackMethod}...`);
+                await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 대기
+                if (this._aborted) break;
+                if (fallbackMethod === 'mymemory') {
+                  retryResult = await this.translateWithRetry((t) => {
+                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                    return this.translateWithMyMemory(
+                      t,
+                      targetLang === 'KO' ? 'ko' : targetLang.toLowerCase(),
+                      _sourceLang || 'auto'
+                    );
+                  }, text);
+                } else {
+                  const provider = this.resolveProvider('chatgpt');
+                  retryResult = await this.translateWithRetry((t) => {
+                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                    return this.translateWithLLM(
+                      t,
+                      this.mapToHumanLang ? this.mapToHumanLang(targetLang) : targetLang,
+                      provider,
+                      _sourceLang
+                    );
+                  }, text);
+                }
+                console.log(
+                  `[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`
+                );
+                break; // 성공하면 재시도 중단
+              } catch (retryError) {
+                console.error(
+                  `[Parallel Retry Failed] ${currentIndex}/${texts.length}: ${retryError.message} - keeping original`
+                );
+                // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
+                if (isQuotaError(retryError)) {
+                  throw new Error('API_QUOTA_EXCEEDED: ' + String(retryError?.message || retryError));
+                }
+                if (String(retryError?.message || '').includes('ABORTED')) break;
+                retryResult = text; // 마지막 실패 시 원문 유지
+              }
             }
 
             batchResults.push(retryResult);
@@ -1722,6 +1787,11 @@ ${lines}`;
     progressCallback = null,
     sourceLang = null
   ) {
+    // HIGH-1a: main.js 다국어 루프가 언어별로 이 함수를 호출하는데, 예전엔 첫
+    // 줄 resetAbort()가 중지 플래그를 지워 중지 후에도 다음 언어 번역이 이어졌다.
+    // abort 상태에서 호출되면 리셋 없이 즉시 ABORTED를 던진다. 새 세션의 첫
+    // 호출(정상 상태)에서만 리셋되어 다음 번역이 다시 시작할 수 있다.
+    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
     this.resetAbort();
     // 구버전 설정에 남은 경량 항목은 OpenAI로 보낸다.
     if (method === 'chatgpt-nano') method = 'chatgpt';

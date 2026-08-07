@@ -61,33 +61,40 @@ class MyMemoryTranslator {
           if (typeof translatedText === 'string') {
             const upper = translatedText.trim().toUpperCase();
             // MyMemory가 실제로 돌려주는 오류 문구(이슈 #42).
-            // 전체 대문자 정규식은 대문자 자막(타이틀 등)을 오탐하므로
-            // 알려진 문구 접두사만 검사한다.
-            const MYMEMORY_ERROR_PREFIXES = [
+            // MED-1: 오탐 방지 — 자막 원문이 'Please select two distinct
+            // languages' 같은 문구로 시작하는 정상 번역 결과를 오류로 던지던
+            // startsWith 접두사 검사를, trim 후 전체 문자열 정확 일치로 바꾼다.
+            // 'MYMEMORY WARNING:' 등 뒤에 사유가 붙는 서버 표식만 접두사
+            // 매칭을 유지한다 (실제 응답이 접미사와 함께 온다).
+            const MYMEMORY_ERROR_PHRASES = [
               'PLEASE SELECT TWO DISTINCT LANGUAGES',
               'NO QUERY SPECIFIED',
-              'MYMEMORY WARNING:',
               'INVALID LANGUAGE PAIR',
+            ];
+            const MYMEMORY_ERROR_PREFIXES = [
+              'MYMEMORY WARNING:',
               'QUERY LENGTH LIMIT EXCEEDED',
               'ANONYMOUS USERS CAN ONLY',
               'DAILY LIMIT',
             ];
             // 영구 오류: 이메일을 바꿔도 성공할 수 없는 입력/설정 오류라
             // 10회 재시도+1초 sleep은 무료 할당량만 태운다. 1회차에 즉시 던진다.
-            const PERMANENT_ERROR_PREFIXES = [
+            const PERMANENT_ERROR_PHRASES = [
               'PLEASE SELECT TWO DISTINCT LANGUAGES',
               'NO QUERY SPECIFIED',
               'INVALID LANGUAGE PAIR',
-              'QUERY LENGTH LIMIT EXCEEDED',
             ];
-            if (PERMANENT_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
+            if (PERMANENT_ERROR_PHRASES.includes(upper)) {
               throw new Error(
                 `MyMemory returned an error message instead of a translation (permanent, not retried): ${translatedText
                   .trim()
                   .substring(0, 80)}`
               );
             }
-            if (MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
+            if (
+              MYMEMORY_ERROR_PHRASES.includes(upper) ||
+              MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))
+            ) {
               throw new Error(
                 `MyMemory returned an error message instead of a translation: ${translatedText.trim().substring(0, 80)}`
               );
