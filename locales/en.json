@@ -299,5 +299,46 @@
   "modelNotInList": "Not in the model list. If typed manually, verify before saving.",
   "comboSelectTitle": "Select from list",
   "comboEmptyHint": "List is empty. Use the ↻ button to load it.",
-  "resetPromptHint": "Restores the default prompt if you made a mistake."
+  "resetPromptHint": "Restores the default prompt if you made a mistake.",
+  "modelSelectNames": {
+    "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐Recommended",
+    "large-v2-sync": "large-v2 Sync (fix bad sync, very slow)",
+    "large-v2-sync-lite": "large-v2 Sync Lite (int8, low VRAM)",
+    "large-v3": "large-v3 (3.1GB)",
+    "medium": "medium (1.5GB)",
+    "small": "small (466MB)",
+    "base": "base (142MB)",
+    "tiny": "tiny (75MB)"
+  },
+  "modelSelectDescs": {
+    "large-v3-turbo": "Fast, accurate sync, best for most videos",
+    "large-v2-sync": "Fixes subtitles that will not sync. Best for non-English (JA/KO/ZH); English is fine with turbo. Follows device choice. Slow",
+    "large-v2-sync-lite": "Same model in int8, lighter. ~3GB VRAM, less lag. Sync quality nearly identical",
+    "large-v3": "Slightly better text but sync drifts and slower on long videos",
+    "medium": "High-spec PC, works without GPU",
+    "small": "Mid-spec PC, speed/accuracy balance",
+    "base": "Low-spec PC, fast draft",
+    "tiny": "Very low-spec PC, speed priority"
+  },
+  "langNames": {
+    "ko": "Korean",
+    "en": "English",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "hu": "Hungarian",
+    "ar": "Arabic",
+    "pl": "Polish",
+    "tr": "Turkish",
+    "fa": "Persian"
+  },
+  "engineSupportNote": {
+    "local": "The local translation engine does not support Hungarian. Use GPT or Gemini for Hungarian.",
+    "deepl": "DeepL does not support Persian."
+  }
 }

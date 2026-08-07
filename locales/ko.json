@@ -299,5 +299,46 @@
   "modelNotInList": "모델 목록에 없는 이름입니다. 직접 입력이라면 확인 후 저장하세요.",
   "comboSelectTitle": "목록에서 선택",
   "comboEmptyHint": "목록이 비어 있습니다. ↻ 버튼으로 불러오세요.",
-  "resetPromptHint": "프롬프트를 잘못 수정했을 때 기본값으로 되돌립니다."
+  "resetPromptHint": "프롬프트를 잘못 수정했을 때 기본값으로 되돌립니다.",
+  "modelSelectNames": {
+    "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐추천",
+    "large-v2-sync": "large-v2 싱크 (싱크 문제 해결용, 매우 느림)",
+    "large-v2-sync-lite": "large-v2 싱크 라이트 (int8, 저사양/저VRAM)",
+    "large-v3": "large-v3 (3.1GB)",
+    "medium": "medium (1.5GB)",
+    "small": "small (466MB)",
+    "base": "base (142MB)",
+    "tiny": "tiny (75MB)"
+  },
+  "modelSelectDescs": {
+    "large-v3-turbo": "빠르고 싱크 정확, 대부분 영상에 적합",
+    "large-v2-sync": "싱크가 안 맞는 영상 교정용. 비영어(일/한/중)에 가장 정확, 영어는 turbo로 충분. 장치 선택 따름. 느림",
+    "large-v2-sync-lite": "정밀과 같은 모델을 int8로 가볍게. VRAM 약 3GB, 렉 적음. 싱크 품질은 거의 동일",
+    "large-v3": "받아쓰기는 조금 더 정확하지만 긴 영상에서 싱크가 밀리고 느림",
+    "medium": "고사양 PC용, GPU 없어도 됨",
+    "small": "중사양 PC용, 속도와 정확도 균형",
+    "base": "저사양 PC용, 빠른 초안",
+    "tiny": "초저사양 PC용, 속도 최우선"
+  },
+  "langNames": {
+    "ko": "한국어",
+    "en": "영어",
+    "ja": "일본어",
+    "zh": "중국어",
+    "es": "스페인어",
+    "fr": "프랑스어",
+    "de": "독일어",
+    "it": "이탈리아어",
+    "pt": "포르투갈어",
+    "ru": "러시아어",
+    "hu": "헝가리어",
+    "ar": "아랍어",
+    "pl": "폴란드어",
+    "tr": "터키어",
+    "fa": "페르시아어"
+  },
+  "engineSupportNote": {
+    "local": "로컬 번역 엔진은 헝가리어를 지원하지 않습니다. 헝가리어가 필요하면 GPT 또는 Gemini를 사용하세요.",
+    "deepl": "DeepL은 페르시아어를 지원하지 않습니다."
+  }
 }

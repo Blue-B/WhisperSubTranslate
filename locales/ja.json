@@ -299,5 +299,46 @@
   "modelNotInList": "モデル一覧にない名前です。手入力の場合は確認して保存してください。",
   "comboSelectTitle": "リストから選択",
   "comboEmptyHint": "リストが空です。↻ ボタンで読み込んでください。",
-  "resetPromptHint": "プロンプトを間違えて編集したとき、デフォルトに戻します。"
+  "resetPromptHint": "プロンプトを間違えて編集したとき、デフォルトに戻します。",
+  "modelSelectNames": {
+    "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐推奨",
+    "large-v2-sync": "large-v2 同期 (同期ずれ対策, 非常に低速)",
+    "large-v2-sync-lite": "large-v2 同期 ライト (int8, 低VRAM)",
+    "large-v3": "large-v3 (3.1GB)",
+    "medium": "medium (1.5GB)",
+    "small": "small (466MB)",
+    "base": "base (142MB)",
+    "tiny": "tiny (75MB)"
+  },
+  "modelSelectDescs": {
+    "large-v3-turbo": "高速で同期正確、ほとんどの動画に最適",
+    "large-v2-sync": "同期が合わない映像の補正用。非英語(日/韓/中)に最も正確、英語はturboで十分。デバイス選択に従う。低速",
+    "large-v2-sync-lite": "精密と同じモデルをint8で軽量化。VRAM約3GB、ラグ少。同期品質はほぼ同じ",
+    "large-v3": "文字起こしはやや上だが長い動画で同期がずれ、低速",
+    "medium": "高スペックPC用、GPU不要",
+    "small": "中スペックPC用、速度・精度バランス",
+    "base": "低スペックPC用、高速下書き",
+    "tiny": "低スペックPC用、速度最優先"
+  },
+  "langNames": {
+    "ko": "韓国語",
+    "en": "英語",
+    "ja": "日本語",
+    "zh": "中国語",
+    "es": "スペイン語",
+    "fr": "フランス語",
+    "de": "ドイツ語",
+    "it": "イタリア語",
+    "pt": "ポルトガル語",
+    "ru": "ロシア語",
+    "hu": "ハンガリー語",
+    "ar": "アラビア語",
+    "pl": "ポーランド語",
+    "tr": "トルコ語",
+    "fa": "ペルシア語"
+  },
+  "engineSupportNote": {
+    "local": "ローカル翻訳エンジンはハンガリー語をサポートしていません。ハンガリー語は GPT または Gemini をご利用ください。",
+    "deepl": "DeepL はペルシア語をサポートしていません。"
+  }
 }

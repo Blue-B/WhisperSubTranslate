@@ -140,7 +140,7 @@ function sleep(ms) {
 }
 
 // Supported video extensions (지원되는 비디오 파일 확장자)
-const SUPPORTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'];
+const SUPPORTED_EXTENSIONS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', '.mpg', '.mpeg', '.3gp'];
 
 function isVideoFile(filePath) {
   const ext = filePath.toLowerCase().substr(filePath.lastIndexOf('.'));
@@ -558,7 +558,9 @@ function _appendLogLine(output, line) {
     _lastLog.count += 1;
     if (_lastLog.count >= _LOG_GROUP_THRESHOLD) {
       // Collapse: keep the first 2 개의 visible 줄 + 1개의 summary 줄.
-      if (!_lastLog.groupEl) {
+      // clearOutput()/prune 등으로 groupEl이 DOM에서 제거된 뒤에도 재사용하면
+      // 줄이 화면에 붙지 않으므로 연결 상태를 확인하고 재생성한다.
+      if (!_lastLog.groupEl || !_lastLog.groupEl.isConnected) {
         const el = document.createElement('div');
         el.className = `log-line log-${cat.id} log-group`;
         output.appendChild(el);
@@ -608,9 +610,12 @@ async function selectFile() {
       filters: [
         {
           name: 'Video & Subtitle Files',
-          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'srt'],
+          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'mts', 'm2ts', 'mpg', 'mpeg', '3gp', 'srt'],
         },
-        { name: 'Video Files', extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
+        {
+          name: 'Video Files',
+          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'mts', 'm2ts', 'mpg', 'mpeg', '3gp'],
+        },
         { name: 'Subtitle Files (SRT)', extensions: ['srt'] },
         { name: 'All Files', extensions: ['*'] },
       ],
@@ -961,7 +966,7 @@ async function continueProcessing() {
       const targetLangs = getSelectedTargetLangs();
       // 시작 로그에 타깃 언어 표시 — 기본값(한국어)을 모르고 돌렸다가 끝나고 알아차리는 일 방지. 다중 선택 시 쉼표로 나열.
       const targetLangNames = targetLangs
-        .map((lc) => (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[lc] || lc)
+        .map((lc) => (I18N[currentUiLang].langNames || I18N.ko.langNames)[lc] || lc)
         .join(', ');
       addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangNames}`)}\n`);
 
@@ -1199,7 +1204,7 @@ async function continueProcessing() {
 
           const targetLangs = getSelectedTargetLangs();
           const targetLangNames = targetLangs
-            .map((lc) => (LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko)[lc] || lc)
+            .map((lc) => (I18N[currentUiLang].langNames || I18N.ko.langNames)[lc] || lc)
             .join(', ');
           addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangNames}`)}\n`);
           const srtPathFromResult =
@@ -1830,205 +1835,7 @@ function getLocalizedError(errorMessage) {
 
 // 모델 이름 현지화 — select 드롭다운 욵은 한 줄이라 길면 잘린다. 여긴 이름+용량+추천마크만 짧게.
 // 긴 설명은 MODEL_DESC_I18N으로 분리해 select 아래 줄에서 풀로 보여준다.
-const MODEL_I18N = {
-  ko: {
-    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐추천',
-    'large-v2-sync': 'large-v2 싱크 (싱크 문제 해결용, 매우 느림)',
-    'large-v2-sync-lite': 'large-v2 싱크 라이트 (int8, 저사양/저VRAM)',
-    'large-v3': 'large-v3 (3.1GB)',
-    medium: 'medium (1.5GB)',
-    small: 'small (466MB)',
-    base: 'base (142MB)',
-    tiny: 'tiny (75MB)',
-  },
-  en: {
-    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Recommended',
-    'large-v2-sync': 'large-v2 Sync (fix bad sync, very slow)',
-    'large-v2-sync-lite': 'large-v2 Sync Lite (int8, low VRAM)',
-    'large-v3': 'large-v3 (3.1GB)',
-    medium: 'medium (1.5GB)',
-    small: 'small (466MB)',
-    base: 'base (142MB)',
-    tiny: 'tiny (75MB)',
-  },
-  ja: {
-    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推奨',
-    'large-v2-sync': 'large-v2 同期 (同期ずれ対策, 非常に低速)',
-    'large-v2-sync-lite': 'large-v2 同期 ライト (int8, 低VRAM)',
-    'large-v3': 'large-v3 (3.1GB)',
-    medium: 'medium (1.5GB)',
-    small: 'small (466MB)',
-    base: 'base (142MB)',
-    tiny: 'tiny (75MB)',
-  },
-  zh: {
-    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推荐',
-    'large-v2-sync': 'large-v2 同步 (修复错位, 非常慢)',
-    'large-v2-sync-lite': 'large-v2 同步 轻量 (int8, 低显存)',
-    'large-v3': 'large-v3 (3.1GB)',
-    medium: 'medium (1.5GB)',
-    small: 'small (466MB)',
-    base: 'base (142MB)',
-    tiny: 'tiny (75MB)',
-  },
-  pl: {
-    'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Zalecany',
-    'large-v2-sync': 'large-v2 Sync (naprawa złej synch., bardzo wolny)',
-    'large-v2-sync-lite': 'large-v2 Sync Lite (int8, niski VRAM)',
-    'large-v3': 'large-v3 (3.1GB)',
-    medium: 'medium (1.5GB)',
-    small: 'small (466MB)',
-    base: 'base (142MB)',
-    tiny: 'tiny (75MB)',
-  },
-};
 
-// 모델 상세 설명 — select 아래 힌트 줄(modelRequirements)에 표시. 여기는 안 잘림.
-const MODEL_DESC_I18N = {
-  ko: {
-    'large-v3-turbo': '빠르고 싱크 정확, 대부분 영상에 적합',
-    'large-v2-sync':
-      '싱크가 안 맞는 영상 교정용. 비영어(일/한/중)에 가장 정확, 영어는 turbo로 충분. 장치 선택 따름. 느림',
-    'large-v2-sync-lite': '정밀과 같은 모델을 int8로 가볍게. VRAM 약 3GB, 렉 적음. 싱크 품질은 거의 동일',
-    'large-v3': '받아쓰기는 조금 더 정확하지만 긴 영상에서 싱크가 밀리고 느림',
-    medium: '고사양 PC용, GPU 없어도 됨',
-    small: '중사양 PC용, 속도와 정확도 균형',
-    base: '저사양 PC용, 빠른 초안',
-    tiny: '초저사양 PC용, 속도 최우선',
-  },
-  en: {
-    'large-v3-turbo': 'Fast, accurate sync, best for most videos',
-    'large-v2-sync':
-      'Fixes subtitles that will not sync. Best for non-English (JA/KO/ZH); English is fine with turbo. Follows device choice. Slow',
-    'large-v2-sync-lite': 'Same model in int8, lighter. ~3GB VRAM, less lag. Sync quality nearly identical',
-    'large-v3': 'Slightly better text but sync drifts and slower on long videos',
-    medium: 'High-spec PC, works without GPU',
-    small: 'Mid-spec PC, speed/accuracy balance',
-    base: 'Low-spec PC, fast draft',
-    tiny: 'Very low-spec PC, speed priority',
-  },
-  ja: {
-    'large-v3-turbo': '高速で同期正確、ほとんどの動画に最適',
-    'large-v2-sync':
-      '同期が合わない映像の補正用。非英語(日/韓/中)に最も正確、英語はturboで十分。デバイス選択に従う。低速',
-    'large-v2-sync-lite': '精密と同じモデルをint8で軽量化。VRAM約3GB、ラグ少。同期品質はほぼ同じ',
-    'large-v3': '文字起こしはやや上だが長い動画で同期がずれ、低速',
-    medium: '高スペックPC用、GPU不要',
-    small: '中スペックPC用、速度・精度バランス',
-    base: '低スペックPC用、高速下書き',
-    tiny: '低スペックPC用、速度最優先',
-  },
-  zh: {
-    'large-v3-turbo': '快速同步准确，多数视频最合适',
-    'large-v2-sync': '用于字幕对不上的视频。对非英语(日/韩/中)最准确，英语用 turbo 即可。遵循设备选择。较慢',
-    'large-v2-sync-lite': '与精密相同模型，int8 更轻。显存约3GB，卡顿更少。同步质量几乎相同',
-    'large-v3': '识别略高但长视频同步偏移、较慢',
-    medium: '高配置PC，不需GPU',
-    small: '中配置PC，速度与精度平衡',
-    base: '低配置PC，快速草稿',
-    tiny: '超低配置PC，速度优先',
-  },
-  pl: {
-    'large-v3-turbo': 'Szybki, dokładna synchronizacja, najlepszy do większości filmów',
-    'large-v2-sync':
-      'Naprawia napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z turbo. Wg wyboru urządzenia. Wolny',
-    'large-v2-sync-lite': 'Ten sam model w int8, lżejszy. ~3GB VRAM, mniej zacięć. Synchronizacja prawie identyczna',
-    'large-v3': 'Lepszy tekst, ale synchronizacja dryfuje i wolniejszy w długich filmach',
-    medium: 'Wydajny PC, bez GPU',
-    small: 'Średni PC, balans szybkości i dokładności',
-    base: 'Słaby PC, szybkie szkice',
-    tiny: 'Bardzo słaby PC, priorytet szybkości',
-  },
-};
-
-// 언어 이름 현지화 (대상/소스 공통 표시용)
-const LANG_NAMES_I18N = {
-  ko: {
-    ko: '한국어',
-    en: '영어',
-    ja: '일본어',
-    zh: '중국어',
-    es: '스페인어',
-    fr: '프랑스어',
-    de: '독일어',
-    it: '이탈리아어',
-    pt: '포르투갈어',
-    ru: '러시아어',
-    hu: '헝가리어',
-    ar: '아랍어',
-    pl: '폴란드어',
-    tr: '터키어',
-    fa: '페르시아어',
-  },
-  en: {
-    ko: 'Korean',
-    en: 'English',
-    ja: 'Japanese',
-    zh: 'Chinese',
-    es: 'Spanish',
-    fr: 'French',
-    de: 'German',
-    it: 'Italian',
-    pt: 'Portuguese',
-    ru: 'Russian',
-    hu: 'Hungarian',
-    ar: 'Arabic',
-    pl: 'Polish',
-    tr: 'Turkish',
-    fa: 'Persian',
-  },
-  ja: {
-    ko: '韓国語',
-    en: '英語',
-    ja: '日本語',
-    zh: '中国語',
-    es: 'スペイン語',
-    fr: 'フランス語',
-    de: 'ドイツ語',
-    it: 'イタリア語',
-    pt: 'ポルトガル語',
-    ru: 'ロシア語',
-    hu: 'ハンガリー語',
-    ar: 'アラビア語',
-    pl: 'ポーランド語',
-    tr: 'トルコ語',
-    fa: 'ペルシア語',
-  },
-  zh: {
-    ko: '韩语',
-    en: '英语',
-    ja: '日语',
-    zh: '中文',
-    es: '西班牙语',
-    fr: '法语',
-    de: '德语',
-    it: '意大利语',
-    pt: '葡萄牙语',
-    ru: '俄语',
-    hu: '匈牙利语',
-    ar: '阿拉伯语',
-    pl: '波兰语',
-    tr: '土耳其语',
-    fa: '波斯语',
-  },
-  pl: {
-    ko: 'Koreański',
-    en: 'Angielski',
-    ja: 'Japoński',
-    zh: 'Chiński',
-    es: 'Hiszpański',
-    fr: 'Francuski',
-    de: 'Niemiecki',
-    it: 'Włoski',
-    pt: 'Portugalski',
-    ru: 'Rosyjski',
-    hu: 'Węgierski',
-    ar: 'Arabski',
-    pl: 'Polski',
-    tr: 'Turecki',
-    fa: 'Perski',
-  },
-};
 
 // 장치/번역 메서드 옵션 현지화
 const DEVICE_OPTIONS_I18N = (lang) => ({
@@ -2064,7 +1871,7 @@ function rebuildLanguageSelectOptions(lang) {
     const opt = document.createElement('option');
     opt.value = code;
     if (code === 'auto') opt.textContent = d.langAutoOption;
-    else opt.textContent = LANG_NAMES_I18N[lang][code] || code;
+    else opt.textContent = (I18N[lang].langNames || {})[code] || code;
     sel.appendChild(opt);
   });
   if (codes.includes(originalValue)) sel.value = originalValue;
@@ -2136,14 +1943,14 @@ async function checkGpuCompatibility() {
 }
 
 function getModelDisplayName(lang, id) {
-  const m = MODEL_I18N[lang] || MODEL_I18N.ko;
+  const m = I18N[lang].modelSelectNames || {};
   return m[id] || id;
 }
 
 function rebuildTargetLanguageNames(lang) {
   const list = document.getElementById('targetLanguageList');
   if (!list) return;
-  const map = LANG_NAMES_I18N[lang] || LANG_NAMES_I18N.ko;
+  const map = I18N[lang].langNames || {};
   list.querySelectorAll('.lang-check').forEach((lab) => {
     const cb = lab.querySelector('input');
     const span = lab.querySelector('span');
@@ -2192,7 +1999,7 @@ function restoreTargetLangs() {
 function updateLangSummary() {
   const summary = document.getElementById('langMsSummary');
   if (!summary) return;
-  const map = LANG_NAMES_I18N[currentUiLang] || LANG_NAMES_I18N.ko;
+  const map = I18N[currentUiLang].langNames || {};
   const langs = getSelectedTargetLangs();
   const firstName = map[langs[0]] || langs[0];
   if (langs.length <= 1) {
@@ -2225,6 +2032,11 @@ function openLangPanel() {
   const panel = document.getElementById('targetLanguageList');
   const trigger = document.getElementById('langMsTrigger');
   if (!panel || !trigger) return;
+  // 다른 오버레이(커스텀 셀렉트 드롭다운)가 떠 있으면 함께 떠 있지 않게 닫는다.
+  document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
+    if (typeof w.close === 'function') w.close();
+    else w.classList.remove('open');
+  });
   panel.hidden = false;
   _positionLangPanel();
   trigger.setAttribute('aria-expanded', 'true');
@@ -2315,7 +2127,6 @@ function applyI18n(lang) {
   setText('labelTranslation', d.labelTranslation);
   setText('labelLocalModel', d.labelLocalModel);
   setText('runBtn', d.runBtn);
-  setText('settingsBtnText', d.settingsBtn);
   setText('selectFileBtn', d.selectFileBtn);
   setText('stopBtnText', d.stopBtn);
   setText('logTitle', d.logTitle);
@@ -2590,8 +2401,7 @@ function updateModelRequirements(modelId) {
 
   const reqText = texts[currentUiLang] || texts.en;
   // 모델 상세 설명(select 드롭다운 잘림 피해 이리로 옮긴 것). select 아래에 풀로 표시.
-  const descMap =
-    (typeof MODEL_DESC_I18N !== 'undefined' && (MODEL_DESC_I18N[currentUiLang] || MODEL_DESC_I18N.en)) || {};
+  const descMap = I18N[currentUiLang].modelSelectDescs || {};
   const descText = descMap[modelId] || '';
   const descHtml = descText ? `<span class="model-req-desc">${descText}</span><br>` : '';
 
@@ -2636,7 +2446,6 @@ function updateQueueDisplayImmediate() {
   lastQueueUpdateTime = Date.now();
   const queueList = document.getElementById('queueList');
   const runBtn = document.getElementById('runBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
   const stopBtn = document.getElementById('stopBtn');
   const clearQueueBtn = document.getElementById('clearQueueBtn');
   const d = I18N[currentUiLang];
@@ -2649,7 +2458,6 @@ function updateQueueDisplayImmediate() {
     // queueContainer는 항상 표시, queueList만 빈 상태 표시
     runBtn.disabled = true;
     runBtn.textContent = d.runBtn;
-    if (pauseBtn) pauseBtn.style.display = 'none';
     stopBtn.style.display = 'none';
     // 빈 상태 메시지 표시
     setSafeHtml(
@@ -3183,30 +2991,8 @@ function initTranslationSelect() {
       });
       const note = document.getElementById('targetLangNote');
       if (note) {
-        const messages = {
-          ko: {
-            local: '로컬 번역 엔진은 헝가리어를 지원하지 않습니다. 헝가리어가 필요하면 GPT 또는 Gemini를 사용하세요.',
-            deepl: 'DeepL은 페르시아어를 지원하지 않습니다.',
-          },
-          en: {
-            local: 'The local translation engine does not support Hungarian. Use GPT or Gemini for Hungarian.',
-            deepl: 'DeepL does not support Persian.',
-          },
-          ja: {
-            local:
-              'ローカル翻訳エンジンはハンガリー語をサポートしていません。ハンガリー語は GPT または Gemini をご利用ください。',
-            deepl: 'DeepL はペルシア語をサポートしていません。',
-          },
-          zh: {
-            local: '本地翻译引擎不支持匈牙利语，请使用 GPT 或 Gemini。',
-            deepl: 'DeepL 不支持波斯语。',
-          },
-          pl: {
-            local: 'Lokalny silnik tłumaczenia nie obsługuje języka węgierskiego. Użyj GPT lub Gemini.',
-            deepl: 'DeepL nie obsługuje języka perskiego.',
-          },
-        };
-        const localized = messages[currentUiLang] || messages.en;
+        // 엔진별 미지원 언어 안내는 locales/*.json 의 engineSupportNote 로 이동.
+        const localized = I18N[currentUiLang].engineSupportNote || I18N.en.engineSupportNote;
         // 다국어 체크박스 모드: 해당 엔진이 미지원 언어(숨김)를 가질 때 안내를 표시.
         if (method === 'local') {
           note.textContent = localized.local;
@@ -3586,6 +3372,8 @@ function buildCustomSelect(selectEl) {
   }
 
   function open() {
+    // 다른 오버레이(언어 다중 선택 패널)가 떠 있으면 함께 떠 있지 않게 닫는다.
+    if (typeof closeLangPanel === 'function' && isLangPanelOpen()) closeLangPanel();
     document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
       if (w !== wrapper) w.classList.remove('open');
     });
@@ -3790,7 +3578,9 @@ async function initApp() {
 
 // ===== Settings Modal 초기화 =====
 function initSettingsModal() {
-  const settingsBtn = document.getElementById('settingsBtn');
+  // 실제 설정 진입점은 사이드바 railSettingsBtn (기존 우상단 settingsBtn은
+  // display:none 데드 요소여서 제거됨).
+  const settingsBtn = document.getElementById('railSettingsBtn');
   const settingsModal = document.getElementById('settingsModal');
   const closeSettingsBtn = document.getElementById('closeSettingsBtn');
   const saveSettingsBtn = document.getElementById('saveSettingsBtn');
@@ -3810,7 +3600,7 @@ function initSettingsModal() {
   soundVolumeValue.textContent = `${Math.round(soundVolume * 100)}%`;
   updateVolumeRowState();
 
-  // 설정 모달 열기
+  // 설정 모달 열기 (railSettingsBtn; 우상단 settingsBtn은 데드 요소로 제거)
   settingsBtn.addEventListener('click', () => {
     showSettingsModal();
   });
@@ -3836,10 +3626,8 @@ function initSettingsModal() {
   document.querySelectorAll('.rail-btn[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => setView(btn.dataset.view));
   });
-  const railSettingsBtn = document.getElementById('railSettingsBtn');
-  if (railSettingsBtn) {
-    railSettingsBtn.addEventListener('click', () => showSettingsModal());
-  }
+  // railSettingsBtn의 설정 열기 리스너는 initSettingsModal 상단에서 등록됨
+  // (settingsBtn 데드 요소 제거로 여기 중복 등록 제거)
   // 키보드: 1 = workspace, 2 = history, 3 = models, , = settings
   document.addEventListener('keydown', (e) => {
     const tag = (e.target && e.target.tagName) || '';
@@ -4035,6 +3823,8 @@ function showSettingsModal() {
     // 포커스 복원용: 열기 직전 활성 요소 저장
     _lastFocusedBeforeModal = document.activeElement || null;
     modal.classList.add('active');
+    // 배경(앱 본문/사이드 패널)을 접근성 트리에서 제외해 모달 바깥 포커스 이동 차단
+    document.querySelectorAll('.main-container, .right-panel').forEach((el) => el.setAttribute('inert', ''));
     // 모달이 열릴 때마다 현재 설정값 반영
     const soundEnabledCheckbox = document.getElementById('soundEnabledCheckbox');
     const soundVolumeSlider = document.getElementById('soundVolumeSliderModal');
@@ -4133,6 +3923,8 @@ function hideSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
     modal.classList.remove('active');
+    // 모달 닫히면 배경 다시 접근 가능하게
+    document.querySelectorAll('.main-container, .right-panel').forEach((el) => el.removeAttribute('inert'));
     // 모달을 열었던 요소로 포커스 복원 (키보드 사용자 컨텍스트 유지)
     const prev = _lastFocusedBeforeModal;
     _lastFocusedBeforeModal = null;
@@ -5325,13 +5117,21 @@ function loadHistory() {
   return _historyCache || [];
 }
 
-function saveHistoryList(list) {
+async function saveHistoryList(list) {
   const safe = Array.isArray(list) ? list.slice(0, HISTORY_MAX) : [];
   _historyCache = safe;
   _historyLoadedOnce = true;
   try {
-    window.electronAPI?.historySave?.(safe);
-  } catch (_e) {}
+    if (window.electronAPI?.historySave) {
+      const res = await window.electronAPI.historySave(safe);
+      if (res && res.success === false) {
+        console.warn('[History] save rejected by main process:', res.error || 'unknown');
+      }
+    }
+  } catch (e) {
+    // IPC 실패(예: 앱 종료 직전)는 치명적이지 않다. 메모리 캐시는 유지된다.
+    console.warn('[History] save failed:', e?.message || e);
+  }
 }
 
 // 히스토리 항목 개별 삭제 (ts 기준). 기록 항목만 지우고 원본 파일은 건드리지 않는다.

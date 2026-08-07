@@ -299,5 +299,46 @@
   "modelNotInList": "Brak na liście modeli. Jeśli wpisano ręcznie, zweryfikuj przed zapisem.",
   "comboSelectTitle": "Wybierz z listy",
   "comboEmptyHint": "Lista jest pusta. Użyj przycisku ↻, aby ją wczytać.",
-  "resetPromptHint": "Przywraca domyślny prompt po błędnej edycji."
+  "resetPromptHint": "Przywraca domyślny prompt po błędnej edycji.",
+  "modelSelectNames": {
+    "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐Zalecany",
+    "large-v2-sync": "large-v2 Sync (naprawa złej synch., bardzo wolny)",
+    "large-v2-sync-lite": "large-v2 Sync Lite (int8, niski VRAM)",
+    "large-v3": "large-v3 (3.1GB)",
+    "medium": "medium (1.5GB)",
+    "small": "small (466MB)",
+    "base": "base (142MB)",
+    "tiny": "tiny (75MB)"
+  },
+  "modelSelectDescs": {
+    "large-v3-turbo": "Szybki, dokładna synchronizacja, najlepszy do większości filmów",
+    "large-v2-sync": "Naprawia napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z turbo. Wg wyboru urządzenia. Wolny",
+    "large-v2-sync-lite": "Ten sam model w int8, lżejszy. ~3GB VRAM, mniej zacięć. Synchronizacja prawie identyczna",
+    "large-v3": "Lepszy tekst, ale synchronizacja dryfuje i wolniejszy w długich filmach",
+    "medium": "Wydajny PC, bez GPU",
+    "small": "Średni PC, balans szybkości i dokładności",
+    "base": "Słaby PC, szybkie szkice",
+    "tiny": "Bardzo słaby PC, priorytet szybkości"
+  },
+  "langNames": {
+    "ko": "Koreański",
+    "en": "Angielski",
+    "ja": "Japoński",
+    "zh": "Chiński",
+    "es": "Hiszpański",
+    "fr": "Francuski",
+    "de": "Niemiecki",
+    "it": "Włoski",
+    "pt": "Portugalski",
+    "ru": "Rosyjski",
+    "hu": "Węgierski",
+    "ar": "Arabski",
+    "pl": "Polski",
+    "tr": "Turecki",
+    "fa": "Perski"
+  },
+  "engineSupportNote": {
+    "local": "Lokalny silnik tłumaczenia nie obsługuje języka węgierskiego. Użyj GPT lub Gemini.",
+    "deepl": "DeepL nie obsługuje języka perskiego."
+  }
 }
