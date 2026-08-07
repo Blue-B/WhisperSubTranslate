@@ -419,6 +419,52 @@ async function runSrtFileNoOutputOn429() {
   }
 }
 
+async function runQuotaClassification() {
+  // F2: 403은 쿼터가 아니다 (인증/권한 오류 → 다음 서비스로 폴백돼야 한다).
+  // translateAuto에서 403을 쿼터로 오판하면 API_QUOTA_EXCEEDED로 하드 스톱되므로,
+  // 403은 계속 진행해 최종 폴백(원문 유지)까지 가야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { preferredService: 'deepl' }; // deepl 없음 → 첫 서비스 실패 후 폴백
+  translator.translateWithMyMemory = async () => {
+    throw new Error('MyMemory returned status 403');
+  };
+  translator.translateWithDeepL = async () => {
+    throw new Error('DeepL status 403');
+  };
+  // 403은 쿼터가 아니므로 원문 유지로 끝나야 한다 (API_QUOTA_EXCEEDED 아님)
+  const result = await translator.translateAuto('hello', 'deepl', 'ko', 'en');
+  assert.strictEqual(result, 'hello', '403 must not hard-stop as quota; fall through to passthrough');
+  console.log('[QuotaClass] 403 is not treated as quota (ok)');
+}
+
+async function runFinalFallbackQuotaPropagation() {
+  // F5: 최종 폴백(모든 서비스 실패 후 MyMemory)에서 쿼터 초과는 원문 반환으로
+  // 삼키지 않고 그대로 전파해야 한다 (할당량이면 나머지 줄도 전부 실패한다).
+  // 루프 내 mymemory 호출(1회)은 일시 장애로 폴백을 계속하게 하고,
+  // 최종 폴백 호출(2회)만 쿼터를 던지게 해 경로를 구분한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { preferredService: 'deepl' };
+  translator.maxRetries = 1; // 재시도 카운트를 결정적으로 만들기 위해 고정
+  translator.translateWithDeepL = async () => {
+    throw new Error('DeepL network timeout'); // 일시 장애 → 폴백 계속
+  };
+  let myMemoryCalls = 0;
+  translator.translateWithMyMemory = async () => {
+    myMemoryCalls++;
+    if (myMemoryCalls === 1) {
+      throw new Error('MyMemory network timeout'); // 루프: 일시 장애 → 계속
+    }
+    throw new Error('MyMemory daily quota exceeded (status 429). Try again tomorrow'); // 최종 폴백: 쿼터
+  };
+  await assert.rejects(
+    () => translator.translateAuto('hello', 'deepl', 'ko', 'en'),
+    /daily quota exceeded/,
+    'final fallback must propagate quota instead of returning original text'
+  );
+  assert.strictEqual(myMemoryCalls, 2, 'final fallback path was reached');
+  console.log('[FinalFallback] quota in final fallback is propagated (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -467,6 +513,8 @@ async function run() {
   await runSerial429Propagation();
   await runSerialRetry429Propagation();
   await runSrtFileNoOutputOn429();
+  await runQuotaClassification();
+  await runFinalFallbackQuotaPropagation();
 
   console.log('Smoke tests passed.');
 }
