@@ -1382,7 +1382,9 @@ function convertToWav(inputPath) {
         // .stale.bak로 백업 후 재변환 — 사용자가 둔 WAV(형제 파일)를 지우는
         // 데이터 손실 방지 (MED-5). ffmpeg -y가 새 파일을 덮어쓴다.
         // (ponytail: 백업이 쌓이면 정리 필요 — ffmpeg 성공 시 백업 삭제로 업그레이드 가능)
-        console.log(`[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`);
+        console.log(
+          `[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`
+        );
         try {
           fs.renameSync(wavPath, `${wavPath}.stale.bak`);
         } catch (_e) {

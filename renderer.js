@@ -4806,7 +4806,9 @@ async function saveApiKeys() {
         status.textContent = successMsg[currentUiLang] || successMsg.ko;
         if (res.insecure) {
           // safeStorage/OS 키링 부재로 AES 폴백 저장됨 — 하드코딩 키라 노출 가능 (locales 키 추가 금지라 하드코딩)
-          showToast('[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다.');
+          showToast(
+            '[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다.'
+          );
         }
       } else {
         status.className = 'api-status error';
