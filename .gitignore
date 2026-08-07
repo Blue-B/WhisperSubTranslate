@@ -1,2 +1,4 @@
 node_modules/
 translation-errors.log
+errors.log
+whisper-cpp/
