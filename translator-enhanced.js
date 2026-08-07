@@ -1677,10 +1677,16 @@ ${lines}`;
       const batchPromises = concurrentBatches.map(async (batch, batchIndex) => {
         const batchResults = [];
         for (let j = 0; j < batch.length; j++) {
-          // 중지 플래그 체크 (할당량 초과 또는 사용자 중지)
+          // 중지 플래그 체크 (할당량 초과 또는 사용자 중지) — 원문 push 없이
+          // 즉시 throw해 Promise.all이 ABORTED/QUOTA를 상위로 전파하게 한다.
+          // 마지막 윈도우에서 미번역 꼬리가 붙은 부분 파일이 success로
+          // 기록되는 것을 막는다 (쿼터 경로와 동일).
           if (shouldStop || this._aborted) {
-            batchResults.push(batch[j]); // 원문 유지
-            continue;
+            throw new Error(
+              this._aborted
+                ? 'ABORTED: Translation stopped by user'
+                : 'API_QUOTA_EXCEEDED: Translation stopped due to rate limit'
+            );
           }
 
           const text = batch[j];
@@ -1797,11 +1803,10 @@ ${lines}`;
     progressCallback = null,
     sourceLang = null
   ) {
-    // HIGH-1a: main.js 다국어 루프가 언어별로 이 함수를 호출하는데, 예전엔 첫
-    // 줄 resetAbort()가 중지 플래그를 지워 중지 후에도 다음 언어 번역이 이어졌다.
-    // abort 상태에서 호출되면 리셋 없이 즉시 ABORTED를 던진다. 새 세션의 첫
-    // 호출(정상 상태)에서만 리셋되어 다음 번역이 다시 시작할 수 있다.
-    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+    // HIGH-1: 중지 플래그는 새 번역 요청마다 항상 리셋한다. 한 번 중지해도
+    // 같은 세션의 다음 새 번역은 다시 시작할 수 있어야 한다. 언어 간 abort
+    // 보호(중지 후 남은 언어 시작 금지)는 main.js 다국어 루프가 translateSRTFile
+    // 호출 전에 translator._aborted를 직접 검사하므로 여기서 리셋해도 유지된다.
     this.resetAbort();
     // 구버전 설정에 남은 경량 항목은 OpenAI로 보낸다.
     if (method === 'chatgpt-nano') method = 'chatgpt';
