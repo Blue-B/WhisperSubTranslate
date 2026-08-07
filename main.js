@@ -3382,7 +3382,12 @@ ipcMain.handle('stop-current-process', async () => {
 ipcMain.handle('save-api-keys', async (_event, keys) => {
   try {
     const result = translator.saveApiKeys(keys);
-    return { success: result };
+    // result가 객체면 { success: true, insecure } 형태 (AES 폴백 저장) —
+    // 평탄화해 renderer가 insecure 플래그를 볼 수 있게 한다
+    if (result && typeof result === 'object') {
+      return { success: true, insecure: !!result.insecure };
+    }
+    return { success: !!result };
   } catch (error) {
     return { success: false, error: error.message };
   }

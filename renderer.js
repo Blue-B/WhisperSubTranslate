@@ -938,6 +938,8 @@ async function continueProcessing() {
     shouldStop = false;
     currentProcessingIndex = -1;
     updateQueueDisplay();
+    // 번역 select 재활성화 (완료 경로와 동일하게 — 안 하면 영구 비활성)
+    if (typeof updateUIMode === 'function') updateUIMode();
 
     const completedCount = fileQueue.filter((f) => f.status === 'completed').length;
     const errorCount = fileQueue.filter((f) => f.status === 'error').length;
@@ -1389,6 +1391,8 @@ async function continueProcessing() {
     shouldStop = false;
     currentProcessingIndex = -1;
     updateQueueDisplay();
+    // 번역 select 재활성화 (완료 경로와 동일하게 — 안 하면 영구 비활성)
+    if (typeof updateUIMode === 'function') updateUIMode();
     return;
   }
 
@@ -3857,14 +3861,21 @@ function initSettingsModal() {
       try {
         localStorage.removeItem('wst_history');
       } catch (_e) {}
-      // IPC로 LevelDB 디스크 공간 안전 회수
+      // IPC로 LevelDB 디스크 공간 안전 회수 — 실패 시 캐시를 유지해
+      // 화면만 비어 보이고 재시작 시 기록이 부활하는 상태를 방지한다
       try {
-        await window.electronAPI?.secureClearHistory?.();
-      } catch (_e) {}
-      // 캐시도 함께 비운다 (안 비우면 목록 잔존 + 다음 저장 시 복원됨)
-      _historyCache = [];
-      _historyLoadedOnce = true;
-      renderHistory();
+        const res = await window.electronAPI?.secureClearHistory?.();
+        if (res && res.success) {
+          // 캐시도 함께 비운다 (안 비우면 목록 잔존 + 다음 저장 시 복원됨)
+          _historyCache = [];
+          _historyLoadedOnce = true;
+          renderHistory();
+        } else {
+          console.error('[History] secureClearHistory failed:', res);
+        }
+      } catch (e) {
+        console.error('[History] secureClearHistory error:', e);
+      }
     });
   }
   // History search
@@ -4793,6 +4804,10 @@ async function saveApiKeys() {
       if (res && res.success) {
         status.className = 'api-status success';
         status.textContent = successMsg[currentUiLang] || successMsg.ko;
+        if (res.insecure) {
+          // safeStorage/OS 키링 부재로 AES 폴백 저장됨 — 하드코딩 키라 노출 가능 (locales 키 추가 금지라 하드코딩)
+          showToast('[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다.');
+        }
       } else {
         status.className = 'api-status error';
         status.textContent = failMsg[currentUiLang] || failMsg.ko;
