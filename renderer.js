@@ -1032,6 +1032,12 @@ async function continueProcessing() {
       }
 
       if (translationResult.success) {
+        // 일부 언어만 실패한 경우 부분 실패를 사용자에게 알린다 (F5).
+        if (translationResult.failedLangs?.length) {
+          addOutput(
+            `${I18N[currentUiLang].translationFailed}${translationResult.failedLangs.join(', ')} (${translationResult.outputPaths?.length ?? 0}/${translationResult.failedLangs.length + (translationResult.outputPaths?.length ?? 0)} languages succeeded)\n`
+          );
+        }
         // 성공: 파일 상태만 갱신. 완료 토스트/사운드/allTasksComplete는
         // translation-progress 'completed' 이벤트 핸들러가 단독 처리 (중복 방지)
         file.status = 'completed';
@@ -1279,6 +1285,12 @@ async function continueProcessing() {
           // 번역 단계 종료 표시는 translation-progress의 'completed'에서 처리
 
           if (translationResult.success) {
+            // 일부 언어만 실패한 경우 부분 실패를 사용자에게 알린다 (F5).
+            if (translationResult.failedLangs?.length) {
+              addOutput(
+                `${I18N[currentUiLang].translationFailed}${translationResult.failedLangs.join(', ')} (${translationResult.outputPaths?.length ?? 0}/${translationResult.failedLangs.length + (translationResult.outputPaths?.length ?? 0)} languages succeeded)\n`
+              );
+            }
             addOutput(`${I18N[currentUiLang].translationDone(fileName, targetLangs.join(', '))}\n`);
             // 히스토리 조기 저장 (completed 이벤트 눌지거나 누락되는 경우 대비 안전망)
             file.status = 'completed';
