@@ -2466,9 +2466,7 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           // 성공은 유지하되, 조용히 넘어가지 않게 명시적으로 경고를 남긴다.
           // (code !== 0 이면서 SRT가 온전하지 않으면 아래 else에서 실패 처리)
           if (code === 0 && srtExists && !srtComplete) {
-            console.warn(
-              `[WARN] ${path.basename(filePath)} exited 0 but SRT is empty/incomplete (silent video?)`
-            );
+            console.warn(`[WARN] ${path.basename(filePath)} exited 0 but SRT is empty/incomplete (silent video?)`);
             mainWindow.webContents.send(
               'output-update',
               `[Warning] Subtitle file is empty (no speech detected in this video/audio).\n`
