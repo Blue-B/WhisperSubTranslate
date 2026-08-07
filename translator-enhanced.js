@@ -120,13 +120,17 @@ const PROVIDER_FORMATS = ['openai', 'anthropic', 'gemini'];
 const CUSTOM_PROVIDER_PREFIX = 'custom:';
 const ANTHROPIC_API_VERSION = '2023-06-01';
 
-// 429/403/할당량 초과 판정. 'quota' 단독 부분매칭은 네트워크 오류 메시지에
+// 429/할당량 초과 판정. 'quota' 단독 부분매칭은 네트워크 오류 메시지에
 // 우연히 걸릴 수 있어 단어 경계 + 명시 문구로 정밀하게 매치한다.
-// (직렬/병렬/translateAuto 재시도 경로가 같은 규칙을 공유한다 — F2)
+// (직렬/병렬/translateAuto 재시도 경로가 같은 규칙을 공유한다)
+// 403은 포함하지 않는다: 403은 인증/권한 오류(키 만료·오타·IP 차단)가 흔해서
+// 쿼터로 오판하면 전체 파일이 하드 스톱된다. 403은 다음 서비스로 폴백된다.
+// (MyMemory 403 쿼터 로테이션은 myMemoryTranslator 내부에서 처리하며,
+//  최종 예외는 'quota exceeded' 문구로 래핑되어 여기서 여전히 잡힌다)
 function isQuotaError(message) {
   const msg = String(message || '');
   const lower = msg.toLowerCase();
-  if (/(^|\D)(429|403)(\D|$)/.test(msg)) return true; // '429', 'status 403' 등
+  if (/(^|\D)(429)(\D|$)/.test(msg)) return true; // '429', 'status 429' 등
   if (/\bquota\b|daily limit|too many requests|rate limit/.test(lower)) return true;
   if (lower.includes('resource_exhausted') || lower.includes('api_quota_exceeded')) return true;
   return false;
@@ -1203,6 +1207,12 @@ class EnhancedSubtitleTranslator {
       return await this.translateWithMyMemory(text, targetLanguage === 'KO' ? 'ko' : targetLanguage.toLowerCase());
     } catch (finalErr) {
       console.error(`[Final Attempt Failed] "${text.substring(0, 40)}..." - ${finalErr.message}`);
+      // 쿼터 초과는 폴백이 끝난 뒤에도 삼키지 않는다: 할당량이면 다른 줄도
+      // 전부 실패할 것이므로 원문 반환 대신 명확한 에러로 전파한다.
+      // (일시 장애/네트워크 오류만 원문 유지 passthrough)
+      if (isQuotaError(finalErr)) {
+        throw finalErr;
+      }
       // 정말 모든 방법이 실패한 경우에만 원문 반환
       return text;
     }
@@ -1380,24 +1390,11 @@ ${lines}`;
 
       const batch = texts.slice(start, start + batchSize);
       try {
-        // 컨텍스트 결과 캐시 히트: 배치의 모든 줄이 ctx:1 키로 캐시돼 있으면
-        // LLM 호출을 건너뛴다. (같은 텍스트 + 같은 소스 언어 + 같은 모드)
-        const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
-        const cachedBatch = batch.map((text) =>
-          this.getCachedTranslation(text, cacheMethod, targetLang, _sourceLang, true)
-        );
-        if (cachedBatch.every((t) => typeof t === 'string' && t.trim().length > 0)) {
-          results.push(...cachedBatch.map((t) => this.sanitizeTranslationText(t)));
-          if (progressCallback) {
-            progressCallback({
-              stage: 'translating',
-              current: Math.min(start + batch.length, texts.length),
-              total: texts.length,
-              text: batch[batch.length - 1]?.substring(0, 50) + '...',
-            });
-          }
-          continue;
-        }
+        // 컨텍스트(문맥) 번역 결과는 이전 배치들의 summary/glossary에 의존한다.
+        // 캐시 키에 컨텍스트 지문이 없어 부분 편집 후 재실행하면 옛 컨텍스트
+        // 결과가 그대로 서빙될 위험이 있어, 읽기 경로는 비활성화한다 (쓰기만 유지).
+        // 지문(summary+glossary 해시)을 키에 넣는 완전한 해법은 추후 별도 PR로.
+        // (getCachedTranslation(ctx:1)은 여기서 호출하지 않음 — 회귀 방지)
         await this.throttleRequest();
         const parsed = await this.translateContextAwareChunk(batch, selectedMethod, targetLang, context);
         const translations = Array.isArray(parsed.translations) ? parsed.translations : [];
@@ -1409,6 +1406,9 @@ ${lines}`;
         }
 
         const cleaned = translations.map((text) => this.sanitizeTranslationText(text));
+        // 쓰기 경로만 유지: 같은 provider.cacheKey + ctx:1 플래그로 기록해
+        // 읽기 재활성화 시(지문 추가 PR) 바로 사용할 수 있게 한다.
+        const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
         cleaned.forEach((translation, index) => {
           // 컨텍스트(문맥) 결과는 일반 LLM 경로와 같은 provider.cacheKey로 기록하되
           // ctx:1 플래그로 구분한다 — 이전엔 'chatgpt' 등 일반 method 이름으로 써서
@@ -1430,8 +1430,8 @@ ${lines}`;
             results.push(fallback);
           } catch (fallbackErr) {
             // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
-            const fbMsg = String(fallbackErr?.message || '').toLowerCase();
-            if (fbMsg.includes('too many requests') || fbMsg.includes('quota') || fbMsg.includes('429')) {
+            // (isQuotaError로 통일 — 다른 재시도 경로와 같은 판정을 쓴다)
+            if (isQuotaError(fallbackErr)) {
               throw fallbackErr;
             }
             results.push(text); // 폴백 실패 시 원문 유지 (기존 passthrough 안전망과 동일)

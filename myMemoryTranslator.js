@@ -106,7 +106,11 @@ class MyMemoryTranslator {
             lower.includes('status 429') ||
             /quota|daily limit|too many requests/.test(lower)
           ) {
-            throw new Error(`MyMemory quota exceeded (${msg.substring(0, 80)}). Try again tomorrow or use DeepL/OpenAI.`);
+            // renderer.js의 'MyMemory daily quota exceeded' 분기가 매칭되도록
+            // 'daily quota' 문구를 유지한다 (그 외 'quota exceeded' 폴백 분기도 동작).
+            throw new Error(
+              `MyMemory daily quota exceeded (${msg.substring(0, 80)}). Try again tomorrow or use DeepL/OpenAI.`
+            );
           }
           throw error;
         }
