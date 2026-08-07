@@ -3526,6 +3526,12 @@ ipcMain.handle(
           );
           outputPaths.push(result);
         } catch (langErr) {
+          // 사용자 중지(ABORTED)는 언어 실패와 다르다: 원본 에러를 그대로 상위로
+          // 전파해 'Stopped by user' userStopped 마커가 설정되게 한다 (HIGH-3).
+          // 중지 후 남은 언어는 번역하지 않는다. 일반 실패만 기록하고 계속 진행한다.
+          if (String(langErr?.message || '').includes('ABORTED')) {
+            throw langErr;
+          }
           // 한 언어의 실패가 다른 언어까지 중단시키지 않는다: 실패 언어만 기록하고
           // 계속 진행한다. 성공한 언어 SRT는 응답에 포함된다 (P1).
           console.error(`[Translate] Language ${safeTarget} failed: ${langErr.message}`);

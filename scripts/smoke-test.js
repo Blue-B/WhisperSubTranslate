@@ -699,8 +699,10 @@ async function runMyMemoryNormalPhrase() {
 }
 
 async function runAbortSurvivesLangLoop() {
-  // HIGH-1a: translateSRTFile이 abort 상태에서 호출되면 resetAbort 없이
-  // 즉시 ABORTED를 던진다 (다국어 루프의 다음 언어가 중지 플래그를 지우지 않음).
+  // HIGH-1: translateSRTFile은 매 호출 resetAbort()하므로, 한 번 중지해도
+  // 같은 세션의 다음 새 번역 요청은 다시 시작할 수 있다. 언어 간 abort 보호는
+  // main.js 루프가 translateSRTFile 호출 전 translator._aborted를 검사해
+  // 남은 언어를 건너뛰는 방식으로 유지된다.
   const translator = new EnhancedSubtitleTranslator();
   translator.translateSRTContent = async (content) => content.replace('Hello', '안녕');
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-abort-lang-'));
@@ -711,16 +713,41 @@ async function runAbortSurvivesLangLoop() {
     await translator.translateSRTFile(inputPath, outputPath, 'mymemory', 'ko', null, 'en');
     assert.strictEqual(translator._aborted, false, 'fresh session runs normally');
     translator._aborted = true; // 사용자 중지 시뮬레이션
+    // 중지 후 새 번역 요청: 플래그가 리셋되어 다시 성공해야 한다 (회귀-1).
+    const out2 = path.join(tmpDir, 'out_ja.srt');
+    await translator.translateSRTFile(inputPath, out2, 'mymemory', 'ja', null, 'en');
+    assert.strictEqual(translator._aborted, false, 'new translation resets the abort flag');
+    assert.ok(fs.existsSync(out2), 'translation after stop must produce an output file');
+    // 단, 진행 중 abort는 번역 내부 루프에서 여전히 ABORTED로 전파된다.
+    translator._aborted = true;
     await assert.rejects(
-      () => translator.translateSRTFile(inputPath, outputPath, 'mymemory', 'ja', null, 'en'),
+      () => translator.translateBatch(['Hello'], 'mymemory', 'ja', 'en'),
       /ABORTED/,
-      'aborted state must throw immediately without reset'
+      'in-flight abort must still throw ABORTED'
     );
-    assert.strictEqual(translator._aborted, true, 'abort flag must survive the language loop');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  console.log('[AbortLangLoop] abort survives language loop (ok)');
+  console.log('[AbortLangLoop] stop then new session translation succeeds, in-flight abort throws (ok)');
+}
+
+async function runParallelLastWindowAbort() {
+  // 남은-2: 병렬 루프의 마지막 윈도우에서 abort가 감지되면 원문 push 없이
+  // ABORTED를 throw해 Promise.all이 상위로 전파해야 한다 (부분 파일 success 방지).
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { preferredService: 'mymemory', batchTranslation: true, maxConcurrent: 2 };
+  let calls = 0;
+  translator.translateAuto = async (text) => {
+    calls++;
+    if (calls === 1) translator._aborted = true; // 마지막(유일) 윈도우 도중에 사용자 중지
+    return 'ok-' + text;
+  };
+  await assert.rejects(
+    () => translator.translateBatch(['a', 'b', 'c'], 'mymemory', 'ko', 'en'),
+    /ABORTED/,
+    'parallel last-window abort must propagate ABORTED, not partial results'
+  );
+  console.log('[ParallelLastWindowAbort] last-window abort propagates ABORTED (ok)');
 }
 
 async function runParallelRetryDedupe() {
@@ -869,6 +896,7 @@ async function run() {
   await runAbortSafeRetry();
   await runCustomPromptFingerprint();
   await runAbortSurvivesLangLoop();
+  await runParallelLastWindowAbort();
   await runParallelRetryDedupe();
   await runThrottleTiers();
   await runQuotaMessagePrecision();
