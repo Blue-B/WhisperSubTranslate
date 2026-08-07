@@ -33,7 +33,7 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 以上または 22.12 以上 (Electron 42 ビルドツールチェーン)
+- Node.js 20.19 以上または 22.12 以上 (Electron 43 ビルドツールチェーン)
 - whisper.cpp は `npm install` 時に自動ダウンロード (Windows は CUDA ビルド、約700MB)
 - FFmpeg は npm で同梱。選択した GGML モデルは初回使用時にダウンロード
 
@@ -63,9 +63,10 @@ npm run build-win   # 成果物は dist2/ に出力されます
 | Hy-MT2 7B (ローカル) | はい | 不要 | 無料 | 約6.16GB、VRAM 8GB / RAM 12GB、大型モデル |
 | MyMemory | いいえ | 不要 | 無料 | IP ごとに 1日 約5万文字 |
 | DeepL | いいえ | 必要 | 月50万文字 無料 | 出力が安定 |
-| OpenAI GPT-5.4 mini | いいえ | 必要 | 有料 | 文脈認識 |
-| OpenAI GPT-5.4 nano | いいえ | 必要 | 有料 | より安価なティア |
-| Gemini 3 Flash | いいえ | 必要 | 無料 / 低コスト | 推奨の低コスト経路 ([キー取得](https://aistudio.google.com/app/apikey)) |
+| OpenAI GPT-5.x (設定可能、既定 gpt-5.6-sol) | いいえ | 必要 | 有料 | 既定モデル、文脈認識 |
+| Gemini 3.x (設定可能、既定 gemini-3.6-flash) | いいえ | 必要 | 無料 / 低コスト | 推奨の低コスト経路 ([キー取得](https://aistudio.google.com/app/apikey)) |
+| Claude (設定可能、既定 claude-opus-5) | いいえ | 必要 | 有料 | 文脈理解に強い ([キー取得](https://console.anthropic.com/settings/keys)) |
+| カスタム OpenAI 互換プロバイダー | いいえ | 必要 | 各種 | 自前エンドポイント (OpenRouter、Ollama、vLLM など) |
 
 ローカルの Hy-MT2 エンジンだけが API キーもネットワークも使用料も不要で、セリフが PC の外に出ません。
 
@@ -94,7 +95,7 @@ WhisperSubTranslate は Tencent Hy-MT2 モデル(既定 1.8B、オプション 7
 | large-v2 同期 | 約4.4GB | 約4.5GB | 低速 | 別エンジン、字幕同期を補正 |
 | large-v2 同期ライト | 共用 | 約3GB | 低速 | 同期と同じファイル、int8、低VRAM |
 
-同期と同期ライトは別の Faster-Whisper エンジン(初回に一度自動ダウンロード、約4.4GB)を使い、同じモデルファイルを共有するため、一度ダウンロードすれば両方使えます。通常モデルで同期がずれるときだけ使ってください。非英語の動画(日本語、韓国語、中国語)で最も正確で、英語は通常 large-v3-turbo で十分です。
+同期と同期ライトは別の Faster-Whisper エンジン(初回に一度自動ダウンロード; エンジン アーカイブ約1.4GB + モデルファイル約3GB、合計約4.4GB)を使い、同じモデルファイルを共有するため、一度ダウンロードすれば両方使えます。通常モデルで同期がずれるときだけ使ってください。非英語の動画(日本語、韓国語、中国語)で最も正確で、英語は通常 large-v3-turbo で十分です。
 
 whisper.cpp モデルの VRAM は GGML 最適化基準で、PyTorch Whisper(large 約10GB)よりはるかに少なめです。同期モデルの数値は Faster-Whisper ベンチマーク基準です。
 
@@ -113,9 +114,13 @@ whisper.cpp モデルの VRAM は GGML 最適化基準で、PyTorch Whisper(larg
 | 設定と API キー | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
 | 処理履歴 | `%APPDATA%\whispersubtranslate\history.json` (最大200件) |
 | エラーログ | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| モデル | `_models/` (アプリフォルダ) |
+| モデル | `%APPDATA%\whispersubtranslate\_models` (ユーザーデータフォルダ; 非ASCII Windows アカウントは `C:\Users\Public\WhisperSubTranslate\_models` にフォールバック) |
 
 API キーは OS のセキュア保存でローカルに保存され、設定ファイルは Git にも配布物にも含まれません。処理履歴は任意で(設定で切替)、最大200件まで保持されます。
+
+### ポータブルデータレイアウト
+
+既定ではモデル・キャッシュ・設定は `%APPDATA%`(システム SSD)に保存されます。USB/外付けドライブにまとめて置きたい場合は、実行ファイルの隣に `portable-data/` フォルダを作るか(または `WHISPER_PORTABLE_DATA` 環境変数をフォルダパスに設定)、アプリは `userData` をそこへリダイレクトします。
 
 ## 貢献
 
@@ -145,6 +150,10 @@ WhisperSubTranslate をより良くしてくれるすべての方に感謝しま
 - whisper.cpp: Georgi Gerganov [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - Hy-MT2: Tencent [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+- Faster-Whisper-XXL: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- Silero VAD、`deepl-node`、`node-llama-cpp`、`axios` などの npm 依存関係
+
+バンドル/ダウンロードされるコンポーネントの完全な一覧とライセンスは [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) を参照してください。
 
 ## ライセンス
 

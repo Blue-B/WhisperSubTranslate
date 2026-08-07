@@ -33,7 +33,7 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 이상 또는 22.12 이상 (Electron 42 빌드 툴체인)
+- Node.js 20.19 이상 또는 22.12 이상 (Electron 43 빌드 툴체인)
 - whisper.cpp는 `npm install` 때 자동으로 받습니다 (윈도우는 CUDA 빌드, 약 700MB)
 - FFmpeg는 npm으로 포함되며, 선택한 GGML 모델은 처음 쓸 때 받습니다
 
@@ -63,9 +63,10 @@ npm run build-win   # 결과물은 dist2/에 생성됩니다
 | Hy-MT2 7B (로컬) | 예 | 불필요 | 무료 | 약 6.16GB, VRAM 8GB / RAM 12GB, 더 큰 모델 |
 | MyMemory | 아니오 | 불필요 | 무료 | IP당 하루 약 5만 자 |
 | DeepL | 아니오 | 필요 | 월 50만 자 무료 | 결과가 일정함 |
-| OpenAI GPT-5.4 mini | 아니오 | 필요 | 유료 | 문맥 인식 |
-| OpenAI GPT-5.4 nano | 아니오 | 필요 | 유료 | 더 저렴한 등급 |
-| Gemini 3 Flash | 아니오 | 필요 | 무료 / 저비용 | 추천 저비용 경로 ([키 받기](https://aistudio.google.com/app/apikey)) |
+| OpenAI GPT-5.x (설정 가능, 기본 gpt-5.6-sol) | 아니오 | 필요 | 유료 | 기본 모델, 문맥 인식 |
+| Gemini 3.x (설정 가능, 기본 gemini-3.6-flash) | 아니오 | 필요 | 무료 / 저비용 | 추천 저비용 경로 ([키 받기](https://aistudio.google.com/app/apikey)) |
+| Claude (설정 가능, 기본 claude-opus-5) | 아니오 | 필요 | 유료 | 문맥 이해에 강함 ([키 받기](https://console.anthropic.com/settings/keys)) |
+| 커스텀 OpenAI 호환 공급자 | 아니오 | 필요 | 상이 | 자체 엔드포인트 사용 (OpenRouter, Ollama, vLLM 등) |
 
 로컬 Hy-MT2 엔진만 API 키도, 네트워크도, 사용 비용도 필요 없어서 대사가 PC를 벗어나지 않습니다.
 
@@ -94,7 +95,7 @@ WhisperSubTranslate는 Tencent Hy-MT2 모델(기본 1.8B, 선택 7B)을 함께 �
 | large-v2 싱크 | 약 4.4GB | 약 4.5GB | 느림 | 별도 엔진, 자막 싱크 교정 |
 | large-v2 싱크 라이트 | 공용 | 약 3GB | 느림 | 싱크와 같은 파일, int8, 저VRAM |
 
-싱크와 싱크 라이트는 별도 Faster-Whisper 엔진(한 번 자동 다운로드, 약 4.4GB)을 쓰고 같은 모델 파일을 공유해서, 한 번 받으면 둘 다 쓸 수 있습니다. 일반 모델로 싱크가 밀릴 때만 쓰세요. 비영어 영상(일본어, 한국어, 중국어)에서 가장 정확하고, 영어는 보통 large-v3-turbo로 충분합니다.
+싱크와 싱크 라이트는 별도 Faster-Whisper 엔진(한 번 자동 다운로드; 엔진 아카이브 약 1.4GB + 모델 파일 약 3GB, 합계 약 4.4GB)을 쓰고 같은 모델 파일을 공유해서, 한 번 받으면 둘 다 쓸 수 있습니다. 일반 모델로 싱크가 밀릴 때만 쓰세요. 비영어 영상(일본어, 한국어, 중국어)에서 가장 정확하고, 영어는 보통 large-v3-turbo로 충분합니다.
 
 whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 약 10GB)보다 훨씬 적습니다. 싱크 모델 수치는 Faster-Whisper 벤치마크 기준입니다.
 
@@ -113,7 +114,7 @@ whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 
 | 설정 및 API 키 | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
 | 작업 히스토리 | `%APPDATA%\whispersubtranslate\history.json` (최대 200개) |
 | 에러 로그 | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| 모델 | `_models/` (앱 폴더) |
+| 모델 | `%APPDATA%\whispersubtranslate\_models` (사용자 데이터 폴더; 비ASCII Windows 계정은 `C:\Users\Public\WhisperSubTranslate\_models`로 폴백) |
 
 API 키는 OS 보안 저장소로 로컬에 저장되고, 설정 파일은 깃에 올라가거나 빌드에 포함되지 않습니다. 작업 히스토리는 선택이고(설정에서 토글) 최대 200개까지 보관됩니다.
 
@@ -146,6 +147,10 @@ WhisperSubTranslate를 함께 만들어주는 모든 분께 감사합니다.
 - whisper.cpp: Georgi Gerganov [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - Hy-MT2: Tencent [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+- Faster-Whisper-XXL: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- Silero VAD, `deepl-node`, `node-llama-cpp`, `axios` 등 npm 의존성
+
+번들/다운로드 구성요소 전체 목록과 라이선스는 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)를 보세요.
 
 ## 라이선스
 
