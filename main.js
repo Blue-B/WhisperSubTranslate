@@ -1353,6 +1353,21 @@ function convertToWav(inputPath) {
     // 단, 소스 미디어가 WAV보다 새로워졌거나(재인코딩됨) 0바이트 잔재면 재변환한다.
     // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV를 재사용하면 틀린 자막이 나오므로
     // mtime 비교로 스테일 파일을 걸러낸다.
+    // 스테일 WAV 백업: 같은 소스의 .stale.bak은 1개만 유지한다 (기존 백업
+    // 덮어쓰기). 백업은 사용자 원본의 유일 사본일 수 있어 삭제하지 않는다
+    // (MED-5). Windows rename은 대상 존재 시 실패하므로 기존 백업을 먼저 지운다.
+    const backupStaleWav = (wavPath) => {
+      const bakPath = `${wavPath}.stale.bak`;
+      try {
+        if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
+        fs.renameSync(wavPath, bakPath);
+      } catch (_e) {
+        try {
+          fs.unlinkSync(wavPath);
+        } catch (_e2) {}
+      }
+    };
+
     if (!usingSafeTemp && fs.existsSync(wavPath)) {
       try {
         const wavStat = fs.statSync(wavPath);
@@ -1368,9 +1383,20 @@ function convertToWav(inputPath) {
         const hasRiffWave = (header.startsWith('RIFF') || isRf64) && header.slice(8, 12) === 'WAVE';
         // RIFF chunk size 필드(4-7바이트 LE)는 '파일 크기 - 8'과 일치해야 한다.
         // 44B~1KB 크기 게이트만 통과하는 잘린 WAV(헤더만 유효하고 데이터가
-        // 잘린 경우)를 여기서 걸러낸다 (MED-2). RF64(4GB 초과)는 크기 필드가
-        // 0xFFFFFFFF 고정이라 이 검증을 건너뛴다 (MED-5).
-        const riffSizeOk = isRf64 || (wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8);
+        // 잘린 경우)를 여기서 걸러낸다 (MED-2). RF64(4GB 초과)는 RIFF 크기
+        // 필드가 0xFFFFFFFF 고정이라 ds64 청크의 riffSize64 필드(청크 헤더
+        // 12바이트 뒤 8바이트 LE, 첫 청크면 @20)로 실제 크기를 대조한다.
+        // ds64가 없거나 불일치면 잘린 파일이므로 stale 처리한다 (MED-5).
+        let riffSizeOk;
+        if (isRf64) {
+          const ds64 = wavBuf.indexOf('ds64', 12);
+          riffSizeOk =
+            ds64 >= 0 &&
+            wavBuf.length >= ds64 + 16 &&
+            wavBuf.readBigUInt64LE(ds64 + 8) === BigInt(wavBuf.length - 8);
+        } else {
+          riffSizeOk = wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8;
+        }
         if (hasRiffWave && riffSizeOk && wavBuf.length >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
@@ -1380,28 +1406,17 @@ function convertToWav(inputPath) {
         }
         // 스테일/잘린 WAV (헤더 검증 실패 또는 소스가 더 새로움): 삭제하지 않고
         // .stale.bak로 백업 후 재변환 — 사용자가 둔 WAV(형제 파일)를 지우는
-        // 데이터 손실 방지 (MED-5). ffmpeg -y가 새 파일을 덮어쓴다.
-        // (ponytail: 백업이 쌓이면 정리 필요 — ffmpeg 성공 시 백업 삭제로 업그레이드 가능)
+        // 데이터 손실 방지 (MED-5). 백업은 유일 사본일 수 있어 삭제하지 않고
+        // 동일 소스당 1개만 유지한다 (backupStaleWav, MED-5).
+        // (ponytail: 보존 기간 제한이 필요하면 날짜 접미사 + 오래된 백업 정리로 확장)
         console.log(
           `[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`
         );
-        try {
-          fs.renameSync(wavPath, `${wavPath}.stale.bak`);
-        } catch (_e) {
-          try {
-            fs.unlinkSync(wavPath);
-          } catch (_e2) {}
-        }
+        backupStaleWav(wavPath);
       } catch (statErr) {
         // stat 실패 시 스킵하지 않고 재변환 시도 (동일하게 백업 우선)
         console.log(`[Audio] WAV stat failed, re-converting: ${statErr.message}`);
-        try {
-          fs.renameSync(wavPath, `${wavPath}.stale.bak`);
-        } catch (_e) {
-          try {
-            fs.unlinkSync(wavPath);
-          } catch (_e2) {}
-        }
+        backupStaleWav(wavPath);
       }
     }
 
