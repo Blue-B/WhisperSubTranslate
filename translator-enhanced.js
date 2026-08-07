@@ -17,8 +17,10 @@ try {
   console.log('[Translator] Running without Electron app context:', error.message);
 }
 
-// Legacy AES key remains only for one-shot migration off the hardcoded secret.
-// New writes go through Electron safeStorage (OS-level: DPAPI / Keychain / libsecret).
+// Hardcoded AES key: ACTIVE fallback when Electron safeStorage is unavailable
+// (e.g. Linux without a keyring daemon). The key is public in the source, so saves
+// through this path are flagged insecure and logged loudly (see README).
+// Prefer safeStorage (OS-level: DPAPI / Keychain / libsecret).
 const ENCRYPTION_KEY = 'whisper-sub-translate-secure-key-2024-32bytes!!';
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
 
@@ -594,6 +596,14 @@ class EnhancedSubtitleTranslator {
         console.warn('[Config] safeStorage save failed, falling back to legacy AES');
       }
 
+      // safeStorage(OS 키링) 부재 시 하드코딩 키 AES 폴백. 키가 소스에 공개되어
+      // 있으므로 이 저장은 난독화 수준이며, '안전하지 않음'을 로그와 반환값의
+      // insecure 플래그로 명시적으로 드러낸다. 저장 자체는 Linux UX를 위해 유지.
+      console.warn(
+        '[Security] API keys stored with legacy AES fallback using a HARDCODED key ' +
+          '(safeStorage/OS keyring unavailable). Keys are recoverable by anyone with the ' +
+          'app source - NOT secure. Use a desktop session with a keyring (e.g. gnome-keyring).'
+      );
       const encryptedConfigPath = getEncryptedConfigPath();
       const encryptedData = encryptData(json);
       if (!encryptedData) {
@@ -604,8 +614,8 @@ class EnhancedSubtitleTranslator {
       if (this.apiKeys.deepl) {
         this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
       }
-      console.log('[Config] API keys saved with legacy AES (safeStorage unavailable)');
-      return true;
+      console.warn('[Config] API keys saved via legacy AES fallback (INSECURE - hardcoded key)');
+      return { success: true, insecure: true };
     } catch (error) {
       console.error('[Config] Failed to save API keys:', error.message);
       return false;
