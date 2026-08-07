@@ -1135,7 +1135,7 @@ async function continueProcessing() {
       if (!dlResult || !dlResult.success) {
         const dlErr = dlResult?.error || 'Model download failed';
         stopIndeterminate();
-        if (String(dlErr).toLowerCase().includes('cancelled')) {
+        if (String(dlErr).toLowerCase().includes('cancelled') || String(dlErr).toLowerCase().includes('canceled')) {
           file.status = 'stopped';
           addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorStopped}: ${fileName}\n`);
           isProcessing = false;

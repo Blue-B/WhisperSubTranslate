@@ -1364,11 +1364,13 @@ function convertToWav(inputPath) {
         // 쓰면 유효한 작은 WAV(사용자 제공 100바이트대 짧은 클립)도 보존된다.
         const wavBuf = fs.readFileSync(wavPath);
         const header = wavBuf.subarray(0, 12).toString('latin1');
-        const hasRiffWave = header.startsWith('RIFF') && header.slice(8, 12) === 'WAVE';
+        const isRf64 = header.startsWith('RF64');
+        const hasRiffWave = (header.startsWith('RIFF') || isRf64) && header.slice(8, 12) === 'WAVE';
         // RIFF chunk size 필드(4-7바이트 LE)는 '파일 크기 - 8'과 일치해야 한다.
         // 44B~1KB 크기 게이트만 통과하는 잘린 WAV(헤더만 유효하고 데이터가
-        // 잘린 경우)를 여기서 걸러낸다 (MED-2).
-        const riffSizeOk = wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8;
+        // 잘린 경우)를 여기서 걸러낸다 (MED-2). RF64(4GB 초과)는 크기 필드가
+        // 0xFFFFFFFF 고정이라 이 검증을 건너뛴다 (MED-5).
+        const riffSizeOk = isRf64 || (wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8);
         if (hasRiffWave && riffSizeOk && wavBuf.length >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
@@ -1376,17 +1378,28 @@ function convertToWav(inputPath) {
           resolve({ wavPath, usingSafeTemp, originalWavPath, reused: true });
           return;
         }
-        // 스테일/잘린 WAV (헤더 검증 실패 또는 소스가 더 새로움): 삭제 후 재변환
-        console.log(`[Audio] WAV stale (bad header or source newer), re-converting: ${path.basename(wavPath)}`);
+        // 스테일/잘린 WAV (헤더 검증 실패 또는 소스가 더 새로움): 삭제하지 않고
+        // .stale.bak로 백업 후 재변환 — 사용자가 둔 WAV(형제 파일)를 지우는
+        // 데이터 손실 방지 (MED-5). ffmpeg -y가 새 파일을 덮어쓴다.
+        // (ponytail: 백업이 쌓이면 정리 필요 — ffmpeg 성공 시 백업 삭제로 업그레이드 가능)
+        console.log(`[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`);
         try {
-          fs.unlinkSync(wavPath);
-        } catch (_e) {}
+          fs.renameSync(wavPath, `${wavPath}.stale.bak`);
+        } catch (_e) {
+          try {
+            fs.unlinkSync(wavPath);
+          } catch (_e2) {}
+        }
       } catch (statErr) {
-        // stat 실패 시 스킵하지 않고 재변환 시도
+        // stat 실패 시 스킵하지 않고 재변환 시도 (동일하게 백업 우선)
         console.log(`[Audio] WAV stat failed, re-converting: ${statErr.message}`);
         try {
-          fs.unlinkSync(wavPath);
-        } catch (_e) {}
+          fs.renameSync(wavPath, `${wavPath}.stale.bak`);
+        } catch (_e) {
+          try {
+            fs.unlinkSync(wavPath);
+          } catch (_e2) {}
+        }
       }
     }
 
@@ -1878,6 +1891,11 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
       });
       writer.on('error', reject);
       response.data.on('error', reject);
+      // 취소/abort 시 writer.destroy()가 close만 발생시켜 finish/error 없이
+      // 영구 pending 되는 것 방지 — download-model과 동일 패턴 (MED-6).
+      writer.on('close', () => {
+        if (!writer.writableFinished) reject(new Error(`${label}: Download stream closed before finish`));
+      });
     });
   } finally {
     activeDownloads.delete(tracker);
@@ -3328,7 +3346,14 @@ ipcMain.handle('download-model', async (_event, modelName) => {
     return { success: true };
   } catch (error) {
     console.error('Model download failed:', error);
-    if (String(error && error.message).includes('cancelled') || String(error && error.name).includes('AbortError')) {
+    // axios 취소(CanceledError, message 'canceled')와 수동 throw('cancelled')를 모두 취소로
+    // 판정 — 철자 불일치로 취소가 네트워크 실패로 오인되어 배치가 계속되는 것 방지 (MED-4).
+    const isCancel =
+      String(error && error.message).includes('cancelled') ||
+      String(error && error.message).includes('canceled') ||
+      (error && error.name === 'CanceledError') ||
+      String(error && error.name).includes('AbortError');
+    if (isCancel) {
       try {
         mainWindow.webContents.send('output-update', `Model download cancelled\n`);
       } catch (_e) {
