@@ -96,6 +96,7 @@
     "whisper-small": "高速な字幕抽出。日常使用に適しています。",
     "whisper-medium": "精度と速度のバランス。デフォルト推奨。",
     "whisper-large-v3-turbo": "Largeの精度 + 8倍高速。高性能GPUに推奨。",
+    "whisper-large-v3": "最も正確な文字起こし。長い動画で同期がずれ、低速 (F16 約3.1GB)。",
     "whisper-large-v2-sync": "同期が合わない字幕を補正する別エンジン(Faster-Whisper)。非英語(日/韓/中)に最も正確、英語はlarge-v3-turboで十分。デバイス選択に従う。GPU約4.5GB、低速。",
     "whisper-large-v2-sync-lite": "精密と同じファイルをint8で軽量実行。VRAM約3GBで低スペックGPU向け、追加DLなし。同期品質はほぼ同じ。"
   },
@@ -266,6 +267,7 @@
     "whisper-small": "Whisper · Small",
     "whisper-medium": "Whisper · Medium",
     "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v3": "Whisper · Large v3",
     "whisper-large-v2-sync": "Whisper · Large v2 同期",
     "whisper-large-v2-sync-lite": "Whisper · Large v2 同期 ライト"
   },

@@ -96,6 +96,7 @@
     "whisper-small": "Szybka ekstrakcja napisów. Dobry do codziennego użytku.",
     "whisper-medium": "Równowaga dokładności i szybkości. Domyślne polecane.",
     "whisper-large-v3-turbo": "Dokładność Large + 8x szybkość. Polecane dla wydajnych GPU.",
+    "whisper-large-v3": "Najdokładniejsza transkrypcja. Synchronizacja dryfuje i wolniejszy w długich filmach (F16 ~3.1GB).",
     "whisper-large-v2-sync": "Osobny silnik (Faster-Whisper) naprawiający napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z large-v3-turbo. Wg wyboru urządzenia. ~4,5GB GPU, wolny.",
     "whisper-large-v2-sync-lite": "Uruchamia ten sam plik w int8, lżej. ~3GB VRAM dla słabszych GPU, bez dodatkowego pobierania. Synchronizacja prawie identyczna."
   },
@@ -266,6 +267,7 @@
     "whisper-small": "Whisper · Small",
     "whisper-medium": "Whisper · Medium",
     "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v3": "Whisper · Large v3",
     "whisper-large-v2-sync": "Whisper · Large v2 Sync",
     "whisper-large-v2-sync-lite": "Whisper · Large v2 Sync Lite"
   },

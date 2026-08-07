@@ -96,6 +96,7 @@
     "whisper-small": "Fast subtitle extraction. Good for daily use.",
     "whisper-medium": "Balanced accuracy & speed. Default recommendation.",
     "whisper-large-v3-turbo": "Large accuracy + 8x speed. Recommended for high-end GPUs.",
+    "whisper-large-v3": "Most accurate transcription. Sync drifts and slow on long videos (F16 ~3.1GB).",
     "whisper-large-v2-sync": "Separate engine (Faster-Whisper) that fixes subtitles which will not sync. Best for non-English (JA/KO/ZH); English is fine with large-v3-turbo. Follows device choice. ~4.5GB GPU, slow.",
     "whisper-large-v2-sync-lite": "Runs the same file in int8, lighter. ~3GB VRAM for low-end GPUs, no extra download. Sync quality nearly identical."
   },
@@ -266,6 +267,7 @@
     "whisper-small": "Whisper · Small",
     "whisper-medium": "Whisper · Medium",
     "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v3": "Whisper · Large v3",
     "whisper-large-v2-sync": "Whisper · Large v2 Sync",
     "whisper-large-v2-sync-lite": "Whisper · Large v2 Sync Lite"
   },
