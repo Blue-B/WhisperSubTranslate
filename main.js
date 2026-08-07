@@ -1710,15 +1710,20 @@ function getFasterWhisperModelsDir() {
 
 function execFileAsync(file, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const proc = execFile(file, args, { ...options, timeout: options.timeout ?? 10 * 60 * 1000 }, (error, stdout, stderr) => {
-      if (error) {
-        error.stdout = stdout;
-        error.stderr = stderr;
-        reject(error);
-      } else {
-        resolve({ stdout, stderr });
+    const proc = execFile(
+      file,
+      args,
+      { ...options, timeout: options.timeout ?? 10 * 60 * 1000 },
+      (error, stdout, stderr) => {
+        if (error) {
+          error.stdout = stdout;
+          error.stderr = stderr;
+          reject(error);
+        } else {
+          resolve({ stdout, stderr });
+        }
       }
-    });
+    );
     // quit/forceCleanup 시 고아 프로세스가 되지 않게 PID를 등록/해제한다 (P1).
     if (proc?.pid) childProcessIds.add(proc.pid);
     proc.once('close', () => childProcessIds.delete(proc.pid));

@@ -3499,7 +3499,12 @@ function buildCustomSelect(selectEl) {
   function activeOptionIndex() {
     const items = Array.from(dropdown.querySelectorAll('.custom-select-option:not(.disabled)'));
     const current = items.findIndex((it) => it.classList.contains('kbd-active'));
-    return current >= 0 ? current : Math.max(0, items.findIndex((it) => it.classList.contains('selected')));
+    return current >= 0
+      ? current
+      : Math.max(
+          0,
+          items.findIndex((it) => it.classList.contains('selected'))
+        );
   }
 
   trigger.addEventListener('click', (e) => {
