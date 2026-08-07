@@ -3005,7 +3005,10 @@ ipcMain.handle('secure-clear-history', async (event) => {
         // (히스토리 파일이 남으면 재시작 시 기록이 부활하므로 정직하게 실패를 알린다)
         fs.unlinkSync(fp);
       }
-    } catch (_) {}
+    } catch (unlinkErr) {
+      // 위 내부 catch(_)와 달리 여기는 실제 unlink 실패(EACCES/EBUSY)만 잡아 전파한다.
+      return { success: false, error: `Failed to clear history file: ${unlinkErr.message}` };
+    }
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
