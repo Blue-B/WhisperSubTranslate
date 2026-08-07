@@ -1344,7 +1344,9 @@ function convertToWav(inputPath) {
       const safeTempDir = getSafeTempDir();
       wavPath = path.join(safeTempDir, `whisper_${Date.now()}.wav`);
       usingSafeTemp = true;
-      console.log(`[Audio] ${isWavInput ? 'WAV input detected, normalizing to' : 'Unicode path detected, using'} safe temp: ${wavPath}`);
+      console.log(
+        `[Audio] ${isWavInput ? 'WAV input detected, normalizing to' : 'Unicode path detected, using'} safe temp: ${wavPath}`
+      );
     }
 
     // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크).

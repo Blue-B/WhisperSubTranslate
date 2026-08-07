@@ -91,10 +91,7 @@ class MyMemoryTranslator {
                   .substring(0, 80)}`
               );
             }
-            if (
-              MYMEMORY_ERROR_PHRASES.includes(upper) ||
-              MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))
-            ) {
+            if (MYMEMORY_ERROR_PHRASES.includes(upper) || MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
               throw new Error(
                 `MyMemory returned an error message instead of a translation: ${translatedText.trim().substring(0, 80)}`
               );
