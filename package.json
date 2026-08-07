@@ -2,7 +2,7 @@
   "name": "whispersubtranslate",
   "version": "2.4.3",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   },
   "main": "main.js",
   "scripts": {
@@ -18,7 +18,12 @@
     "lint:check": "eslint *.js locales/*.js",
     "check": "npm run i18n:check && npm run lint:check && npm test",
     "check:full": "npm run lint:check && npm test && npm run test:e2e",
-    "format": "prettier --write \"*.js\" \"locales/*.js\" \"*.json\" \"*.html\" \"*.css\""
+    "format": "prettier --write \"*.js\" \"locales/*.json\" \"scripts/*.js\"",
+    "format:check": "prettier --check \"*.js\" \"locales/*.json\" \"scripts/*.js\"",
+    "test:e2e:allmodels": "node scripts/e2e-allmodels.js",
+    "test:e2e:interaction": "node scripts/e2e-interaction.js",
+    "test:e2e:logvisual": "node scripts/e2e-log-visual.js",
+    "test:e2e:pipeline": "node scripts/e2e-pipeline.js"
   },
   "keywords": [],
   "author": "GTPS Team",
@@ -78,7 +83,8 @@
       "extraResources": [
         {
           "from": "whisper-cpp",
-          "to": "whisper-cpp"
+          "to": "whisper-cpp",
+          "filter": ["**/*", "!install-failed.txt"]
         },
         {
           "from": "ffprobe.exe",

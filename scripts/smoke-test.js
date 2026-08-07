@@ -122,9 +122,7 @@ async function runModelDownloadAbort() {
       };
       requestCount++;
       if (requestCount === 1) {
-        queueMicrotask(() =>
-          cb({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} })
-        );
+        queueMicrotask(() => cb({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} }));
       } else {
         queueMicrotask(() => controller.abort(new Error('ABORTED: test download')));
       }
@@ -480,11 +478,7 @@ async function runParallelPathSourceLang() {
     return 'translated';
   };
   await translator.translateBatch(['a', 'b'], 'mymemory', 'ko', 'ja', null);
-  assert.strictEqual(
-    receivedSourceLang,
-    'ja',
-    'parallel batch path must forward _sourceLang to translateAuto'
-  );
+  assert.strictEqual(receivedSourceLang, 'ja', 'parallel batch path must forward _sourceLang to translateAuto');
   console.log('[ParallelPath] sourceLang forwarded in parallel batch (ok)');
 }
 

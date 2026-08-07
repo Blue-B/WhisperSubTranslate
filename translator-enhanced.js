@@ -622,10 +622,7 @@ class EnhancedSubtitleTranslator {
     // sourceLang/contextAware는 선택 플래그다: 소스 언어가 다른 요청끼리
     // 번역 결과가 교차하지 않고, 컨텍스트(문맥) 번역 결과가 일반 번역과
     // 섞이지 않게 한다. 기본값이 null/false라 기존 호출은 동일 키를 쓴다.
-    const flags = [
-      sourceLang && sourceLang !== 'auto' ? `sl:${sourceLang}` : '',
-      contextAware ? 'ctx:1' : '',
-    ]
+    const flags = [sourceLang && sourceLang !== 'auto' ? `sl:${sourceLang}` : '', contextAware ? 'ctx:1' : '']
       .filter(Boolean)
       .join('_');
     return `${filePrefix}${method}_${targetLang}_${text.length}_${flags ? flags + '_' : ''}${this.hashString(text)}`;

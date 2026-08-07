@@ -27,6 +27,12 @@ let playwright;
 try {
   playwright = require('playwright');
 } catch (_) {
+  // CI(E2E_REQUIRED=1)에서는 playwright 부재가 테스트 실패로 간주된다.
+  // 로컬에서 편하게 돌릴 때는 경고 후 skip(기본 동작 유지).
+  if (process.env.E2E_REQUIRED === '1') {
+    console.error('[e2e-smoke] playwright not installed — E2E_REQUIRED=1, failing.');
+    process.exit(1);
+  }
   console.log('[e2e-smoke] playwright not installed — skipping (run `npm i -D playwright`).');
   process.exit(0);
 }
@@ -53,7 +59,7 @@ async function run() {
   window.on('console', (msg) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
   });
-  window.on('pageerror', (err) => pageErrors.push(String(err && err.stack || err)));
+  window.on('pageerror', (err) => pageErrors.push(String((err && err.stack) || err)));
 
   await window.waitForLoadState('domcontentloaded', { timeout: BOOT_TIMEOUT_MS });
 
@@ -112,6 +118,6 @@ async function run() {
 }
 
 run().catch((err) => {
-  console.error('[e2e-smoke] FAILED:', err && err.stack || err);
+  console.error('[e2e-smoke] FAILED:', (err && err.stack) || err);
   process.exit(1);
 });

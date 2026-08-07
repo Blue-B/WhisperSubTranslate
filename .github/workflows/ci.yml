@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - name: Install dependencies (skip postinstall — needs CUDA/whisper.cpp)
         run: npm ci --ignore-scripts
@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - name: Install dependencies (skip postinstall)
         run: npm ci --ignore-scripts
@@ -43,9 +43,13 @@ jobs:
         run: npm run i18n:check
       - name: Run smoke test
         run: npm test
+      - name: Check Prettier formatting
+        run: npm run format:check
       - name: Install Electron display deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2
+          sudo apt-get install -y -qq xvfb libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libgtk-3-0 libxss1 libxtst6 libatspi2.0-0 libsecret-1-0 xdg-utils
       - name: Run E2E smoke test (headless)
         run: xvfb-run --auto-servernum npm run test:e2e
+        env:
+          E2E_REQUIRED: '1'
