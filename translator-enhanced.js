@@ -755,7 +755,9 @@ class EnhancedSubtitleTranslator {
           error.message.includes('429') ||
           error.message.includes('quota') ||
           error.message.toLowerCase().includes('too many requests') ||
-          error.message.includes('RESOURCE_EXHAUSTED')
+          error.message.includes('RESOURCE_EXHAUSTED') ||
+          // MyMemory 영구 오류(입력/설정 오류, 이메일을 바꿔도 성공 불가)도 즉시 전파
+          error.message.includes('permanent, not retried')
         ) {
           // 429 에러는 API 할당량 초과이므로 재시도 무의미
           break;
@@ -788,7 +790,7 @@ class EnhancedSubtitleTranslator {
       textLength: text.length,
     });
 
-    await this.throttleRequest();
+    await this.throttleRequest('deepl');
 
     try {
       if (!this.deeplTranslator) {
@@ -838,10 +840,10 @@ class EnhancedSubtitleTranslator {
   // 커스텀 공급자는 'custom:<id>' 형태로 들어온다.
   // 공급자 프로필: 프롬프트 설정이 바뀌면 캐시 키가 달라져 옛 결과가
   // 서빙되지 않게 한다 (P1: LLM 캐시에 프롬프트 지문 없음).
-  buildProviderCacheKey(method, model) {
+  buildProviderCacheKey(method, model, promptOverride = null, contextPromptOverride = null) {
     const keys = this.apiKeys || {};
-    const prompt = keys.translationPrompt || DEFAULT_SYSTEM_PROMPT;
-    const contextPrompt = keys.contextPrompt || DEFAULT_CONTEXT_SYSTEM_PROMPT;
+    const prompt = promptOverride || keys.translationPrompt || DEFAULT_SYSTEM_PROMPT;
+    const contextPrompt = contextPromptOverride || keys.contextPrompt || DEFAULT_CONTEXT_SYSTEM_PROMPT;
     const fp = this.hashString(`${prompt}|${contextPrompt}`);
     return `${method}:${model}:pf${fp}`;
   }
@@ -896,7 +898,9 @@ class EnhancedSubtitleTranslator {
       const custom = (keys.customProviders || []).find((provider) => provider.id === id);
       if (!custom) return null;
       return {
-        cacheKey: this.buildProviderCacheKey(method, custom.model),
+        // 커스텀 공급자는 전역 프롬프트 대신 custom.prompt를 사용하므로
+        // 프롬프트 지문에도 반영한다 (F5: 커스텀 프롬프트 변경 시 캐시 무효화).
+        cacheKey: this.buildProviderCacheKey(method, custom.model, custom.prompt, custom.contextPrompt),
         label: custom.name || id,
         format: custom.format || 'openai',
         baseUrl: normalizeBaseUrl(custom.baseUrl, ''),
@@ -1029,7 +1033,7 @@ class EnhancedSubtitleTranslator {
     }
 
     console.log(`[${provider.label}] "${text.substring(0, 40)}..." → ${targetLang}`);
-    await this.throttleRequest();
+    await this.throttleRequest('llm');
 
     const startTime = Date.now();
     const system = renderPrompt(provider.prompt || DEFAULT_SYSTEM_PROMPT, { targetLang });
@@ -1551,31 +1555,38 @@ ${lines}`;
             // 이미 파이프라인이 전 서비스를 다 돌았거나 재시도 후보가 없으면
             // 재시도 없이 원문 유지로 넘어간다.
             for (const fallbackMethod of retryCandidates) {
+              // 사용자가 중지한 뒤에는 유료 API를 다시 호출하지 않는다 (F4).
+              if (this._aborted) {
+                retryResult = texts[i];
+                break;
+              }
               try {
                 console.log(`[Retry] ${i + 1}/${texts.length}: ${fallbackMethod}...`);
                 await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 지연
+                if (this._aborted) {
+                  retryResult = texts[i];
+                  break;
+                }
                 if (fallbackMethod === 'mymemory') {
-                  retryResult = await this.translateWithRetry(
-                    (t) =>
-                      this.translateWithMyMemory(
-                        t,
-                        targetLang === 'KO' ? 'ko' : targetLang.toLowerCase(),
-                        _sourceLang || 'auto'
-                      ),
-                    texts[i]
-                  );
+                  retryResult = await this.translateWithRetry((t) => {
+                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                    return this.translateWithMyMemory(
+                      t,
+                      targetLang === 'KO' ? 'ko' : targetLang.toLowerCase(),
+                      _sourceLang || 'auto'
+                    );
+                  }, texts[i]);
                 } else {
                   const provider = this.resolveProvider('chatgpt');
-                  retryResult = await this.translateWithRetry(
-                    (t) =>
-                      this.translateWithLLM(
-                        t,
-                        this.mapToHumanLang ? this.mapToHumanLang(targetLang) : targetLang,
-                        provider,
-                        _sourceLang
-                      ),
-                    texts[i]
-                  );
+                  retryResult = await this.translateWithRetry((t) => {
+                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                    return this.translateWithLLM(
+                      t,
+                      this.mapToHumanLang ? this.mapToHumanLang(targetLang) : targetLang,
+                      provider,
+                      _sourceLang
+                    );
+                  }, texts[i]);
                 }
                 console.log(`[Retry Success] ${i + 1}/${texts.length}: ${retryResult.substring(0, 40)}...`);
                 break; // 성공하면 재시도 중단
@@ -1584,6 +1595,10 @@ ${lines}`;
                 // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
                 if (isQuotaError(retryError)) {
                   throw new Error('API_QUOTA_EXCEEDED: ' + String(retryError?.message || retryError));
+                }
+                if (String(retryError?.message || '').includes('ABORTED')) {
+                  retryResult = texts[i];
+                  break;
                 }
                 retryResult = texts[i]; // 마지막 실패 시 원문 유지
               }
@@ -1872,9 +1887,14 @@ ${lines}`;
     for (let k = 0; k < translatedTexts.length; k++) {
       const src = (textsToTranslate[k] || '').trim();
       const out = (translatedTexts[k] || '').trim();
-      // 고유명사만 있는 원문(단일 대문자 단어 포함: 'Christopher' 등)은 번역 후에도
-      // 그대로인 게 정상이라 echo로 세지 않는다 — 1줄짜리 짧은 SRT에서 오탐 방지.
-      const isProperNounOnly = localTranslator.hasProperNounOnlyPattern(src) || /^[A-Z][a-z]+$/.test(src);
+      // 고유명사만 있는 원문(약어/전체 대문자: OK·NASA·BEN, 숫자 혼합: R2D2·C3PO,
+      // 다단어 대문자 나열: John Smith Tokyo)은 번역 후에도 그대로인 게 정상이라
+      // echo로 세지 않는다. 반대로 'Hello'·'Sorry' 같은 일반 단어는 예외에 두지
+      // 않아 전체 echo 시 무성 실패로 잡힌다 (오탐/무음 통과 양면 수정).
+      const isProperNounOnly =
+        localTranslator.hasProperNounOnlyPattern(src) ||
+        /^[A-Z]{2,}$/.test(src) ||
+        /^[A-Z][A-Za-z'’.-]*\p{N}/u.test(src);
       if (isProperNounOnly) continue;
       if (src && localTranslator.isEffectivelySameText(out, src, 1)) unchanged++;
     }
