@@ -685,6 +685,9 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    // 정리 중 창이 닫힌 경우: quit 요청은 before-quit의 정리 시퀀스를 타게 하고,
+    // 정리 완료 전 종료가 일어나지 않도록 before-quit에서 preventDefault 후
+    // 재요청하는 구조를 그대로 따른다 (F2).
     app.quit();
   }
 });
@@ -898,7 +901,21 @@ async function splitAudioToSegments(wavPath, duration) {
 
         const proc = spawn(ffmpegPath, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
 
+        // 분할 ffmpeg도 추적 자식에 포함한다 — quit/stop 시 고아가 temp 세그먼트를
+        // 계속 쓰는 것을 막는다(F3).
+        if (proc?.pid) childProcessIds.add(proc.pid);
+        proc.once('close', () => childProcessIds.delete(proc.pid));
+        proc.once('error', () => childProcessIds.delete(proc.pid));
+
+        // 세그먼트 생성 타임아웃: 30분 분할은 보통 수 초~수십 초면 끝난다.
+        // 멈춘 ffmpeg가 분할을 영원히 붙들지 않게 300초로 제한한다(F3).
+        const splitTimeout = setTimeout(() => {
+          if (!proc.killed) proc.kill('SIGKILL');
+          rej(new Error(`Segment ${segmentIndex} split timeout`));
+        }, 300000);
+
         proc.on('close', (code) => {
+          clearTimeout(splitTimeout);
           if (code === 0 && fs.existsSync(segmentPath)) {
             res();
           } else {
@@ -906,7 +923,10 @@ async function splitAudioToSegments(wavPath, duration) {
           }
         });
 
-        proc.on('error', rej);
+        proc.on('error', (err) => {
+          clearTimeout(splitTimeout);
+          rej(err);
+        });
       });
 
       segments.push({
@@ -1031,6 +1051,12 @@ function cueTextSimilarity(a, b, allowPartialSubstring = false) {
 function mergeSrtFiles(srtContents, startTimes) {
   const allEntries = [];
 
+  // 세그먼트 경계 시각(ms): 다음 세그먼트 시작 = 이전 세그먼트 끝(오버랩 포함) 근처.
+  // 고유사도(≥0.98) 중복의 창 확대는 이 경계 인접 구간에만 적용한다 — 미드-세그먼트의
+  // 반복 발화('Okay.'/'Okay' 등 1.5~5초 간격)가 지워지지 않게 하려는 것이다(F1).
+  const boundaryMs = startTimes.slice(1).map((t) => t * 1000);
+  const nearSegmentBoundary = (ms) => boundaryMs.some((b) => Math.abs(ms - b) <= OVERLAP_DURATION * 1000);
+
   for (let i = 0; i < srtContents.length; i++) {
     const content = srtContents[i];
     const offsetSeconds = startTimes[i];
@@ -1055,10 +1081,12 @@ function mergeSrtFiles(srtContents, startTimes) {
       // 텍스트가 완전히 같거나 유사도가 매우 높은(≥0.98) 중복만 오버랩 창
       // (OVERLAP_DURATION=5초)까지 확대해 흡수한다. 경계에서 같은 자막이
       // 양쪽 세그먼트에 중복 인식되면 1.5초를 넘겨 떨어질 수 있기 때문(P1-4).
-      // 유사도가 낮은 건(반복 발화 "Thanks" vs "Thanks for watching")은
-      // 기존 1500ms 창을 유지해 실제 다른 대사를 보존한다.
+      // 단, 창 확대는 세그먼트 경계 인접 구간에만 적용한다. 유사도가 낮은 건
+      // (반복 발화 "Thanks" vs "Thanks for watching")은 기존 1500ms 창을 유지해
+      // 실제 다른 대사를 보존한다.
       const sim = cueTextSimilarity(a, b);
-      const windowMs = sim >= 0.98 ? OVERLAP_DURATION * 1000 : 1500;
+      const atBoundary = nearSegmentBoundary(existing.startMs) || nearSegmentBoundary(entry.startMs);
+      const windowMs = atBoundary && sim >= 0.98 ? OVERLAP_DURATION * 1000 : 1500;
       if (Math.abs(existing.startMs - entry.startMs) >= windowMs) return false;
       // 1ms짜리 초단시간 큐가 오버랩 창 안에 겹치면 중복으로 흡수 (머지 경계 잔재 제거)
       const durMs = entry.endMs ? entry.endMs - entry.startMs : 0;
@@ -3141,6 +3169,10 @@ ipcMain.handle('stop-current-process', async () => {
     console.log('Process stopped by user.');
   }
 
+  // 파일 전환 중/분할 ffmpeg 실행 중 stop이면 currentProcess뿐 아니라 추적된
+  // 자식(분할 ffmpeg 등)도 함께 종료한다 (F5).
+  killTrackedChildProcesses();
+
   // 번역 중이면 translator에도 중지 시그널 전달
   if (translator && typeof translator.abort === 'function') {
     try {
@@ -3493,8 +3525,16 @@ ipcMain.handle('local-translate', async (_event, { text, targetLang, modelId }) 
 let _isCleaningUp = false;
 let _quitRequested = false; // preventDefault 후 재호출된 quit을 정리 완료와 구분
 app.on('before-quit', (event) => {
-  // 정리 중 두 번째 quit 요청(또는 정리 완료 후 재호출)은 그대로 통과시킨다.
-  if (_isCleaningUp || _quitRequested) return;
+  // 정리 완료 후 재호출된 quit(또는 두 번째 종료 요청이 이미 정리 시퀀스 안이면)은 통과시킨다.
+  if (_quitRequested || _isCleaningUp) {
+    // 단, 아직 정리 중(_isCleaningUp && !_quitRequested)인데 창 닫기 경로에서
+    // quit이 재도착하면 preventDefault 해서 정리 완료까지 앱이 죽지 않게 한다.
+    if (_isCleaningUp && !_quitRequested) {
+      event.preventDefault();
+      console.log('[Cleanup] Quit requested during cleanup, deferring until cleanup finishes');
+    }
+    return;
+  }
   event.preventDefault();
   _isCleaningUp = true;
   console.log('[Cleanup] App closing, cleaning up...');
