@@ -291,6 +291,8 @@
   "customProviderNameLabel": "이름",
   "customProviderFormatLabel": "API 형식",
   "customProviderModelLabel": "모델",
+  "customProviderBaseUrlLabel": "기본 URL",
+  "customProviderApiKeyLabel": "API 키",
   "customProviderPromptLabel": "프롬프트 (선택)",
   "modelRefreshTitle": "모델 목록 불러오기",
   "modelsLoadedSuffix": "개 모델을 불러왔습니다.",

@@ -291,6 +291,8 @@
   "customProviderNameLabel": "Nazwa",
   "customProviderFormatLabel": "Format API",
   "customProviderModelLabel": "Model",
+  "customProviderBaseUrlLabel": "URL bazowy",
+  "customProviderApiKeyLabel": "Klucz API",
   "customProviderPromptLabel": "Prompt (opcjonalnie)",
   "modelRefreshTitle": "Wczytaj listę modeli",
   "modelsLoadedSuffix": " modeli wczytano.",

@@ -291,6 +291,8 @@
   "customProviderNameLabel": "名称",
   "customProviderFormatLabel": "API 格式",
   "customProviderModelLabel": "模型",
+  "customProviderBaseUrlLabel": "基础 URL",
+  "customProviderApiKeyLabel": "API 密钥",
   "customProviderPromptLabel": "提示词（可选）",
   "modelRefreshTitle": "加载模型列表",
   "modelsLoadedSuffix": " 个模型已加载。",
