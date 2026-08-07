@@ -391,6 +391,12 @@ function handleDrop(e) {
     console.log('[DragDrop] Drop cancelled - same position or invalid index');
     return;
   }
+  // 처리 중에는 재정렬 금지: currentProcessingIndex가 어긋나 미처리 파일이
+  // completed로 마킹되거나 누락될 수 있다. (드래그 시작 후 처리 시작된 경우 방어)
+  if (isProcessing) {
+    console.log('[DragDrop] Drop cancelled - processing in progress');
+    return;
+  }
 
   // 마우스 위치에 따라 삽입 위치 결정
   const rect = this.getBoundingClientRect();
@@ -764,6 +770,13 @@ function clearQueue() {
     addOutput(`${I18N[currentUiLang].queueCleared}\n`);
   } else {
     // when busy: remove only pending items (처리 중엔 대기 항목만 삭제)
+    // clearCompletedFromQueue의 removedBefore 패턴 재사용: 제거된 항목이 현재
+    // 처리 인덱스보다 앞이면 차감하지 않으면 translating이 영구 스턱한다.
+    let removedBefore = 0;
+    fileQueue.forEach((file, idx) => {
+      if (file.status === 'pending' && idx < currentProcessingIndex) removedBefore++;
+    });
+    currentProcessingIndex -= removedBefore;
     const pendingFiles = fileQueue.filter((file) => file.status === 'pending');
     fileQueue = fileQueue.filter((file) => file.status !== 'pending');
 
@@ -819,9 +832,13 @@ function stopProcessing() {
     window.electronAPI.stopCurrentProcess();
 
     // revert processing item back to stopped
+    // 2초 finalize 창에 이미 completed로 마킹된 파일은 revert하지 않는다 (MED-11)
     if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
-      fileQueue[currentProcessingIndex].status = 'stopped';
-      fileQueue[currentProcessingIndex].progress = 0;
+      const _curFile = fileQueue[currentProcessingIndex];
+      if (_curFile.status !== 'completed') {
+        _curFile.status = 'stopped';
+        _curFile.progress = 0;
+      }
     }
 
     currentProcessingIndex = -1;
@@ -925,6 +942,7 @@ async function continueProcessing() {
     const completedCount = fileQueue.filter((f) => f.status === 'completed').length;
     const errorCount = fileQueue.filter((f) => f.status === 'error').length;
     const stoppedCount = fileQueue.filter((f) => f.status === 'stopped').length;
+    const skippedCount = fileQueue.filter((f) => f.status === 'skipped').length;
 
     {
       const d = I18N[currentUiLang];
@@ -933,6 +951,9 @@ async function continueProcessing() {
       } else if (errorCount > 0 && completedCount === 0) {
         setProgressTarget(100, getAllFailedMsg());
         showToast(getAllFailedMsg());
+      } else if (skippedCount > 0 && completedCount === 0) {
+        // 전부 skip: '완료' 토스트는 오해를 부르므로 생략 (출력 로그에 skip 사유가 이미 남음)
+        setProgressTarget(100, d.allDoneNoTr || 'All files completed!');
       } else if (errorCount > 0) {
         setProgressTarget(100, d.allDoneWithErrors || `Done with ${errorCount} error(s)`);
         showToast(d.allDoneWithErrors || `Done with ${errorCount} error(s)`, {
@@ -1291,7 +1312,11 @@ async function continueProcessing() {
                 `${I18N[currentUiLang].translationFailed}${translationResult.failedLangs.join(', ')} (${translationResult.outputPaths?.length ?? 0}/${translationResult.failedLangs.length + (translationResult.outputPaths?.length ?? 0)} languages succeeded)\n`
               );
             }
-            addOutput(`${I18N[currentUiLang].translationDone(fileName, targetLangs.join(', '))}\n`);
+            // 성공한 언어만 완료 문구에 포함 (실패 언어가 '번역 완료'에 끼지 않게)
+            const okLangs = targetLangs.filter((l) => !(translationResult.failedLangs || []).includes(l));
+            if (okLangs.length > 0) {
+              addOutput(`${I18N[currentUiLang].translationDone(fileName, okLangs.join(', '))}\n`);
+            }
             // 히스토리 조기 저장 (completed 이벤트 눌지거나 누락되는 경우 대비 안전망)
             file.status = 'completed';
             file.progress = 100;
@@ -1416,10 +1441,13 @@ async function continueProcessing() {
     shouldStop = false;
     currentProcessingIndex = -1;
     updateQueueDisplay();
+    // 번역 select 재활성화 (완료 경로와 동일하게 — 안 하면 영구 비활성)
+    if (typeof updateUIMode === 'function') updateUIMode();
 
     const completedCount = fileQueue.filter((f) => f.status === 'completed').length;
     const errorCount = fileQueue.filter((f) => f.status === 'error').length;
     const stoppedCount = fileQueue.filter((f) => f.status === 'stopped').length;
+    const skippedCount = fileQueue.filter((f) => f.status === 'skipped').length;
 
     {
       const d = I18N[currentUiLang];
@@ -1428,6 +1456,9 @@ async function continueProcessing() {
       } else if (errorCount > 0 && completedCount === 0) {
         setProgressTarget(100, getAllFailedMsg());
         showToast(getAllFailedMsg());
+      } else if (skippedCount > 0 && completedCount === 0) {
+        // 전부 skip: '완료' 토스트는 오해를 부르므로 생략 (출력 로그에 skip 사유가 이미 남음)
+        setProgressTarget(100, d.allDoneNoTr || 'All files completed!');
       } else if (errorCount > 0) {
         setProgressTarget(100, d.allDoneWithErrors || `Done with ${errorCount} error(s)`);
         showToast(d.allDoneWithErrors || `Done with ${errorCount} error(s)`, {
@@ -1588,6 +1619,8 @@ document.addEventListener('DOMContentLoaded', () => {
       f.autoRetryCount = 0;
     });
     updateQueueDisplay();
+    // 시작 즉시 번역 select 비활성 (완료/중지 경로의 updateUIMode와 짝을 이룬다)
+    if (typeof updateUIMode === 'function') updateUIMode();
 
     const model = document.getElementById('modelSelect').value;
     const language = document.getElementById('languageSelect').value;
@@ -2649,8 +2682,9 @@ function updateQueueDisplayImmediate() {
         const btnRemove = d.btnRemove;
         const processingBadge = `<span style="color: #ffc107; font-size: 12px; font-weight: 600;">${d.qProcessing}</span>`;
 
-        // 처리 중이 아닌 경우에만 드래그 가능
-        const isDraggable = file.status !== 'processing' && file.status !== 'translating';
+        // 처리 중이 아닌 경우에만 드래그 가능 (처리 중에는 pending 항목도 잠금:
+        // 재정렬 시 currentProcessingIndex가 어긋나 미처리 파일이 누락된다)
+        const isDraggable = !isProcessing && file.status !== 'processing' && file.status !== 'translating';
         const dragAttr = isDraggable ? `draggable="true" data-index="${index}"` : '';
 
         // Safe HTML generation: all user data in data-* attrs only, no inline JS
@@ -3475,7 +3509,10 @@ function buildCustomSelect(selectEl) {
     // 다른 오버레이(언어 다중 선택 패널)가 떠 있으면 함께 떠 있지 않게 닫는다.
     if (typeof closeLangPanel === 'function' && isLangPanelOpen()) closeLangPanel();
     document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
-      if (w !== wrapper) w.classList.remove('open');
+      if (w !== wrapper) {
+        if (typeof w.close === 'function') w.close();
+        else w.classList.remove('open');
+      }
     });
     refreshOptions();
     // Show first so scrollHeight is accurate
@@ -3509,6 +3546,8 @@ function buildCustomSelect(selectEl) {
     wrapper.classList.remove('open');
     trigger.setAttribute('aria-expanded', 'false');
   }
+  // 외부에서 닫을 때(openLangPanel/글로벌 mousedown) aria-expanded까지 동기화되도록 노출
+  wrapper.close = close;
 
   // 키보드 탐색: 현재 강조/선택된 옵션 인덱스를 트래킹해 ArrowUp/Down으로 이동하고
   // Enter로 확정한다. dropdown의 옵션은 refreshOptions()에서 재생성되므로 그때 읽는다.
@@ -3601,7 +3640,8 @@ function buildCustomSelect(selectEl) {
         document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
           const area = w.closest('#localModelGroup, .setting-card');
           if (!w.contains(e.target) && !(area && area.contains(e.target))) {
-            w.classList.remove('open');
+            if (typeof w.close === 'function') w.close();
+            else w.classList.remove('open');
           }
         });
       },
@@ -3821,6 +3861,9 @@ function initSettingsModal() {
       try {
         await window.electronAPI?.secureClearHistory?.();
       } catch (_e) {}
+      // 캐시도 함께 비운다 (안 비우면 목록 잔존 + 다음 저장 시 복원됨)
+      _historyCache = [];
+      _historyLoadedOnce = true;
       renderHistory();
     });
   }
