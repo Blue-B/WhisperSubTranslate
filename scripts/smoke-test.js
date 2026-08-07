@@ -376,6 +376,49 @@ async function runSerial429Propagation() {
   console.log('[Serial429] serial batch propagates API_QUOTA_EXCEEDED (ok)');
 }
 
+async function runSerialRetry429Propagation() {
+  // F3-1: 직렬 retry 루프 안에서 폴백 서비스가 429를 던지면 재시도를 포기하고
+  // API_QUOTA_EXCEEDED로 전파해야 한다 (원문 유지로 삼키지 않는다).
+  // 첫 시도는 할당량과 무관한 오류로 실패 → retry 1회차(폴백)에서 429 발생.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys.batchTranslation = false; // 직렬 경로 강제
+  let calls = 0;
+  translator.translateAuto = async (text, method) => {
+    calls++;
+    if (calls === 1) throw new Error('ECONNRESET network blip'); // 일시 장애
+    throw new Error('Too many requests'); // retry(폴백)에서 429
+  };
+  await assert.rejects(
+    () => translator.translateBatch(['a', 'b', 'c'], 'mymemory', 'ko', null),
+    /API_QUOTA_EXCEEDED/,
+    'serial retry loop must propagate 429'
+  );
+  console.log('[SerialRetry429] serial retry loop propagates API_QUOTA_EXCEEDED (ok)');
+}
+
+async function runSrtFileNoOutputOn429() {
+  // F3-2: translateSRTFile이 429로 실패하면 출력 SRT 파일을 생성하면 안 된다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.translateSRTContent = async () => {
+    throw new Error('API_QUOTA_EXCEEDED: Too many requests');
+  };
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-srt429-'));
+  const inputPath = path.join(tmpDir, 'in.srt');
+  const outputPath = path.join(tmpDir, 'out_ko.srt');
+  fs.writeFileSync(inputPath, '1\n00:00:01,000 --> 00:00:02,000\nHello\n');
+  try {
+    await assert.rejects(
+      () => translator.translateSRTFile(inputPath, outputPath, 'mymemory', 'ko', null, 'en'),
+      /API_QUOTA_EXCEEDED/,
+      'translateSRTFile must rethrow 429'
+    );
+    assert.strictEqual(fs.existsSync(outputPath), false, 'no output file on quota failure');
+    console.log('[SrtNoOutput] 429 leaves no partial output file (ok)');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -422,6 +465,8 @@ async function run() {
   await runThrottleSerialization();
   runCacheKeyConsistency();
   await runSerial429Propagation();
+  await runSerialRetry429Propagation();
+  await runSrtFileNoOutputOn429();
 
   console.log('Smoke tests passed.');
 }
