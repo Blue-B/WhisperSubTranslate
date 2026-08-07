@@ -33,7 +33,7 @@ npm install
 npm start
 ```
 
-- Node.js >= 20.19 or >= 22.12 (Electron 43 toolchain)
+- Node.js >= 22.12.0 (see `engines` in package.json; Electron 43 toolchain)
 - whisper.cpp is downloaded during `npm install` (CUDA build on Windows, ~700MB)
 - FFmpeg is included via npm; the selected GGML model downloads on first use
 
@@ -46,6 +46,8 @@ npm start
 ```
 
 For CUDA acceleration, install the NVIDIA CUDA Toolkit before `npm install`. Manual whisper.cpp build steps are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+- **Linux keyring**: API keys are stored via Electron safeStorage (libsecret). Without a keyring daemon (headless SSH session, minimal desktop/WM), saving falls back to legacy AES with a hardcoded key: the app logs an explicit security warning and marks the save as `insecure`. That storage is **not secure** - install `gnome-keyring` (or run in a desktop session with a keyring) to enable secure storage.
 
 ### Build (Windows)
 
