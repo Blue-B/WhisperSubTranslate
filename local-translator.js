@@ -41,6 +41,9 @@ const MODELS = {
 };
 const DEFAULT_MODEL_ID = '1.8b';
 const LOCAL_OPERATION_TIMEOUT_MS = 3 * 60 * 1000;
+// 7B Q6(6.16GB) 모델 로드는 느린 디스크/첫 실행에서 수 분이 걸릴 수 있어
+// 추론(3분)과 분리된 별도 타임아웃을 둔다.
+const LOCAL_LOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
 function getModelUrl(modelId) {
   const m = MODELS[modelId];
@@ -109,10 +112,27 @@ function normalizeComparableText(text) {
     .replace(/[\p{P}\p{S}\s]+/gu, '');
 }
 
-function isEffectivelySameText(output, source, minLength = 8) {
+// 고유명사/라벨+숫자 패턴만 있는 원문은 번역 대상으로 보지 않는다.
+// ('Episode 7', 'John Smith Tokyo', 'Chapter 2' 등은 번역 후에도 동일하게
+// 남는 게 정상이라 echo로 오탐하면 매번 클라우드 폴백이 발생한다.)
+function hasProperNounOnlyPattern(srcRaw) {
+  const t = String(srcRaw || '').trim();
+  if (!t) return false;
+  // 라벨 + 숫자: "Episode 7", "Chapter 3", "Part 2", "Season 1: ..."
+  if (/^(episode|chapter|part|act|scene|season|vol\.?|no\.?|number|title|track)\b[\s\d:.-]*$/i.test(t)) return true;
+  // 대문자 시작 단어만 연속으로 나열된 고유명사: "John Smith Tokyo", "New York"
+  const words = t.split(/[\s,-]+/).filter(Boolean);
+  return words.length >= 2 && words.every((w) => /^[A-Z][a-zA-Z'’-]*$/.test(w));
+}
+
+function isEffectivelySameText(output, source, minLength = 3) {
   const src = normalizeComparableText(source);
   const out = normalizeComparableText(output);
   if (src.length < minLength) return false;
+  // 숫자/기호만 있는 원문(예: "123", "!!!")은 번역 대상이 아니므로 echo로 보지 않는다.
+  if (!/[\p{L}]/u.test(src)) return false;
+  // 고유명사/라벨+숫자만 있는 원문은 번역 후에도 그대로인 게 정상이다.
+  if (hasProperNounOnlyPattern(source)) return false;
   if (out === src) return true;
 
   // "Original: <source>"처럼 짧은 라벨만 붙인 echo도 번역으로 인정하지 않는다.
@@ -149,8 +169,36 @@ let _currentModelId = null; // '1.8b' | '7b'
 let _downloadPromises = {}; // modelId → Promise
 let _loadPromise = null;
 let _translateMutex = Promise.resolve();
-let _activeAbortController = null;
+const _activeAbortControllers = new Set();
 let _onDownloadProgress = null;
+// in-flight 다운로드의 진행률 구독자 (동일 모델에 두 번째 호출자가 붙어도
+// 체인을 무한 누적하지 않고 Set으로 관리해 완료 시 정리한다 — MED 8).
+const _downloadSubscribers = new Map(); // modelId → Set<fn>
+
+// 모델 다운로드 전 디스크 여유 공간 확인 (MED 4).
+function assertDiskSpaceFor(modelId) {
+  const m = MODELS[modelId];
+  if (!m) return;
+  try {
+    const dir = getModelsDir();
+    if (!fs.existsSync(dir)) return;
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const freeBytes = bavail * bsize;
+    if (freeBytes < m.sizeBytes) {
+      throw new Error(
+        `Not enough disk space: need ${(m.sizeBytes / 1024 / 1024 / 1024).toFixed(2)} GB, free ${(
+          freeBytes /
+          1024 /
+          1024 /
+          1024
+        ).toFixed(2)} GB`
+      );
+    }
+  } catch (error) {
+    if (error?.message?.startsWith('Not enough disk space')) throw error;
+    // statfsSync 실패(예: 네트워크 드라이브)는 무시하고 다운로드 진행
+  }
+}
 
 async function withTimeout(run, timeoutMs = LOCAL_OPERATION_TIMEOUT_MS, parentSignal = null) {
   const controller = new AbortController();
@@ -174,8 +222,11 @@ async function withTimeout(run, timeoutMs = LOCAL_OPERATION_TIMEOUT_MS, parentSi
 }
 
 function abortTranslation() {
-  if (_activeAbortController && !_activeAbortController.signal.aborted) {
-    _activeAbortController.abort(new Error('ABORTED: Translation stopped by user'));
+  // 여러 호출이 큐에 쌓여 있어도 각자 컨트롤러를 갖고 있으므로 전부 중단한다.
+  for (const controller of _activeAbortControllers) {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error('ABORTED: Translation stopped by user'));
+    }
   }
 }
 
@@ -302,25 +353,20 @@ async function downloadModel(onProgress, signal, modelId = DEFAULT_MODEL_ID) {
   // 동일 모델에 대한 in-flight 다운로드는 공유
   if (_downloadPromises[modelId]) {
     if (onProgress) {
-      const prev = _onDownloadProgress;
-      _onDownloadProgress = (p) => {
-        try {
-          onProgress(p);
-        } catch (_e) {
-          /* ignore */
-        }
-        if (prev)
-          try {
-            prev(p);
-          } catch (_e) {
-            /* ignore */
-          }
+      if (!_downloadSubscribers.has(modelId)) _downloadSubscribers.set(modelId, new Set());
+      _downloadSubscribers.get(modelId).add(onProgress);
+      const cleanup = () => {
+        _downloadSubscribers.get(modelId)?.delete(onProgress);
+        if (!_downloadSubscribers.get(modelId)?.size) _downloadSubscribers.delete(modelId);
       };
+      _downloadPromises[modelId].then(cleanup, cleanup);
     }
     return await waitForDownload(_downloadPromises[modelId], signal);
   }
-  _downloadPromises[modelId] = _downloadModelImpl(onProgress, signal, modelId).finally(() => {
+  assertDiskSpaceFor(modelId);
+  _downloadPromises[modelId] = _downloadModelImpl(signal, modelId).finally(() => {
     delete _downloadPromises[modelId];
+    _downloadSubscribers.delete(modelId);
   });
   return await waitForDownload(_downloadPromises[modelId], signal);
 }
@@ -335,13 +381,30 @@ function waitForDownload(promise, signal) {
   });
 }
 
-async function _downloadModelImpl(onProgress, signal, modelId) {
+async function _downloadModelImpl(signal, modelId) {
   const m = MODELS[modelId];
   if (!m) throw new Error(`Unknown model id: ${modelId}`);
   const dir = getModelsDir();
   fs.mkdirSync(dir, { recursive: true });
   const dest = getModelPath(modelId);
   const tmp = dest + '.tmp';
+
+  // 진행률 구독자 일괄 호출 (첫 호출자 + 추가 대기자).
+  const emitProgress = (p) => {
+    for (const sub of _downloadSubscribers.get(modelId) || []) {
+      try {
+        sub(p);
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    if (_onDownloadProgress)
+      try {
+        _onDownloadProgress(p);
+      } catch (_e) {
+        /* ignore */
+      }
+  };
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -355,7 +418,7 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
       reject(error);
     };
 
-    const doRequest = (url, redirects = 0) => {
+    const doRequest = (url, redirects = 0, resumeOffset = 0) => {
       if (settled) return;
       if (signal?.aborted) return fail(abortError());
       if (redirects > 5) return fail(new Error('Too many redirects'));
@@ -369,21 +432,33 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
         fail(abortError());
       };
 
-      req = https.get(url, (res) => {
+      const headers = {};
+      if (resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
+      req = https.get(url, { headers }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
           detachAbort();
           res.resume();
-          return doRequest(res.headers.location, redirects + 1);
+          return doRequest(res.headers.location, redirects + 1, resumeOffset);
         }
-        if (res.statusCode !== 200) {
+        // resume 지원 서버는 206, 미지원/서버가 재시작한 경우 200으로 온다.
+        const isPartial = res.statusCode === 206;
+        if (res.statusCode !== 200 && !isPartial) {
           detachAbort();
           res.resume();
           return fail(new Error(`HTTP ${res.statusCode}`));
         }
+        if (resumeOffset > 0 && !isPartial) {
+          // 서버가 Range를 무시했다 → 처음부터 다시 받는다 (기존 tmp 폐기).
+          try {
+            fs.unlinkSync(tmp);
+          } catch {}
+          resumeOffset = 0;
+        }
 
-        const total = parseInt(res.headers['content-length'] || m.sizeBytes, 10);
-        let downloaded = 0;
-        out = fs.createWriteStream(tmp);
+        const total = parseInt(res.headers['content-length'] || m.sizeBytes, 10) + (isPartial ? resumeOffset : 0);
+        let downloaded = resumeOffset;
+        const writeFlags = isPartial || resumeOffset > 0 ? 'a' : 'w';
+        out = fs.createWriteStream(tmp, { flags: writeFlags });
         out.on('error', (error) => {
           detachAbort();
           res.destroy();
@@ -397,13 +472,7 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
             out.once('drain', () => res.resume());
           }
           const p = { modelId, percent: Math.round((downloaded / total) * 100), downloaded, total };
-          if (onProgress) onProgress(p);
-          if (_onDownloadProgress)
-            try {
-              _onDownloadProgress(p);
-            } catch (_e) {
-              /* ignore */
-            }
+          emitProgress(p);
         });
 
         res.on('end', () => {
@@ -411,6 +480,12 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
           out.end(() => {
             if (settled) return;
             try {
+              // 잘린 다운로드 방지: content-length가 주어졌고 받은 양이 다르면 실패 (MED 4).
+              if (res.headers['content-length'] && downloaded !== total) {
+                return fail(
+                  new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`)
+                );
+              }
               fs.renameSync(tmp, dest);
               settled = true;
               resolve(dest);
@@ -434,7 +509,14 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
       });
     };
 
-    doRequest(getModelUrl(modelId));
+    // 이미 받다 만 tmp가 있으면 이어받기 시도 (MED 5).
+    let resumeOffset = 0;
+    try {
+      resumeOffset = fs.statSync(tmp).size;
+    } catch {
+      resumeOffset = 0;
+    }
+    doRequest(getModelUrl(modelId), 0, resumeOffset);
   });
 }
 
@@ -457,17 +539,40 @@ async function loadModelUnlocked(device = 'auto', modelId = DEFAULT_MODEL_ID, si
     // translateLocal이 잡은 mutex 안에서 다시 unloadModel의 mutex를 기다리면 교착된다.
     if (_model || _llama) await disposeModel();
     const { getLlama } = await import('node-llama-cpp');
-    _llama = await getLlama({ gpu: desiredMode === 'cpu' ? false : 'auto' });
-    _model = await _llama.loadModel({ modelPath: getModelPath(modelId), loadSignal: signal });
-    _currentGpuMode = desiredMode;
+    let mode = desiredMode;
+    try {
+      _llama = await getLlama({ gpu: mode === 'cpu' ? false : 'auto' });
+      _model = await _llama.loadModel({ modelPath: getModelPath(modelId), loadSignal: signal });
+    } catch (error) {
+      // GPU 자동 모드에서 CUDA/VRAM 계열 실패면 같은 모델을 CPU로 1회 재시도한다.
+      // (구형 카드/드라이버/VRAM 부족은 GPU 로드만 실패하고 CPU는 동작한다)
+      if (mode !== 'auto' || !isGpuRelatedError(error)) {
+        // 로드 실패로 파편으로 남은 _llama/_model을 정리한다 (MED 6).
+        await disposeModel();
+        throw error;
+      }
+      console.warn(`[Local] GPU 로드 실패 → CPU로 폴백: ${error.message}`);
+      await disposeModel();
+      mode = 'cpu';
+      _llama = await getLlama({ gpu: false });
+      _model = await _llama.loadModel({ modelPath: getModelPath(modelId), loadSignal: signal });
+    }
+    _currentGpuMode = mode;
     _currentModelId = modelId;
     console.log(
-      `[Local] 모델 로드 완료 (id=${modelId}, device=${desiredMode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`
+      `[Local] 모델 로드 완료 (id=${modelId}, device=${mode}, gpuLayers=${_model?.gpuLayers ?? 'n/a'})`
     );
   })().finally(() => {
     _loadPromise = null;
   });
   return _loadPromise;
+}
+
+// GPU 로드 실패와 관련된 오류 메시지 판정 (VRAM 부족/드라이버/CUDA 등).
+// CPU 폴백은 이 계열 실패에만 적용해 다른 원인(파일 손상 등)을 숨기지 않는다.
+function isGpuRelatedError(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return /cuda|cublas|vram|out of memory|out-of-memory|oom|gpu|nvidia|illegal memory|driver/i.test(msg);
 }
 
 async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = null) {
@@ -489,7 +594,7 @@ async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = n
 async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAULT_MODEL_ID) {
   // 락 대기 중에도 사용자 중지가 통하도록 컨트롤러를 먼저 등록한다.
   const controller = new AbortController();
-  _activeAbortController = controller;
+  _activeAbortControllers.add(controller);
   try {
     const release = await acquireTranslateLock(controller.signal);
     try {
@@ -498,7 +603,7 @@ async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAU
       release();
     }
   } finally {
-    if (_activeAbortController === controller) _activeAbortController = null;
+    _activeAbortControllers.delete(controller);
   }
 }
 
@@ -525,7 +630,7 @@ async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
           _context = await _model.createContext({ contextSize: 2048, createSignal: operationSignal });
         }
       },
-      LOCAL_OPERATION_TIMEOUT_MS,
+      LOCAL_LOAD_TIMEOUT_MS,
       signal
     );
     const { LlamaChatSession } = await import('node-llama-cpp');
