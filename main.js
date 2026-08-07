@@ -1,4 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { pathToFileURL } = require('url');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
 try {
   app.setName('WhisperSubTranslate');
@@ -6,14 +9,35 @@ try {
 try {
   app.setAppUserModelId('com.whispersubtranslate.app');
 } catch (_) {}
+
+// ===== Portable data layout (포터블 데이터 레이아웃) =====
+// WHISPER_PORTABLE_DATA 환경변수, 또는 실행 파일(또는 소스 루트) 옆의
+// portable-data/ 디렉토리가 있으면 모델·캐시·설정(%APPDATA%)을 그 경로로
+// 리다이렉트한다. 시스템 SSD가 작거나 USB/외장 드라이브로 실행할 때 유용.
+// app ready 이전에 setPath 해야 하므로 모듈 최상단에서 처리한다.
+function resolvePortableUserData() {
+  if (process.env.WHISPER_PORTABLE_DATA) return process.env.WHISPER_PORTABLE_DATA;
+  const exeDir = app.isPackaged ? path.dirname(process.execPath) : __dirname;
+  const marker = path.join(exeDir, 'portable-data');
+  return fs.existsSync(marker) ? marker : null;
+}
+try {
+  const portableDir = resolvePortableUserData();
+  if (portableDir) {
+    fs.mkdirSync(portableDir, { recursive: true });
+    app.setPath('userData', portableDir);
+    console.log('[Portable] userData redirected to:', portableDir);
+  }
+} catch (e) {
+  console.warn('[Portable] Failed to redirect userData:', e.message);
+}
+
 let autoUpdater = null;
 try {
   ({ autoUpdater } = require('electron-updater'));
 } catch (error) {
   console.log('[Auto-Updater] electron-updater not available:', error.message);
 }
-const path = require('path');
-const fs = require('fs');
 const { spawn, execFile, execSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
@@ -385,7 +409,23 @@ async function checkForUpdates() {
     const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { timeout: 10000 });
 
     const latestVersion = response.data.tag_name.replace(/^v/, '');
-    const releaseUrl = response.data.html_url;
+
+    // releaseUrl은 GitHub 릴리스 페이지 형태만 허용 (쿼리/해시 제거 후 검증).
+    let releaseUrl = response.data.html_url;
+    if (typeof releaseUrl === 'string') {
+      try {
+        const parsed = new URL(releaseUrl);
+        parsed.search = '';
+        parsed.hash = '';
+        releaseUrl = parsed.href;
+      } catch (_err) {
+        /* keep raw */
+      }
+    }
+    if (typeof releaseUrl !== 'string' || !isAllowedOpenExternalUrl(releaseUrl)) {
+      console.warn('[Update Check] Rejecting invalid release URL:', releaseUrl);
+      return { hasUpdate: false, error: 'Invalid release URL' };
+    }
     const releaseName = response.data.name || `v${latestVersion}`;
 
     // 버전 비교 (semver 간단 비교)
@@ -458,10 +498,14 @@ function createWindow() {
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob:",
       "media-src 'self' data: blob:",
-      "connect-src 'self' https://api.openai.com https://generativelanguage.googleapis.com https://api-free.deepl.com https://api.deepl.com https://api.mymemory.translated.net https://api.github.com https://huggingface.co",
+      // renderer는 모든 네트워크 호출을 main IPC로 우회하므로(직접 fetch/axios 없음)
+      // connect-src는 'self'로만 충분하다. 서드파티 API 호스트는 추가하지 않는다.
+      "connect-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
+      "form-action 'none'",
+      "worker-src 'none'",
     ].join('; ');
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       const responseHeaders = { ...details.responseHeaders };
@@ -503,8 +547,12 @@ function createWindow() {
     }
     return { action: 'deny' };
   });
+  // 앱 자체 index.html 이외의 file:// 네비게이션은 차단한다 (렌더러가 임의 로컬
+  // 파일을 열어 파일 내용을 노출하는 경로 방지). https 외부 URL은 allow-list로만.
+  const APP_INDEX_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) {
+    const isOwnFile = url.startsWith('file://') && url === APP_INDEX_URL;
+    if (!isOwnFile) {
       event.preventDefault();
       if (isAllowedExternalUrl(url)) {
         windowShell.openExternal(url);
@@ -687,10 +735,12 @@ function getSafeTempDir() {
 
   // ASCII 문자만 있는지 체크 (유니코드 없으면 안전)
   if (/^[\x00-\x7F]*$/.test(appTemp)) {
-    if (!fs.existsSync(appTemp)) {
+    try {
       fs.mkdirSync(appTemp, { recursive: true });
+      return appTemp;
+    } catch (e) {
+      console.warn('[Temp] Failed to create app temp dir, falling back:', e.message);
     }
-    return appTemp;
   }
 
   // 2순위: 플랫폼별 안전한 fallback 경로
@@ -700,8 +750,11 @@ function getSafeTempDir() {
   } else {
     fallbackTemp = path.join(os.tmpdir(), 'WhisperSubTranslate', 'temp');
   }
-  if (!fs.existsSync(fallbackTemp)) {
+  try {
     fs.mkdirSync(fallbackTemp, { recursive: true });
+  } catch (e) {
+    console.warn('[Temp] Failed to create fallback temp dir, using os.tmpdir:', e.message);
+    fallbackTemp = os.tmpdir();
   }
   return fallbackTemp;
 }
@@ -709,6 +762,38 @@ function getSafeTempDir() {
 // 경로가 ASCII만 포함하는지 체크
 function isAsciiPath(filePath) {
   return /^[\x00-\x7F]*$/.test(filePath);
+}
+
+// ===== 경로 헬퍼 =====
+// 확장자가 없는 파일("movie")이 들어와도 원본을 절대 덮어쓰지 않도록
+// SRT/WAV 출력 경로는 항상 확장자를 붙여 만든다.
+function withoutExt(filePath) {
+  const ext = path.extname(filePath);
+  return ext ? filePath.slice(0, -ext.length) : filePath;
+}
+function srtOutputPathFor(filePath) {
+  return withoutExt(filePath) + '.srt';
+}
+
+// ===== 타임아웃 계산 =====
+// 기존 30분 고정이 CPU+large 모델처럼 실제로 오래 걸리는 작업을 무조건 죽이던 문제
+// 수정. 실제 미디어 길이 × 실시간 계수(GPU 4x, CPU 12x)로 스케일링하고
+// 하한 30분 / 상한 6시간으로 클램프한다. 길이를 모르면(0) 하한만 적용.
+function extractionTimeoutMs(durationSec, device) {
+  const factor = device === 'cuda' ? 4 : 12;
+  const scaled = durationSec > 0 ? durationSec * factor * 1000 : 0;
+  return Math.min(6 * 60 * 60 * 1000, Math.max(30 * 60 * 1000, scaled));
+}
+
+// 부분/손상 SRT를 성공으로 오인하지 않도록: 파싱 가능한 큐 1개 이상 + 끝 개행.
+function isCompleteSrt(p) {
+  try {
+    const c = fs.readFileSync(p, 'utf-8');
+    if (!c.trim() || !c.endsWith('\n')) return false;
+    return parseSrtEntries(c).length > 0;
+  } catch (_) {
+    return false;
+  }
 }
 
 // ===== Long Audio Splitting (장시간 오디오 분할 처리) =====
@@ -883,8 +968,8 @@ function adjustSrtTimestamps(srtContent, offsetSeconds) {
   const lines = srtContent.split('\n');
   const result = [];
 
-  // SRT 타임스탬프 형식: 00:00:00,000 --> 00:00:00,000
-  const timestampRegex = /(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/;
+  // SRT 타임스탬프 형식: 00:00:00,000 --> 00:00:00,000 (시는 1~3자리 허용: 100시간+ 파일 대응)
+  const timestampRegex = /(\d{1,3}):(\d{2}):(\d{2}),(\d{3}) --> (\d{1,3}):(\d{2}):(\d{2}),(\d{3})/;
 
   for (const line of lines) {
     const match = line.match(timestampRegex);
@@ -915,6 +1000,54 @@ function adjustSrtTimestamps(srtContent, offsetSeconds) {
 }
 
 // 여러 SRT 파일 합치기 (중복 제거 포함)
+// 오버랩 구간에서 같은 발화가 양쪽 세그먼트에 인식될 때, 워딩이 조금 달라도
+// (예: 앞 트림 차이, 마침표 유무) 중복으로 판정한다. 근거리 창(1500ms) 안에서
+// ① 완전 동일 ② substring 포함(기존) ③ bigram Dice ≥0.9 ④ 편집거리 비율 ≥0.85
+// 중 하나면 중복으로 본다. 실제로 다른 대사가 묻히지 않도록 ③④ 임계값은 보수적으로.
+function cueTextSimilarity(a, b, allowPartialSubstring = false) {
+  if (a === b) return 1;
+  const normalize = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (!na || !nb) return 0;
+  // substring 포함: 짧은 쪽(4자 이상)이 긴 쪽의 연속 부분 문자열이면 중복 후보.
+  // allowPartialSubstring(잔재 큐 흡수)일 때만 길이 비율 게이트 없이 즉시 중복,
+  // 일반 큐는 70% 이상 비율일 때만 인정해 반복 발화("Thanks" vs
+  // "Thanks for watching")가 지워지지 않게 한다.
+  if (Math.min(na.length, nb.length) >= 4) {
+    const shorter = na.length < nb.length ? na : nb;
+    const longer = na.length < nb.length ? nb : na;
+    const ratio = Math.min(na.length, nb.length) / Math.max(na.length, nb.length);
+    if (longer.includes(shorter) && (allowPartialSubstring || ratio >= 0.7)) return 1;
+  }
+  // bigram Dice 계수
+  const bigrams = (s) => {
+    const set = new Set();
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+    return set;
+  };
+  const ga = bigrams(na);
+  const gb = bigrams(nb);
+  let inter = 0;
+  for (const g of ga) if (gb.has(g)) inter++;
+  const dice = (2 * inter) / (ga.size + gb.size || 1);
+  if (dice >= 0.9) return dice;
+  // Levenshtein 편집거리 비율 (문자열이 짧을수록 유의미, 64자 이하에서만 계산)
+  if (na.length <= 64 && nb.length <= 64) {
+    const dp = Array.from({ length: na.length + 1 }, (_, i) => [i, ...Array(nb.length).fill(0)]);
+    for (let j = 0; j <= nb.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= na.length; i++) {
+      for (let j = 1; j <= nb.length; j++) {
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (na[i - 1] === nb[j - 1] ? 0 : 1));
+      }
+    }
+    const dist = dp[na.length][nb.length];
+    const lev = 1 - dist / Math.max(na.length, nb.length);
+    if (lev >= 0.85) return lev;
+  }
+  return 0;
+}
+
 function mergeSrtFiles(srtContents, startTimes) {
   const allEntries = [];
 
@@ -937,16 +1070,19 @@ function mergeSrtFiles(srtContents, startTimes) {
   for (const entry of allEntries) {
     const isDuplicate = uniqueEntries.some((existing) => {
       if (Math.abs(existing.startMs - entry.startMs) >= 1500) return false;
-      const a = existing.text.trim().toLowerCase();
-      const b = entry.text.trim().toLowerCase();
+      const a = existing.text.trim();
+      const b = entry.text.trim();
       if (!a || !b) return false;
-      if (a === b) return true;
-      // 길이 비율이 비슷하고(±30%) 한쪽이 다른쪽을 포함하면 중복
-      const ratio = Math.min(a.length, b.length) / Math.max(a.length, b.length);
-      if (ratio < 0.7) return false;
-      const shorter = a.length < b.length ? a : b;
-      const longer = a.length < b.length ? b : a;
-      return longer.includes(shorter);
+      // 1ms짜리 초단시간 큐가 오버랩 창 안에 겹치면 중복으로 흡수 (머지 경계 잔재 제거)
+      const durMs = entry.endMs ? entry.endMs - entry.startMs : 0;
+      const existingDurMs = existing.endMs ? existing.endMs - existing.startMs : 0;
+      // 잔재 큐(5ms 이하)는 부분 포함만으로 흡수한다(머지 경계 잔재 제거).
+      // 일반 큐끼리는 비율 게이트가 있는 유사도(≥0.85)만 적용해 반복 발화가
+      // 지워지지 않게 한다.
+      if (durMs <= 5 || existingDurMs <= 5) {
+        return cueTextSimilarity(a, b, true) > 0;
+      }
+      return cueTextSimilarity(a, b) >= 0.85;
     });
     if (!isDuplicate) {
       uniqueEntries.push(entry);
@@ -975,16 +1111,19 @@ function parseSrtEntries(srtContent) {
     const lines = block.split('\n');
     if (lines.length >= 3) {
       const timestampLine = lines[1];
-      const timestampRegex = /(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})/;
+      const timestampRegex = /(\d{1,3}):(\d{2}):(\d{2}),(\d{3}) --> (\d{1,3}):(\d{2}):(\d{2}),(\d{3})/;
       const match = timestampLine.match(timestampRegex);
 
       if (match) {
         const startMs =
           (parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3])) * 1000 + parseInt(match[4]);
+        const endMs =
+          (parseInt(match[5]) * 3600 + parseInt(match[6]) * 60 + parseInt(match[7])) * 1000 + parseInt(match[8]);
         const text = lines.slice(2).join('\n');
 
         entries.push({
           startMs,
+          endMs,
           timestamp: timestampLine,
           text,
         });
@@ -1033,12 +1172,16 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
     });
     currentProcess = proc;
 
-    const segTimeout = setTimeout(() => {
-      if (proc && !proc.killed) {
-        console.log(`[Segment TIMEOUT] ${path.basename(segmentPath)} - exceeded 30 min`);
-        proc.kill('SIGKILL');
-      }
-    }, 1800000);
+    const segTimeout = setTimeout(
+      () => {
+        if (proc && !proc.killed) {
+          const secs = Math.round(extractionTimeoutMs(SEGMENT_DURATION, device) / 1000 / 60);
+          console.log(`[Segment TIMEOUT] ${path.basename(segmentPath)} - exceeded ${secs} min`);
+          proc.kill('SIGKILL');
+        }
+      },
+      extractionTimeoutMs(SEGMENT_DURATION, device)
+    );
 
     proc.stdout.on('data', (data) => {
       mainWindow.webContents.send('output-update', data.toString('utf8'));
@@ -1089,6 +1232,10 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
 
     proc.on('error', (err) => {
       clearTimeout(segTimeout);
+      // 임시 SRT 잔재 정리 (프로세스 실행 자체 실패 시)
+      try {
+        if (fs.existsSync(srtPath)) fs.unlinkSync(srtPath);
+      } catch (_e) {}
       reject(err);
     });
   });
@@ -1098,8 +1245,8 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
 // 유니코드 경로 문제 해결: 안전한 temp 경로에 WAV 생성
 function convertToWav(inputPath) {
   return new Promise((resolve, reject) => {
-    // 원본 경로가 ASCII인지 확인
-    const originalWavPath = inputPath.replace(/\.[^/.]+$/, '.wav');
+    // 원본 경로가 ASCII인지 확인 (확장자 없는 파일도 원본을 덮어쓰지 않도록)
+    const originalWavPath = withoutExt(inputPath) + '.wav';
     let wavPath;
     let usingSafeTemp = false;
 
@@ -1114,11 +1261,31 @@ function convertToWav(inputPath) {
       console.log(`[Audio] Unicode path detected, using safe temp: ${wavPath}`);
     }
 
-    // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크)
+    // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크).
+    // 단, 소스 미디어가 WAV보다 새로워졌거나(재인코딩됨) 0바이트 잔재면 재변환한다.
+    // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV를 재사용하면 틀린 자막이 나오므로
+    // mtime 비교로 스테일 파일을 걸러낸다.
     if (!usingSafeTemp && fs.existsSync(wavPath)) {
-      console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
-      resolve({ wavPath, usingSafeTemp, originalWavPath });
-      return;
+      try {
+        const wavStat = fs.statSync(wavPath);
+        const srcStat = fs.statSync(inputPath);
+        if (wavStat.size > 0 && wavStat.mtimeMs >= srcStat.mtimeMs) {
+          console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
+          resolve({ wavPath, usingSafeTemp, originalWavPath });
+          return;
+        }
+        // 스테일/잘린 WAV: 삭제 후 아래에서 재변환
+        console.log(`[Audio] WAV stale (source newer or empty), re-converting: ${path.basename(wavPath)}`);
+        try {
+          fs.unlinkSync(wavPath);
+        } catch (_e) {}
+      } catch (statErr) {
+        // stat 실패 시 스킵하지 않고 재변환 시도
+        console.log(`[Audio] WAV stat failed, re-converting: ${statErr.message}`);
+        try {
+          fs.unlinkSync(wavPath);
+        } catch (_e) {}
+      }
     }
 
     // 입력 미디어 경로 자체도 비ASCII면 ffmpeg에 바로 넘기지 않고
@@ -1455,7 +1622,10 @@ function get7zaExePath() {
 async function extract7z(archivePath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
   try {
-    await execFileAsync('tar.exe', ['-xf', archivePath, '-C', destDir], { windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+    await execFileAsync('tar.exe', ['-xf', archivePath, '-C', destDir], {
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    });
     return;
   } catch (tarErr) {
     console.log('[FasterWhisper] tar.exe 7z extract failed, falling back to 7za.exe:', tarErr.message);
@@ -1573,7 +1743,7 @@ async function ensureFasterWhisperEngine(onPercent) {
   return exePath;
 }
 
-function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = false) {
+function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = false, computeType = null) {
   const args = [
     wavPath,
     '--model',
@@ -1603,8 +1773,9 @@ function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = fal
     useGpu ? 'cuda' : 'cpu',
     // 라이트는 GPU에서 int8_float16(가중치 int8 + 누적 float16)으로 VRAM을 줄인다(품질 손실 극소).
     // CPU는 정밀/라이트 모두 int8(CTranslate2 CPU 표준)이라 차이가 없다.
+    // computeType이 명시되면(구형 GPU float32 재시도) 그 값을 우선 사용한다.
     '--compute_type',
-    useGpu ? (lite ? 'int8_float16' : 'float16') : 'int8',
+    computeType || (useGpu ? (lite ? 'int8_float16' : 'float16') : 'int8'),
     // CPU 경로일 때만 의미: 이 엔진은 기본 최대 4스레드(--help: "no more than 4")라
     // 멀티코어 PC에서 절반도 못 쓴다. 물리 코어 수만큼 올린다(최대 8, 과구동 방지).
     '--threads',
@@ -1618,7 +1789,14 @@ function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = fal
   return args;
 }
 
-async function runFasterWhisperExtraction(filePath, wavPath, language, device, model = SYNC_ENGINE_MODEL_ID) {
+async function runFasterWhisperExtraction(
+  filePath,
+  wavPath,
+  language,
+  device,
+  model = SYNC_ENGINE_MODEL_ID,
+  srtOutputOverride = null
+) {
   const lite = model === SYNC_ENGINE_LITE_MODEL_ID;
   const modeLabel = lite ? 'large-v2 lite' : 'large-v2';
   const exePath = await ensureFasterWhisperEngine();
@@ -1627,19 +1805,35 @@ async function runFasterWhisperExtraction(filePath, wavPath, language, device, m
   fs.mkdirSync(getFasterWhisperModelsDir(), { recursive: true });
 
   const outputSrt = path.join(outputDir, `${path.basename(wavPath, path.extname(wavPath))}.srt`);
-  const finalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+  const finalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
 
   // 장치 선택은 일반 모델과 일관되게 따른다.
   // CPU = CPU만, GPU = GPU만, 자동 = GPU 먼저 시도 후 CPU 폴백.
+  // Compute Capability < 7.0(Volta 이하) GPU는 float16을 지원하지 않으므로(이슈 #45),
+  // GPU 시도가 실패하면 float32로 한 번 더 시도한 뒤 CPU로 폴백한다.
   const requestedDevice = String(device || 'auto').toLowerCase();
-  const attempts = requestedDevice === 'cpu' ? [false] : requestedDevice === 'cuda' || requestedDevice === 'gpu' ? [true] : [true, false];
+  const gpuCompute = lite ? 'int8_float16' : 'float16';
+  const attempts =
+    requestedDevice === 'cpu'
+      ? [{ useGpu: false, computeType: 'int8' }]
+      : requestedDevice === 'cuda' || requestedDevice === 'gpu'
+        ? [
+            { useGpu: true, computeType: gpuCompute },
+            { useGpu: true, computeType: 'float32' }, // CC<7.0 재시도
+          ]
+        : [
+            { useGpu: true, computeType: gpuCompute },
+            { useGpu: true, computeType: 'float32' }, // CC<7.0 재시도
+            { useGpu: false, computeType: 'int8' },
+          ];
 
-  const runOnce = (useGpu) =>
+  const runOnce = (attempt) =>
     new Promise((resolve, reject) => {
-      const args = buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite);
+      const useGpu = attempt.useGpu;
+      const args = buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite, attempt.computeType);
       mainWindow?.webContents?.send(
         'output-update',
-        `Starting sync repair extraction (${modeLabel}, ${useGpu ? 'GPU' : 'CPU'}). This mode is for subtitles that do not sync with normal models; English is usually faster with large-v3-turbo. First run may download the model (~3GB).\n`
+        `Starting sync repair extraction (${modeLabel}, ${useGpu ? 'GPU ' + attempt.computeType : 'CPU'}). This mode is for subtitles that do not sync with normal models; English is usually faster with large-v3-turbo. First run may download the model (~3GB).\n`
       );
       console.log(`[FasterWhisper] (${useGpu ? 'GPU' : 'CPU'}) ${exePath} ${args.join(' ')}`);
 
@@ -1677,7 +1871,10 @@ async function runFasterWhisperExtraction(filePath, wavPath, language, device, m
             lastLoggedPct = pct;
             lastProgressLogAt = now;
             const where = useGpu ? 'GPU' : 'CPU';
-            mainWindow?.webContents?.send('output-update', `Transcribing (sync-first ${modeLabel}, ${where})... ${pct}%\n`);
+            mainWindow?.webContents?.send(
+              'output-update',
+              `Transcribing (sync-first ${modeLabel}, ${where})... ${pct}%\n`
+            );
           }
         }
         // tqdm progress chunks contain carriage returns and can spam the log. Keep meaningful lines.
@@ -1706,19 +1903,22 @@ async function runFasterWhisperExtraction(filePath, wavPath, language, device, m
     });
 
   let lastErr = null;
-  for (const useGpu of attempts) {
+  for (let ai = 0; ai < attempts.length; ai++) {
+    const attempt = attempts[ai];
     try {
-      await runOnce(useGpu);
+      await runOnce(attempt);
       lastErr = null;
       break;
     } catch (e) {
       lastErr = e;
       if (isUserStopped) throw e;
-      // GPU 실패 + CPU 폴백이 남아있으면 한 번 더 시도.
-      if (useGpu && attempts.length > 1) {
+      // GPU 실패 → 다음 시도가 남아있으면(float32 또는 CPU) 계속.
+      if (ai < attempts.length - 1) {
+        const next = attempts[ai + 1];
+        const nextLabel = next.useGpu ? `GPU (${next.computeType})` : 'CPU (slower)';
         mainWindow?.webContents?.send(
           'output-update',
-          `GPU run failed (${e.message}). Falling back to CPU (slower)...\n`
+          `GPU run failed (${e.message}). Falling back to ${nextLabel}...\n`
         );
         try {
           fs.rmSync(outputSrt, { force: true });
@@ -1754,11 +1954,15 @@ function getWhisperVadArgs() {
     return [];
   }
   console.log('[VAD] enabled (speech-only processing):', vadModel);
-  return ['--vad', '--vad-model', vadModel, '-vt', '0.3', '-vsd', '200', '-vp', '100'];
+  // -vmsd 30: VAD 세그먼트 최대 30초. 기본값이 'unlimited'라 다화자 교대를 한 큐로
+  // 통째로 삼키던 문제(이슈 #46) 해결. 30초면 일반 발화는 안 쪼개면서도
+  // 길게 이어지는 대화 교대는 분리해준다.
+  return ['--vad', '--vad-model', vadModel, '-vt', '0.3', '-vsd', '200', '-vp', '100', '-vmsd', '30'];
 }
 
 // Single File Subtitle Extraction (Promise-based) - whisper.cpp 버전
-function extractSingleFile(filePath, model, language, device) {
+// srtOutputOverride: 배치 basename 충돌 시 강제할 출력 SRT 경로 (null이면 기본 규칙)
+function extractSingleFile(filePath, model, language, device, srtOutputOverride = null) {
   return new Promise((resolve, reject) => {
     const start = async () => {
       console.log(`[START] Processing: ${path.basename(filePath)}`);
@@ -1847,7 +2051,14 @@ function extractSingleFile(filePath, model, language, device) {
       // CPU = CPU만, GPU = GPU만, 자동 = GPU 먼저 시도 후 CPU 폴백.
       if (isSyncEngineModel(model)) {
         try {
-          const finalSrtPath = await runFasterWhisperExtraction(filePath, wavPath, language, device, model);
+          const finalSrtPath = await runFasterWhisperExtraction(
+            filePath,
+            wavPath,
+            language,
+            device,
+            model,
+            srtOutputOverride
+          );
           if (wavPath !== filePath && fs.existsSync(wavPath)) {
             try {
               fs.unlinkSync(wavPath);
@@ -1883,14 +2094,17 @@ function extractSingleFile(filePath, model, language, device) {
       // 영상 길이 확인 및 분할 처리 결정
       let segments = [];
       let useSegmentedProcessing = false;
+      let mediaDurationSec = 0; // 단일 파일 경로의 타임아웃 스케일링에도 사용
       try {
-        const duration = await getMediaDuration(wavPath);
-        if (duration > SEGMENT_DURATION + 60) {
+        mediaDurationSec = await getMediaDuration(wavPath);
+        if (mediaDurationSec > SEGMENT_DURATION + 60) {
           // 31분 이상이면 분할
-          segments = await splitAudioToSegments(wavPath, duration);
+          segments = await splitAudioToSegments(wavPath, mediaDurationSec);
           useSegmentedProcessing = segments.length > 1;
           if (useSegmentedProcessing) {
-            console.log(`[Split] Will process ${segments.length} segments for ${(duration / 60).toFixed(1)} min audio`);
+            console.log(
+              `[Split] Will process ${segments.length} segments for ${(mediaDurationSec / 60).toFixed(1)} min audio`
+            );
           }
         }
       } catch (err) {
@@ -1959,8 +2173,8 @@ function extractSingleFile(filePath, model, language, device) {
           mainWindow.webContents.send('output-update', `\nMerging ${segments.length} subtitle segments...\n`);
           const mergedSrt = mergeSrtFiles(srtContents, startTimes);
 
-          // 최종 SRT 파일 저장
-          const originalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+          // 최종 SRT 파일 저장 (확장자 없는 입력도 원본을 덮어쓰지 않게)
+          const originalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
           fs.writeFileSync(originalSrtPath, mergedSrt, 'utf-8');
           console.log(`[Split] Merged SRT saved: ${originalSrtPath}`);
           mainWindow.webContents.send('output-update', `Subtitle merge completed!\n`);
@@ -1993,9 +2207,9 @@ function extractSingleFile(filePath, model, language, device) {
         }
       }
 
-      // SRT 출력 경로
+      // SRT 출력 경로 (확장자 없는 입력이면 원본 경로에 .srt 를 붙여 덮어쓰기 방지)
       // 유니코드 경로면 temp에 생성 후 원본 위치로 복사
-      const originalSrtPath = filePath.replace(/\.[^/.]+$/, '.srt');
+      const originalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
       let srtPath, outputBase;
 
       if (usingSafeTemp) {
@@ -2009,7 +2223,8 @@ function extractSingleFile(filePath, model, language, device) {
       } else {
         // 원본 경로가 ASCII면 직접 생성
         srtPath = originalSrtPath;
-        outputBase = filePath.replace(/\.[^/.]+$/, ''); // 확장자 제외
+        // 충돌 오버라이드가 있으면 whisper -of 베이스도 오버라이드 기준으로 맞춘다
+        outputBase = srtOutputOverride ? withoutExt(srtOutputOverride) : withoutExt(filePath);
       }
 
       // whisper.cpp 인자 구성
@@ -2064,13 +2279,15 @@ function extractSingleFile(filePath, model, language, device) {
         ...(mainSpawnEnv ? { env: mainSpawnEnv } : {}),
       });
 
-      // Process timeout handling
+      // Process timeout handling — 실제 미디어 길이 × 실시간 계수로 스케일링
+      // (기존 30분 고정은 CPU+large 모델이 걸린 작업을 무조건 죽이던 문제가 있었다)
+      const processTimeoutMs = extractionTimeoutMs(mediaDurationSec, chosenDevice);
       const processTimeout = setTimeout(() => {
         if (currentProcess && !currentProcess.killed) {
-          console.log('[TIMEOUT] ' + path.basename(filePath) + ' - exceeded 30 minute limit');
+          console.log(`[TIMEOUT] ${path.basename(filePath)} - exceeded ${Math.round(processTimeoutMs / 60000)} min`);
           currentProcess.kill('SIGKILL');
         }
-      }, 1800000); // 30 minutes
+      }, processTimeoutMs);
 
       currentProcess.stdout.on('data', (data) => {
         const output = data.toString('utf8');
@@ -2122,7 +2339,10 @@ function extractSingleFile(filePath, model, language, device) {
           return reject(new Error('Stopped by user'));
         }
 
-        if (code === 0 || srtExists) {
+        // 부분/손상 출력을 성공으로 오인하지 않게: code 0 이거나,
+        // SRT가 존재하면서 파싱 가능한 큐 1개 이상 + 끝 개행으로 온전할 때만 성공.
+        const srtComplete = srtExists && isCompleteSrt(srtPath);
+        if (code === 0 || srtComplete) {
           let finalSrtPath = srtPath;
 
           // 유니코드 경로면 temp에서 원본 위치로 복사
@@ -2217,6 +2437,18 @@ function extractSingleFile(filePath, model, language, device) {
         clearTimeout(processTimeout); // Clear timeout
         await forceMemoryCleanup(chosenDevice, true);
 
+        // 임시 WAV/SRT 잔재 정리 (spawn 자체 실패: ENOENT/EACCES 등)
+        if (wavPath !== filePath && fs.existsSync(wavPath)) {
+          try {
+            fs.unlinkSync(wavPath);
+          } catch (_e) {}
+        }
+        if (usingSafeTemp && fs.existsSync(srtPath)) {
+          try {
+            fs.unlinkSync(srtPath);
+          } catch (_e) {}
+        }
+
         // ENOENT/EACCES 에러 = whisper-cli 파일 없음 또는 실행 권한 없음
         if (err.code === 'ENOENT' || err.code === 'EACCES') {
           // On Windows, ENOENT from spawn() can also mean a dependent DLL
@@ -2292,13 +2524,31 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
   let userStopped = false;
   const successDetails = [];
   const failureDetails = [];
+  // 배치 내 같은 basename(예: movie.mkv + movie.mp4)이 같은 .srt로 덮어쓰는 충돌 방지.
+  // 이미 쓰인 출력 베이스가 있으면 소스 확장자를 붙인 이름(movie.mkv.srt)으로 분리한다.
+  const usedSrtBases = new Set();
 
   for (let i = 0; i < filesToProcess.length; i++) {
     const currentFile = filesToProcess[i];
     if (!currentFile) continue;
 
+    // 충돌 시 사용할 출력 SRT 경로 결정 (extractSingleFile이 내부에서 이 값을 그대로 쓴다)
+    const normalSrt = srtOutputPathFor(currentFile);
+    let srtOutputOverride = null;
+    if (usedSrtBases.has(normalSrt)) {
+      const srcExt = path.extname(currentFile);
+      srtOutputOverride = `${withoutExt(currentFile)}${srcExt}.srt`;
+      event.sender.send(
+        'output-update',
+        `[Collision] ${path.basename(normalSrt)} already used by an earlier file — saving as ${path.basename(srtOutputOverride)}\n`
+      );
+      usedSrtBases.add(srtOutputOverride);
+    } else {
+      usedSrtBases.add(normalSrt);
+    }
+
     try {
-      const srtPath = await extractSingleFile(currentFile, model, language, device);
+      const srtPath = await extractSingleFile(currentFile, model, language, device, srtOutputOverride);
 
       // 출력 정리(Output cleanup): 화자 표시(>>) / SDH 태그 제거 (옵트인)
       // 번역 단계는 이 .srt 파일을 다시 읽으므로, 여기서 미리 정리하면
@@ -2313,10 +2563,7 @@ ipcMain.handle('extract-subtitles', async (event, payload) => {
             event.sender.send('output-update', `Output cleanup skipped (would remove all lines).\n`);
           } else if (cleaned !== raw) {
             fs.writeFileSync(srtPath, cleaned, 'utf-8');
-            const applied = [
-              cleanup.removeSpeakerTags ? 'speaker tags' : null,
-              cleanup.removeSDH ? 'SDH tags' : null,
-            ]
+            const applied = [cleanup.removeSpeakerTags ? 'speaker tags' : null, cleanup.removeSDH ? 'SDH tags' : null]
               .filter(Boolean)
               .join(', ');
             event.sender.send('output-update', `Output cleanup applied (${applied}).\n`);
@@ -2561,7 +2808,17 @@ function isAllowedOpenExternalUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
     if (parsed.protocol !== 'https:') return false;
-    return ALLOWED_OPEN_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase());
+    if (!ALLOWED_OPEN_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) return false;
+    // github.com은 <소유자>/<레포> 하위 경로만 허용한다. 릴리스 노트 링크는
+    // /releases/tag/v2.4.3, 엔진 다운로드는 /releases/download/... 형태라
+    // 레포 루트 두 세그먼트만 고정하고 그 아래는 허용한다.
+    // (경로 세그먼트에 .. 이 섞이면 거부해 상위 탈출 표기를 막는다.)
+    const pathname = parsed.pathname.replace(/\/$/, '');
+    if (parsed.hostname.toLowerCase() === 'github.com') {
+      if (!/^\/[\w.-]+\/[\w.-]+(\/[\w./+-]*)?$/.test(pathname)) return false;
+      if (pathname.split('/').includes('..')) return false;
+    }
+    return true;
   } catch (_err) {
     return false;
   }
@@ -2667,7 +2924,8 @@ ipcMain.handle('check-model-status', async () => {
     if (fs.existsSync(modelsPath)) {
       for (const modelName of modelNames) {
         const modelFile = path.join(modelsPath, `ggml-${modelName}.bin`);
-        if (fs.existsSync(modelFile)) {
+        // 0바이트/손상 잔재는 설치된 모델로 인정하지 않는다
+        if (fs.existsSync(modelFile) && fs.statSync(modelFile).size > 0) {
           availableModels[modelName] = true;
         }
       }
@@ -2765,19 +3023,43 @@ ipcMain.handle('download-model', async (_event, modelName) => {
       });
       response.data.pipe(writer);
       await new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
+        writer.on('finish', () => {
+          // content-length가 알려진 경우(전송/연결 중단 등으로) 받은 크기와 다르면
+          // 손상 파일로 취급해 부분 파일 삭제 + 실패시킨다.
+          if (total > 0 && received !== total) {
+            try {
+              fs.unlinkSync(destPath);
+            } catch (_e) {}
+            reject(new Error(`Download incomplete (${received}/${total} bytes)`));
+          } else {
+            resolve();
+          }
+        });
         writer.on('error', reject);
       });
     };
 
-    // 파일 존재하면 스킵 (GGML 단일 파일 체크)
+    // 파일 존재하면 스킵 — 단 0바이트/손상 잔재(이전 실패)가 있으면 재다운로드
     if (fs.existsSync(targetPath)) {
+      let existingOk = false;
       try {
-        mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
-      } catch (_e) {
-        console.log('[Download] Failed to send model ready message:', _e.message);
+        existingOk = fs.statSync(targetPath).size > 0;
+      } catch (e) {
+        console.log('[Download] Failed to check existing model:', e.message);
       }
-      return { success: true };
+      if (existingOk) {
+        try {
+          mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
+        } catch (_e) {
+          console.log('[Download] Failed to send model ready message:', _e.message);
+        }
+        return { success: true };
+      }
+      // 0바이트 잔재 제거 후 아래에서 재다운로드
+      try {
+        fs.unlinkSync(targetPath);
+        mainWindow.webContents.send('output-update', `Model file was empty, re-downloading: ${modelName}\n`);
+      } catch (_e) {}
     }
 
     try {
@@ -2880,6 +3162,35 @@ ipcMain.handle('load-api-keys', async () => {
   }
 });
 
+// 설정 UI에서 프롬프트를 기본값으로 되돌리거나 공급자 기본 모델명을 보여줄 때 사용
+ipcMain.handle('get-provider-defaults', async () => {
+  return {
+    success: true,
+    defaults: {
+      prompts: {
+        translationPrompt: EnhancedSubtitleTranslator.DEFAULT_SYSTEM_PROMPT,
+        contextPrompt: EnhancedSubtitleTranslator.DEFAULT_CONTEXT_SYSTEM_PROMPT,
+      },
+      providers: EnhancedSubtitleTranslator.PROVIDER_DEFAULTS,
+      modelPresets: EnhancedSubtitleTranslator.PROVIDER_MODEL_PRESETS,
+      formats: EnhancedSubtitleTranslator.PROVIDER_FORMATS,
+    },
+  };
+});
+
+// 설정 UI의 모델 새로고침 — 저장 전이라도 입력된 키·Base URL로 바로 조회한다.
+ipcMain.handle('list-provider-models', async (_event, { method, tempKeys } = {}) => {
+  try {
+    const source = new EnhancedSubtitleTranslator();
+    source.apiKeys = { ...source.apiKeys, ...(tempKeys || {}) };
+    const models = await source.listModels(source.resolveProvider(method));
+    return { success: true, models };
+  } catch (error) {
+    console.error('[List Provider Models Error]', error.response?.data || error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 // 오프라인 관련 IPC 제거됨
 
 // API 키 유효성 검사 (임시 키 지원)
@@ -2910,6 +3221,8 @@ ipcMain.handle('validate-api-keys', async (_event, tempKeys) => {
 });
 
 // 자막 번역
+// targetLang 검증: 알파벳 2~8자 언어 코드(ko, en, ja, zh-CN 등)만 허용.
+const TARGET_LANG_RE = /^[a-z]{2,8}$/i;
 ipcMain.handle(
   'translate-subtitle',
   async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId }) => {
@@ -2922,6 +3235,11 @@ ipcMain.handle(
         .filter(Boolean);
       langs = [...new Set(langs)];
       if (!langs.length) langs = ['ko'];
+      // 검증: 허용된 언어 코드만 번역 대상으로 삼는다.
+      const invalidLangs = langs.filter((l) => !TARGET_LANG_RE.test(l));
+      if (invalidLangs.length) {
+        throw new Error(`Invalid target language code: ${invalidLangs.join(', ')}`);
+      }
 
       // 파일별 캐시 격리 활성화
       translator.setCurrentFile(filePath);
@@ -2963,6 +3281,9 @@ ipcMain.handle(
         );
         outputPaths.push(result);
       }
+
+      // 파일 처리 완료: 이 파일의 번역 캐시만 정리 (메모리 해제)
+      translator.clearFileCache();
 
       // 모든 언어 완료 후 단 한 번만 completed 전송(이벤트 중복 방지)
       event.sender.send('translation-progress', {
@@ -3023,8 +3344,20 @@ ipcMain.handle('get-gpu-info', async () => {
 });
 
 // nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)
+// 임의 경로 탐색 방지: 허용리스트 + basename 검증으로 resources 내 파일만 노출한다.
+const ALLOWED_AUDIO_FILES = new Set(['nya.wav']);
 ipcMain.handle('get-audio-data', async (_event, filename) => {
   try {
+    // basename과 다른 경로(하위/상위 디렉터리 포함)는 즉시 거부
+    if (typeof filename !== 'string' || path.basename(filename) !== filename) {
+      console.warn('[Security] Blocked get-audio-data path traversal attempt:', filename);
+      return null;
+    }
+    if (!ALLOWED_AUDIO_FILES.has(filename)) {
+      console.warn('[Security] Blocked get-audio-data for non-allowlisted file:', filename);
+      return null;
+    }
+
     const basePath = app.isPackaged ? process.resourcesPath : __dirname;
     const filePath = path.join(basePath, filename);
 

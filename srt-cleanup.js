@@ -19,34 +19,224 @@
  * removal on is an explicit "I want sound descriptions gone" choice.
  */
 
-// A cue counts as SDH-only when, after removing every complete (...) / [...] group
-// and music notes from both ends, NOTHING but separators remains. This keeps mixed
-// lines like "(grunting) Help me! (groans)" (real dialogue survives) while dropping
-// pure sound-description cues like "[music playing]", "(applause)", "♪♪".
+// SDH(청각장애인용 자막) 키워드 화이트리스트. 이 키워드가 완전히 괄호로 감싸인
+// "[music playing]", "(applause)" 같은 큐만 SDH로 보고 삭제한다.
+// 괄호 안에 실제 대사((와!), (笑) 등)가 있으면 보존한다.
+const SDH_KEYWORDS = [
+  // 음악/효과음
+  'music',
+  'song',
+  'melody',
+  'theme',
+  'jingle',
+  'applause',
+  'clapping',
+  'clap',
+  'cheering',
+  'cheer',
+  'laughter',
+  'laugh',
+  'laughing',
+  'chuckles',
+  'chuckling',
+  'giggling',
+  'giggles',
+  'sobbing',
+  'sob',
+  'crying',
+  'cries',
+  'sigh',
+  'sighs',
+  'sighing',
+  'groan',
+  'groans',
+  'groaning',
+  'grunt',
+  'grunts',
+  'gasp',
+  'gasps',
+  'gasping',
+  'scream',
+  'screaming',
+  'screams',
+  'yell',
+  'yelling',
+  'shout',
+  'shouting',
+  'whisper',
+  'whispering',
+  'humming',
+  'hums',
+  'whistling',
+  'whistles',
+  'cough',
+  'coughs',
+  'coughing',
+  'sneeze',
+  'sneezes',
+  'sneezing',
+  'hiccup',
+  'hiccups',
+  'yawn',
+  'yawns',
+  'yawning',
+  'sniffle',
+  'sniffles',
+  // 소리/효과
+  'knock',
+  'knocking',
+  'doorbell',
+  'ring',
+  'ringing',
+  'phone',
+  'beep',
+  'beeps',
+  'beeping',
+  'buzzer',
+  'buzz',
+  'alarm',
+  'siren',
+  'horn',
+  'honk',
+  'honking',
+  'engine',
+  'motor',
+  'crash',
+  'crashing',
+  'boom',
+  'explosion',
+  'explosions',
+  'thunder',
+  'rain',
+  'wind',
+  'whoosh',
+  'whooshing',
+  'splash',
+  'splashing',
+  'water',
+  'birds',
+  'bird',
+  'chirping',
+  'chirps',
+  'barking',
+  'barks',
+  'meow',
+  'meowing',
+  'roar',
+  'roaring',
+  'growl',
+  'growling',
+  'howl',
+  'howling',
+  'footsteps',
+  'footstep',
+  'steps',
+  'static',
+  'radio',
+  'tv',
+  'television',
+  'crowd',
+  'audience',
+  'noise',
+  'sound',
+  'sounds',
+  'sfx',
+  'phone ringing',
+  'doorbell rings',
+  'music playing',
+  'upbeat music',
+  'dramatic music',
+  'sad music',
+  'soft music',
+  'loud music',
+  'rock music',
+  'jazz music',
+  'classical music',
+  // 한국어 SDH
+  '음악',
+  '박수',
+  '웃음',
+  '환호',
+  '노래',
+  '효과음',
+  '문소리',
+  '노크',
+  '벨',
+  '종소리',
+  '기침',
+  '한숨',
+  '비명',
+  '발소리',
+  '울음',
+  '휘파람',
+  '경적',
+  '엔진',
+  '천둥',
+  '빗소리',
+  '바람',
+  '물소리',
+  '새소리',
+  '짖음',
+  '고양이',
+  '라디오',
+  '티비',
+  '방송',
+  '소음',
+  '소리',
+  // 일본어 SDH
+  '音楽',
+  '拍手',
+  '笑い',
+  '泣き',
+  'ため息',
+  '咳',
+  'くしゃみ',
+  '悲鳴',
+  '足音',
+  'ベル',
+  'ノック',
+  '犬',
+  '猫',
+  '鳥',
+  '雨',
+  '風',
+  '雷',
+  '効果音',
+  '音',
+  '音楽が流れる',
+];
+// 유니코드 인식 단어 경계: \b 는 \w(ASCII) 기준이라 CJK 키워드(음악, 音楽 등)에선
+// 경계가 성립하지 않아 매치가 불가능하다. 양쪽이 글자/숫자가 아닐 때만 매치한다.
+const UNICODE_WORD_BOUNDARY = '(?<![\\p{L}\\p{N}])';
+const SDH_KEYWORD_RE = new RegExp(
+  `${UNICODE_WORD_BOUNDARY}(${SDH_KEYWORDS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}])`,
+  'iu'
+);
+
+// A cue counts as SDH-only when EVERY line is fully enclosed in a single bracket/paren
+// group (no nested/unclosed brackets, no trailing text) AND the inner content matches
+// the SDH keyword whitelist (or is pure notation like ♪♫). Mixed lines like
+// "(grunting) Help me! (groans)" contain unclosed brackets + text, so they're kept.
 function isSdhOnlyText(textLines) {
-  let s = textLines.join(' ').trim();
-  if (!s) return false;
+  const lines = textLines.map((l) => l.trim()).filter(Boolean);
+  if (!lines.length) return false;
 
-  // Pure music notes: ♪ ♫ ♬ ♩
-  if (/^[♪♫♬♩\s]+$/.test(s)) return true;
+  // Pure music notes: ♪ ♫ ♬ ♩ — 괄호 안이든 밖이든 기호뿐이면 SDH
+  // (기호만 있는 줄은 번역 대상 대사가 아니므로 안전하게 제거한다)
+  if (lines.every((l) => /^[♪♫♬♩]+$/.test(l.replace(/[\[\]()\s]/g, '')))) return true;
 
-  // Iteratively peel complete bracketed/parenthesized groups + note runs off both
-  // ends. [^()] / [^\[\]] keep the match to a SINGLE balanced group so that text
-  // sandwiched between two sound tags is never swallowed.
-  let prev;
-  do {
-    prev = s;
-    s = s
-      .replace(/^\s*\([^()]*\)\s*/, '') // leading (...)
-      .replace(/\s*\([^()]*\)\s*$/, '') // trailing (...)
-      .replace(/^\s*\[[^[\]]*\]\s*/, '') // leading [...]
-      .replace(/\s*\[[^[\]]*\]\s*$/, '') // trailing [...]
-      .replace(/^[♪♫♬♩\s]+/, '') // leading notes
-      .replace(/[♪♫♬♩\s]+$/, '') // trailing notes
-      .trim();
-  } while (s !== prev);
+  // 모든 줄이 "여는 괄호 + 괄호 없는 내용 + 닫는 괄호"의 단일 그룹이어야 한다.
+  // (grunting) Help me! (groans) 처럼 괄호 밖 텍스트/중첩 괄호가 있으면 대사로 본다.
+  const innerParts = [];
+  for (const l of lines) {
+    const m = /^[\[\(]([^()\[\]]+)[\]\)]$/.exec(l);
+    if (!m) return false;
+    innerParts.push(m[1]);
+  }
 
-  return s === '';
+  // 내부 내용 전부가 SDH 키워드 화이트리스트와 매치돼야 SDH.
+  // (와!), (笑) 같은 실제 대사 괄호는 키워드에 없으므로 보존된다.
+  return innerParts.every((part) => SDH_KEYWORD_RE.test(part));
 }
 
 /**
@@ -66,6 +256,7 @@ function applySrtCleanup(srtText, opts = {}) {
   const blocks = normalized.split(/\n[ \t]*\n/);
 
   const outCues = [];
+  const outNonCueBlocks = []; // 헤더/푸터 등 비큐 블록은 원본 그대로 보존
   let sawAnyCue = false;
 
   for (const rawBlock of blocks) {
@@ -73,8 +264,11 @@ function applySrtCleanup(srtText, opts = {}) {
 
     const lines = rawBlock.split('\n');
     const tsIdx = lines.findIndex((l) => l.includes('-->'));
-    if (tsIdx === -1) continue; // not a recognizable cue block
-
+    if (tsIdx === -1) {
+      // 큐가 아닌 블록(예: "WEBVTT" 헤더, 파일 푸터)은 삭제하지 않고 보존
+      outNonCueBlocks.push(rawBlock);
+      continue;
+    }
     sawAnyCue = true;
     const timeLine = lines[tsIdx].trim();
     let textLines = lines.slice(tsIdx + 1);
@@ -104,9 +298,24 @@ function applySrtCleanup(srtText, opts = {}) {
   // If we couldn't parse a single cue, never destroy the file — return as-is.
   if (!sawAnyCue) return srtText;
 
-  const rebuilt = outCues
-    .map((c, i) => `${i + 1}\n${c.timeLine}\n${c.textLines.join('\n')}`)
-    .join('\n\n');
+  // 비큐 블록(헤더/푸터)은 원본 그대로, 큐는 재번호를 매겨 재조립한다.
+  const rebuiltBlocks = [];
+  let cueIdx = 0;
+  for (const rawBlock of blocks) {
+    if (!rawBlock.trim()) continue;
+    const lines = rawBlock.split('\n');
+    const tsIdx = lines.findIndex((l) => l.includes('-->'));
+    if (tsIdx === -1) {
+      rebuiltBlocks.push(rawBlock);
+      continue;
+    }
+    const kept = outCues[cueIdx];
+    if (!kept) continue;
+    cueIdx++;
+    rebuiltBlocks.push(`${cueIdx}\n${kept.timeLine}\n${kept.textLines.join('\n')}`);
+  }
+
+  const rebuilt = rebuiltBlocks.join('\n\n');
 
   return rebuilt ? rebuilt + '\n' : '';
 }
@@ -197,11 +406,6 @@ function wrapCuesForDisplay(srtText, opts = {}) {
 // 단어 타임스탬프는 아니지만(균일 발화속도 가정), "짧게 말하면 짧게 / 길게 말하면 길게"
 // 의 근사값으로 충분하다. 번역 출력(사용자가 보는 _ko.srt)에만 적용 — 원본은 번역기가
 // 완결 문장으로 읽어야 하므로 쪼개지 않는다.
-function _srtTimeToMs(t) {
-  const m = /(\d+):(\d+):(\d+)[,.](\d+)/.exec(t);
-  if (!m) return null;
-  return +m[1] * 3600000 + +m[2] * 60000 + +m[3] * 1000 + +m[4];
-}
 function _msToSrtTime(ms) {
   ms = Math.max(0, Math.round(ms));
   const h = Math.floor(ms / 3600000);

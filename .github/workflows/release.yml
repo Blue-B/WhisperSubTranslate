@@ -47,11 +47,13 @@ jobs:
         shell: pwsh
         run: |
           $cands = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/cpu/whisper-cli.exe")
-          if ($cands | Where-Object { Test-Path $_ }) {
-            Write-Host "whisper-cli.exe present"
+          $found = $cands | Where-Object { Test-Path $_ }
+          if ($found) {
+            Write-Host "whisper-cli.exe present: $found"
           } else {
-            Write-Warning "whisper-cli.exe not found - listing whisper-cpp/ for debugging:"
+            Write-Error "whisper-cli.exe not found - postinstall download failed; aborting release"
             Get-ChildItem -Recurse whisper-cpp -ErrorAction SilentlyContinue | Select-Object FullName
+            exit 1
           }
 
       - name: Lint + smoke test

@@ -23,7 +23,19 @@ const localesDir = path.join(__dirname, '..', 'locales');
 const functions = require(path.join(localesDir, 'i18n.functions.js'));
 
 // Keep this order stable for a deterministic, diff-friendly output.
-const LANGS = ['ko', 'en', 'ja', 'zh', 'pl'];
+// 선호 순서를 먼저, 나머지는 알파벳순으로 뒤에 붙인다(새 로케일 자동 포함).
+const PREFERRED_LANGS = ['ko', 'en', 'ja', 'zh', 'pl'];
+const LANGS = (() => {
+  const files = fs.readdirSync(localesDir).filter((f) => f.endsWith('.json'));
+  const fromDisk = files.map((f) => f.replace(/\.json$/, ''));
+  const ordered = PREFERRED_LANGS.filter((l) => fromDisk.includes(l));
+  for (const l of fromDisk) if (!ordered.includes(l)) ordered.push(l);
+  return ordered;
+})();
+if (LANGS.length === 0) {
+  console.error('[i18n] no locales/*.json found — nothing to build.');
+  process.exit(1);
+}
 
 function serialize(jsonNode, fnNode, indent) {
   const keys = [...new Set([...Object.keys(jsonNode || {}), ...Object.keys(fnNode || {})])];

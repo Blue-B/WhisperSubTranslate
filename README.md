@@ -117,6 +117,10 @@ Everything stays local under your user data folder. Nothing is uploaded.
 
 API keys are stored locally with OS-level safe storage, and the config is never committed or bundled. Job history is optional (toggle in Settings) and capped at 200 entries.
 
+### Portable data layout
+
+By default models, caches, and settings live under `%APPDATA%` (system SSD). To keep everything on a USB stick / external drive, create a `portable-data/` folder next to the executable (or set the `WHISPER_PORTABLE_DATA` environment variable to a folder path) — the app then redirects its `userData` there.
+
 ## Contributing
 
 Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch

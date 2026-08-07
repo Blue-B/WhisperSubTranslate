@@ -55,6 +55,10 @@ async function getLatestRelease() {
     const options = {
       headers: { 'User-Agent': 'WhisperSubTranslate-Installer' },
     };
+    // CI(릴리스 워크플로)에서 GITHUB_TOKEN이 주어지면 API rate limit을 높인다.
+    if (process.env.GITHUB_TOKEN) {
+      options.headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+    }
 
     https
       .get(GITHUB_API, options, (res) => {

@@ -179,10 +179,41 @@ function abortTranslation() {
   }
 }
 
-async function acquireTranslateLock() {
-  return await new Promise((resolve) => {
+async function acquireTranslateLock(signal = null) {
+  return await new Promise((resolve, reject) => {
     const prev = _translateMutex;
-    _translateMutex = new Promise((release) => prev.then(() => resolve(release)));
+    let aborted = false;
+
+    const onAbort = () => {
+      if (aborted) return;
+      aborted = true;
+      reject(signal?.reason || new Error('ABORTED: Translation stopped by user'));
+    };
+
+    // 대기 중 abort가 오면 즉시 reject할 수 있도록 리스너를 락 획득 전에 등록한다.
+    // (이전엔 prev.then 안에서 등록해 락 대기 중에는 abort가 통하지 않았다)
+    if (signal) {
+      if (signal.aborted) {
+        aborted = true;
+        reject(signal.reason || new Error('ABORTED: Translation stopped by user'));
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
+    // 체인: prev가 resolve되면(=이전 보유자가 release) 이번 대기자가 락을 받는다.
+    // 이미 abort로 거절된 대기자는 락을 받는 순간 즉시 release해
+    // 뒤따르는 대기자들의 체인을 끊지 않는다.
+    _translateMutex = new Promise((release) => {
+      prev.then(() => {
+        if (aborted) {
+          release();
+          return;
+        }
+        signal?.removeEventListener('abort', onAbort);
+        resolve(release);
+      });
+    });
   });
 }
 
@@ -314,8 +345,7 @@ async function _downloadModelImpl(onProgress, signal, modelId) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const abortError = () =>
-      signal?.reason instanceof Error ? signal.reason : new Error('Download cancelled');
+    const abortError = () => (signal?.reason instanceof Error ? signal.reason : new Error('Download cancelled'));
     const fail = (error) => {
       if (settled) return;
       settled = true;
@@ -457,14 +487,18 @@ async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = n
  * @param {string} modelId - '1.8b' | '7b'
  */
 async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAULT_MODEL_ID) {
-  const release = await acquireTranslateLock();
+  // 락 대기 중에도 사용자 중지가 통하도록 컨트롤러를 먼저 등록한다.
   const controller = new AbortController();
   _activeAbortController = controller;
   try {
-    return await _translateLocalImpl(text, targetLang, device, modelId, controller.signal);
+    const release = await acquireTranslateLock(controller.signal);
+    try {
+      return await _translateLocalImpl(text, targetLang, device, modelId, controller.signal);
+    } finally {
+      release();
+    }
   } finally {
     if (_activeAbortController === controller) _activeAbortController = null;
-    release();
   }
 }
 

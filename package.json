@@ -129,7 +129,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^42.3.0",
+    "electron": "^43.3.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
@@ -163,6 +163,8 @@
   "overrides": {
     "@electron/asar": "^4.2.0",
     "@electron/get": "^5.0.0",
+    "adm-zip": "^0.6.0",
+    "tar": "^7.5.21",
     "temp": {
       "rimraf": "^6.1.3"
     }
