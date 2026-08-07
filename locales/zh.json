@@ -96,6 +96,7 @@
     "whisper-small": "快速字幕提取。适合日常使用。",
     "whisper-medium": "准确度与速度平衡。默认推荐。",
     "whisper-large-v3-turbo": "Large精度+8倍速度。高性能GPU推荐。",
+    "whisper-large-v3": "最准确的转写。长视频同步偏移、较慢 (F16 约3.1GB)。",
     "whisper-large-v2-sync": "修复对不上字幕的独立引擎(Faster-Whisper)。对非英语(日/韩/中)最准确，英语用 large-v3-turbo 即可。遵循设备选择。GPU约4.5GB，较慢。",
     "whisper-large-v2-sync-lite": "用 int8 轻量运行精密的同一文件。显存约3GB，适合低端 GPU，无需额外下载。同步质量几乎相同。"
   },
@@ -266,6 +267,7 @@
     "whisper-small": "Whisper · Small",
     "whisper-medium": "Whisper · Medium",
     "whisper-large-v3-turbo": "Whisper · Large v3 Turbo",
+    "whisper-large-v3": "Whisper · Large v3",
     "whisper-large-v2-sync": "Whisper · Large v2 同步",
     "whisper-large-v2-sync-lite": "Whisper · Large v2 同步 轻量"
   },

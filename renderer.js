@@ -23,6 +23,7 @@ let _stoppedAt = 0; // timestamp when stopProcessing() was called
 // 세션 epoch: startProcessing 진입 시 증가. 이전 세션의 비동기 콜백/이벤트는
 // 캠처한 epoch와 현재 epoch가 다르면 무시한다 (중지 후 재시작 stale 이벤트 방지).
 let _processingEpoch = 0;
+let _lastFocusedBeforeModal = null; // 설정 모달 열기 직전 포커스 (닫을 때 복원용)
 let _maxTranslatedCurrent = 0; // monotonic counter for parallel translation progress display
 let _curLangIndex = 0; // 다국어 번역 시 현재 언어 순번(변경되면 X/total 카운터 리셋)
 
@@ -2935,7 +2936,13 @@ if (window?.electronAPI) {
         }
 
         // 단일 파일 처리 완료 후 잠시 대기 (메모리 정리 시간 확보)
+        const completeEpoch = _processingEpoch; // 완료 콜백 epoch 캡처 (중지/재시작 시 무효화)
         setTimeout(async () => {
+          // 중지/재시작으로 epoch가 바뀌었으면 stale 콜백이므로 무시한다.
+          if (completeEpoch !== _processingEpoch) {
+            console.log('[onTranslationProgress] stale completed callback ignored (epoch mismatch)');
+            return;
+          }
           try {
             console.log('[onTranslationProgress] completed setTimeout executing, isProcessing:', isProcessing);
             updateQueueDisplay();
@@ -2965,6 +2972,8 @@ if (window?.electronAPI) {
 
               // UX: 짧은 지연 후 100%로 마무리
               setTimeout(() => {
+                // 이 콜백도 stale이면 (완료 도중 중지/재시작) 토스트/사운드를 건드리지 않는다.
+                if (completeEpoch !== _processingEpoch) return;
                 const d = I18N[currentUiLang];
                 if (stoppedCount > 0 || (_stoppedAt && Date.now() - _stoppedAt < 10000)) {
                   showToast(d.allStopped || 'Processing stopped.');
@@ -3777,6 +3786,9 @@ function initSettingsModal() {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if (e.target && e.target.isContentEditable) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // 모달이 열려 있으면 뷰 전환 단축키를 무시한다 (포커스 트랩이 우선).
+    const settingsModalOpen = document.getElementById('settingsModal')?.classList.contains('active');
+    if (settingsModalOpen) return;
     if (e.key === '1') setView('workspace');
     else if (e.key === '2') setView('history');
     else if (e.key === '3') setView('models');
@@ -3817,6 +3829,31 @@ function initSettingsModal() {
   // 설정 모달 닫기
   closeSettingsBtn.addEventListener('click', () => {
     hideSettingsModal();
+  });
+
+  // 모달 열림 중 키보드: ESC 닫기 + 포커스 트랩 (Tab 순환)
+  settingsModal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      hideSettingsModal();
+      return;
+    }
+    if (e.key === 'Tab') {
+      // 포커스 트랩: 모달 안의 포커스 가능 요소 사이에서만 순환
+      const focusables = settingsModal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
   });
 
   // 모달 외부 클릭시 닫기
@@ -3935,6 +3972,8 @@ function initSettingsModal() {
 function showSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
+    // 포커스 복원용: 열기 직전 활성 요소 저장
+    _lastFocusedBeforeModal = document.activeElement || null;
     modal.classList.add('active');
     // 모달이 열릴 때마다 현재 설정값 반영
     const soundEnabledCheckbox = document.getElementById('soundEnabledCheckbox');
@@ -3964,6 +4003,17 @@ function showSettingsModal() {
       } else {
         soundVolumeRow.classList.remove('disabled');
       }
+    }
+    // 포커스를 모달 안으로 이동 (키보드 사용자가 모달 밖에 계속 있지 않게)
+    const closeBtn = document.getElementById('closeSettingsBtn');
+    const firstFocusable = settingsModal.querySelector(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const target = closeBtn || firstFocusable;
+    if (target && typeof target.focus === 'function') {
+      try {
+        target.focus();
+      } catch (_e) {}
     }
     // 히스토리 토글 반영
     const historyChk = document.getElementById('historyEnabledCheckbox');
@@ -4023,6 +4073,14 @@ function hideSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
     modal.classList.remove('active');
+    // 모달을 열었던 요소로 포커스 복원 (키보드 사용자 컨텍스트 유지)
+    const prev = _lastFocusedBeforeModal;
+    _lastFocusedBeforeModal = null;
+    if (prev && typeof prev.focus === 'function') {
+      try {
+        prev.focus();
+      } catch (_e) {}
+    }
     // 상태 메시지 초기화
     const status = document.getElementById('apiKeyStatus');
     if (status) status.style.display = 'none';
@@ -5512,6 +5570,17 @@ async function renderModels() {
       size: '~1.6 GB',
       vram: '~2 GB',
       speedKey: 'fast',
+      category: 'asr',
+      tag: 'ASR',
+    },
+    {
+      id: 'whisper-large-v3',
+      whisperKey: 'large-v3',
+      name: 'Whisper · Large v3',
+      desc: 'Most accurate ASR model (F16, slower).',
+      size: '~3.1 GB',
+      vram: '~4 GB',
+      speedKey: 'slow',
       category: 'asr',
       tag: 'ASR',
     },
