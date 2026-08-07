@@ -44,6 +44,7 @@
   "translationTranslating": "翻訳中...",
   "translationCompleted": "翻訳完了！",
   "translationFailed": "翻訳失敗: ",
+  "insecureStorageWarning": "[セキュリティ警告] OSキーリング(safeStorage)が利用できないため、APIキーがOSレベルの暗号化なしで保存されました。このデバイスにアクセスできるプログラムがキーを読み取る可能性があります。",
   "myMemoryQuotaExceeded": "MyMemory の1日の上限を超えました。明日再試行するか、DeepL/OpenAI をご利用ください。",
   "errorGpuMemory": "GPUメモリ不足またはドライバーの問題",
   "errorProcessCrash": "プロセスが異常終了しました（メモリ不足の可能性）",

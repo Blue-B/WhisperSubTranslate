@@ -44,6 +44,7 @@
   "translationTranslating": "번역 중...",
   "translationCompleted": "번역 완료!",
   "translationFailed": "번역 실패: ",
+  "insecureStorageWarning": "[보안 경고] OS 키링(safeStorage)을 사용할 수 없어 API 키가 안전하지 않은 방식(AES)으로 저장되었습니다. 이 기기에 접근할 수 있는 프로그램이 키를 읽을 수 있습니다.",
   "myMemoryQuotaExceeded": "MyMemory 일일 한도 초과. 내일 다시 시도하거나 DeepL/OpenAI를 사용하세요.",
   "errorGpuMemory": "GPU 메모리 부족 또는 드라이버 문제",
   "errorProcessCrash": "프로세스가 비정상적으로 종료됨 (메모리 부족 가능성)",
