@@ -55,6 +55,7 @@
       "!node_modules/**/{*.md,*.markdown,LICENSE*,test,tests,__tests__,*.map}",
       "!node_modules/@node-llama-cpp/linux-*/**",
       "!node_modules/@node-llama-cpp/win-arm64/**",
+      "!node_modules/@node-llama-cpp/mac-*/**",
       "!node_modules/ffprobe-static/bin/linux/**",
       "!node_modules/ffprobe-static/bin/darwin/**",
       "!node_modules/7zip-bin/linux/**",
