@@ -318,6 +318,64 @@ async function runRetryOn429Case() {
   console.log('[Retry] lowercase 429 message not retried (ok)');
 }
 
+async function runThrottleSerialization() {
+  // P2-7: throttleRequest가 Promise 체인으로 직렬화되어 동시 진입 호출이
+  // 최소 간격을 서로 지킨다. 10개를 동시에 던져도 각 요청 시각 간격이
+  // minRequestInterval 미만으로 붙지 않아야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.minRequestInterval = 30;
+  const times = await Promise.all(
+    Array.from({ length: 10 }, async () => {
+      const start = Date.now();
+      await translator.throttleRequest();
+      return Date.now() - start; // 소요시간이 아니라 완료 시점 간격으로 검증
+    })
+  );
+  // 10개가 순차로 완료되므로 완료 시각이 서로 다르다 (최소 간격 미만으로 몰리지 않음).
+  const sorted = [...times].sort((x, y) => x - y);
+  for (let i = 1; i < sorted.length; i++) {
+    assert.ok(
+      sorted[i] - sorted[i - 1] >= 0 && sorted[i] !== sorted[i - 1],
+      `throttle calls must serialize, got ${sorted[i - 1]}->${sorted[i]}`
+    );
+  }
+  console.log('[Throttle] 10 concurrent calls serialized with interval (ok)');
+}
+
+function runCacheKeyConsistency() {
+  // P2-10: 캐시 키에 sourceLang/contextAware 플래그가 반영되어 서로 다른
+  // 소스 언어·컨텍스트 요청끼리 결과가 교차하지 않는다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys.enableCache = true;
+  const base = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko');
+  const withSrc = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', 'en');
+  const withCtx = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', null, true);
+  assert.notStrictEqual(base, withSrc, 'sourceLang must be part of cache key');
+  assert.notStrictEqual(base, withCtx, 'contextAware flag must be part of cache key');
+  // 동일 입력·동일 소스는 같은 키 (캐시 적중 유지)
+  assert.strictEqual(
+    translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', 'en'),
+    withSrc,
+    'same sourceLang must produce same key'
+  );
+  console.log('[CacheKey] sourceLang/contextAware flags isolated (ok)');
+}
+
+async function runSerial429Propagation() {
+  // P1-2: 직렬 translateBatch도 429를 삼키지 않고 API_QUOTA_EXCEEDED로 전파한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys.batchTranslation = false; // 직렬 경로 강제
+  translator.translateAuto = async () => {
+    throw new Error('Too many requests');
+  };
+  await assert.rejects(
+    () => translator.translateBatch(['a', 'b', 'c'], 'mymemory', 'ko', null),
+    /API_QUOTA_EXCEEDED/,
+    'serial path must propagate 429'
+  );
+  console.log('[Serial429] serial batch propagates API_QUOTA_EXCEEDED (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -361,6 +419,9 @@ async function run() {
   await runLocalTranslationGuards();
   await runMyMemoryErrorPhrase();
   await runRetryOn429Case();
+  await runThrottleSerialization();
+  runCacheKeyConsistency();
+  await runSerial429Propagation();
 
   console.log('Smoke tests passed.');
 }

@@ -598,12 +598,21 @@ class EnhancedSubtitleTranslator {
   }
 
   // Cache system with per-file isolation (파일별 캐시 격리 시스템)
-  getCacheKey(text, method, targetLang) {
+  getCacheKey(text, method, targetLang, sourceLang = null, contextAware = false) {
     // 파일별 캐시 격리: 파일 ID를 캐시 키에 포함
     const filePrefix = this.currentFileId ? `${this.currentFileId}_` : '';
     // text.length를 키에 포함해 32비트 해시 충돌 시 다른 텍스트의 번역이
     // 반환되는 것을 막는다 (같은 길이+같은 해시만 충돌 → 사실상 제거).
-    return `${filePrefix}${method}_${targetLang}_${text.length}_${this.hashString(text)}`;
+    // sourceLang/contextAware는 선택 플래그다: 소스 언어가 다른 요청끼리
+    // 번역 결과가 교차하지 않고, 컨텍스트(문맥) 번역 결과가 일반 번역과
+    // 섞이지 않게 한다. 기본값이 null/false라 기존 호출은 동일 키를 쓴다.
+    const flags = [
+      sourceLang && sourceLang !== 'auto' ? `sl:${sourceLang}` : '',
+      contextAware ? 'ctx:1' : '',
+    ]
+      .filter(Boolean)
+      .join('_');
+    return `${filePrefix}${method}_${targetLang}_${text.length}_${flags ? flags + '_' : ''}${this.hashString(text)}`;
   }
 
   hashString(str) {
@@ -616,9 +625,9 @@ class EnhancedSubtitleTranslator {
     return hash.toString();
   }
 
-  getCachedTranslation(text, method, targetLang) {
+  getCachedTranslation(text, method, targetLang, sourceLang = null, contextAware = false) {
     if (!this.apiKeys.enableCache) return null;
-    const key = this.getCacheKey(text, method, targetLang);
+    const key = this.getCacheKey(text, method, targetLang, sourceLang, contextAware);
     const cached = this.translationCache.get(key);
 
     // LRU: Move to end (most recently used) (최근 사용으로 갱신)
@@ -633,7 +642,7 @@ class EnhancedSubtitleTranslator {
     return cached;
   }
 
-  setCachedTranslation(text, method, targetLang, translation) {
+  setCachedTranslation(text, method, targetLang, translation, sourceLang = null, contextAware = false) {
     if (!this.apiKeys.enableCache) return;
 
     // 빈 번역 결과는 캐시하지 않음
@@ -642,7 +651,7 @@ class EnhancedSubtitleTranslator {
       return;
     }
 
-    const key = this.getCacheKey(text, method, targetLang);
+    const key = this.getCacheKey(text, method, targetLang, sourceLang, contextAware);
 
     // LRU: Remove if exists, then add to end (최신으로 갱신)
     if (this.translationCache.has(key)) {
@@ -660,15 +669,24 @@ class EnhancedSubtitleTranslator {
   }
 
   // API rate limiting (API 요청 제한)
+  // Promise 체인으로 직렬화: 동시 진입한 여러 호출(병렬 배치)이 lastRequestTime을
+  // 함께 읽어 같은 시각에 발사되는 경합을 막는다. 각 호출은 이전 호출이
+  // 최소 간격을 확보하고 끝난 뒤에만 진행된다.
   async throttleRequest() {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      await this.sleep(this.minRequestInterval - timeSinceLastRequest);
-    }
-
-    this.lastRequestTime = Date.now();
+    const self = this;
+    const run = async () => {
+      const now = Date.now();
+      const timeSinceLastRequest = now - self.lastRequestTime;
+      if (timeSinceLastRequest < self.minRequestInterval) {
+        await self.sleep(self.minRequestInterval - timeSinceLastRequest);
+      }
+      self.lastRequestTime = Date.now();
+    };
+    const prev = this._throttleChain || Promise.resolve();
+    const next = prev.then(run, run);
+    // 체인에서 빠진 경우에도 반드시 마무리되도록 참조를 갱신한다.
+    this._throttleChain = next.catch(() => {});
+    return next;
   }
 
   sleep(ms) {
@@ -740,7 +758,7 @@ class EnhancedSubtitleTranslator {
     }
 
     // 캐시 확인
-    const cached = this.getCachedTranslation(text, 'deepl', targetLang);
+    const cached = this.getCachedTranslation(text, 'deepl', targetLang, sourceLang);
     if (cached) {
       console.log('[DeepL Cache Hit]', {
         text: text.substring(0, 30) + '...',
@@ -784,7 +802,7 @@ class EnhancedSubtitleTranslator {
       });
 
       // 결과 캐시
-      this.setCachedTranslation(text, 'deepl', targetLang, translation);
+      this.setCachedTranslation(text, 'deepl', targetLang, translation, sourceLang);
       return translation;
     } catch (error) {
       console.error('[DeepL Translation Failed]', {
@@ -979,7 +997,7 @@ class EnhancedSubtitleTranslator {
   async translateWithLLM(text, targetLang, provider, sourceLang = null) {
     if (!provider) throw new Error('Unknown translation provider.');
 
-    const cached = this.getCachedTranslation(text, provider.cacheKey, targetLang);
+    const cached = this.getCachedTranslation(text, provider.cacheKey, targetLang, sourceLang);
     if (cached) {
       console.log(`[${provider.label} Cache Hit]`, { text: text.substring(0, 30) + '...', cached: true });
       return cached;
@@ -1030,7 +1048,7 @@ class EnhancedSubtitleTranslator {
         time: `${Date.now() - startTime}ms`,
       });
 
-      this.setCachedTranslation(text, provider.cacheKey, targetLang, translation);
+      this.setCachedTranslation(text, provider.cacheKey, targetLang, translation, sourceLang);
       return translation;
     } catch (error) {
       console.error(`[${provider.label} Error]`, {
@@ -1066,7 +1084,7 @@ class EnhancedSubtitleTranslator {
   // 개선된 MyMemory 번역
   async translateWithMyMemory(text, targetLang = 'ko', sourceLang = 'auto') {
     // 캐시 확인
-    const cached = this.getCachedTranslation(text, 'mymemory', targetLang);
+    const cached = this.getCachedTranslation(text, 'mymemory', targetLang, sourceLang);
     if (cached) return cached;
 
     await this.throttleRequest();
@@ -1078,7 +1096,7 @@ class EnhancedSubtitleTranslator {
       result = result.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
 
       // 결과 캐시
-      this.setCachedTranslation(text, 'mymemory', targetLang, result);
+      this.setCachedTranslation(text, 'mymemory', targetLang, result, sourceLang);
       return result;
     } catch (error) {
       this.logError('MyMemory translation failed', error);
@@ -1367,7 +1385,11 @@ ${lines}`;
 
         const cleaned = translations.map((text) => this.sanitizeTranslationText(text));
         cleaned.forEach((translation, index) => {
-          this.setCachedTranslation(batch[index], selectedMethod, targetLang, translation);
+          // 컨텍스트(문맥) 결과는 일반 LLM 경로와 같은 provider.cacheKey로 기록하되
+          // ctx:1 플래그로 구분한다 — 이전엔 'chatgpt' 등 일반 method 이름으로 써서
+          // 아무도 읽지 않는 키로 낭비됐다. (provider.cacheKey = 'chatgpt:모델명')
+          const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
+          this.setCachedTranslation(batch[index], cacheMethod, targetLang, translation, _sourceLang, true);
         });
 
         results.push(...cleaned);
@@ -1440,6 +1462,19 @@ ${lines}`;
             `[Batch Failed] ${i + 1}/${texts.length}: "${texts[i].substring(0, 40)}..." - ${error.message}`
           );
 
+          // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
+          // (병렬 경로와 동일 판정 — 직렬 경로도 같은 규칙으로 동작하게 한다)
+          const errMsg = String(error?.message || '');
+          if (
+            errMsg.includes('429') ||
+            errMsg.includes('quota') ||
+            errMsg.toLowerCase().includes('too many requests') ||
+            errMsg.includes('RESOURCE_EXHAUSTED') ||
+            errMsg.includes('API_QUOTA_EXCEEDED')
+          ) {
+            throw new Error('API_QUOTA_EXCEEDED: ' + errMsg);
+          }
+
           // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
           let retryResult = texts[i]; // 기본값은 원문
           // 로컬(오프라인)을 고른 경우 온라인 API(mymemory/chatgpt)로 폴백하지 않는다.
@@ -1472,6 +1507,17 @@ ${lines}`;
                 break; // 성공하면 재시도 중단
               } catch (retryError) {
                 console.error(`[Retry ${retry} Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
+                // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
+                const retryMsg = String(retryError?.message || '');
+                if (
+                  retryMsg.includes('429') ||
+                  retryMsg.includes('quota') ||
+                  retryMsg.toLowerCase().includes('too many requests') ||
+                  retryMsg.includes('RESOURCE_EXHAUSTED') ||
+                  retryMsg.includes('API_QUOTA_EXCEEDED')
+                ) {
+                  throw new Error('API_QUOTA_EXCEEDED: ' + retryMsg);
+                }
                 if (retry === 2) {
                   console.warn(`[Give Up] ${i + 1}/${texts.length}: All retries failed - keeping original`);
                 }
