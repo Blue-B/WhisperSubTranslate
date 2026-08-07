@@ -291,6 +291,8 @@
   "customProviderNameLabel": "Name",
   "customProviderFormatLabel": "API format",
   "customProviderModelLabel": "Model",
+  "customProviderBaseUrlLabel": "Base URL",
+  "customProviderApiKeyLabel": "API Key",
   "customProviderPromptLabel": "Prompt (optional)",
   "modelRefreshTitle": "Load model list",
   "modelsLoadedSuffix": " models loaded.",

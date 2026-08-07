@@ -291,6 +291,8 @@
   "customProviderNameLabel": "名前",
   "customProviderFormatLabel": "API 形式",
   "customProviderModelLabel": "モデル",
+  "customProviderBaseUrlLabel": "ベースURL",
+  "customProviderApiKeyLabel": "APIキー",
   "customProviderPromptLabel": "プロンプト（任意）",
   "modelRefreshTitle": "モデル一覧を読み込む",
   "modelsLoadedSuffix": "件のモデルを読み込みました。",

@@ -582,7 +582,8 @@ function _appendLogLine(output, line) {
         _lastLog.groupEl = el;
       }
       const extras = _lastLog.count - 2;
-      _lastLog.groupEl.textContent = `${_ts()}  ${cat.icon}  (... 외 ${extras}개 항목)`;
+      const foldFn = I18N[currentUiLang]?.logGroupMoreItems;
+      _lastLog.groupEl.textContent = `${_ts()}  ${cat.icon}  (... ${foldFn ? foldFn(extras) : `외 ${extras}개 항목`})`;
       return;
     }
   } else {
@@ -1603,6 +1604,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // 파일 선택 버튼 이벤트
   selectFileBtn.onclick = selectFile;
 
+  // 드롭존 전체 클릭도 파일 선택을 연다 (안내 문구는 "드래그 또는 클릭"이라
+  // 클릭 동작이 없으면 안내와 불일치한다). 버튼 클릭이 이벤트 버블로 중복
+  // 다이얼로그를 열지 않게 버튼에서는 stopPropagation 한다.
+  dropZone.onclick = (e) => {
+    if (isProcessing) return;
+    if (e.target.closest('#selectFileBtn')) return; // 버튼은 자기 핸들러에 맡긴다
+    if (e.target.closest('.drop-mascot-frame')) return;
+    selectFile();
+  };
+  selectFileBtn.addEventListener('click', (e) => e.stopPropagation());
+
   // 대기열 관리 버튼들
   document.getElementById('stopBtn').onclick = stopProcessing;
   document.getElementById('clearQueueBtn').onclick = clearQueue;
@@ -1922,6 +1934,11 @@ function rebuildLanguageSelectOptions(lang) {
   if (codes.includes(originalValue)) sel.value = originalValue;
 }
 
+// GPU 비호환 경고 마크업을 캐시해 언어 변경/설정 로드가 deviceStatus를 덮어써도
+// 경고가 소실되지 않게 한다. checkGpuCompatibility가 설정하고
+// rebuildDeviceSelectOptions가 있을 때 복원한다.
+let _gpuWarningHtml = '';
+
 function rebuildDeviceSelectOptions(lang) {
   const sel = document.getElementById('deviceSelect');
   if (!sel) return;
@@ -1933,7 +1950,10 @@ function rebuildDeviceSelectOptions(lang) {
   });
   sel.value = original;
   const deviceStatus = document.getElementById('deviceStatus');
-  if (deviceStatus) setStatusMarkup(deviceStatus, I18N[lang].deviceStatusHtml);
+  if (deviceStatus) {
+    // 비호환 GPU 경고가 있으면 기본 상태 문구 대신 경고를 유지한다.
+    setStatusMarkup(deviceStatus, _gpuWarningHtml || I18N[lang].deviceStatusHtml);
+  }
 }
 
 function rebuildTranslationSelectOptions(lang) {
@@ -1978,12 +1998,13 @@ async function checkGpuCompatibility() {
   const lang = I18N[currentUiLang];
   const deviceStatus = document.getElementById('deviceStatus');
   if (!info.cudaCompatible && deviceStatus) {
-    setStatusMarkup(
-      deviceStatus,
-      lang.gpuIncompatibleHtml
-        ? lang.gpuIncompatibleHtml(info.name, info.computeCap)
-        : `<strong style="color:#e74c3c;">⚠ ${info.name} (Compute ${info.computeCap})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`
-    );
+    _gpuWarningHtml = lang.gpuIncompatibleHtml
+      ? lang.gpuIncompatibleHtml(info.name, info.computeCap)
+      : `<strong style="color:#e74c3c;">⚠ ${info.name} (Compute ${info.computeCap})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`;
+    setStatusMarkup(deviceStatus, _gpuWarningHtml);
+  } else {
+    // 호환 GPU면 경고 캐시를 비워 이후 언어 변경 시 기본 상태 문구를 보여준다.
+    _gpuWarningHtml = '';
   }
 }
 
@@ -2302,6 +2323,12 @@ function applyI18n(lang) {
   rebuildTranslationSelectOptions(currentUiLang);
   rebuildTargetLanguageNames(currentUiLang);
   updateProgressInitial(currentUiLang);
+
+  // 내장 공급자 카드의 Base URL 라벨도 새 언어로 갱신한다.
+  const baseUrlLabel = I18N[currentUiLang]?.customProviderBaseUrlLabel || 'Base URL';
+  document.querySelectorAll('#openaiBaseUrlLabel, #geminiBaseUrlLabel, #claudeBaseUrlLabel').forEach((el) => {
+    el.textContent = baseUrlLabel;
+  });
 
   updateModelSelect();
   updateQueueDisplay(); // 언어 변경 시 큐 표시도 즉시 업데이트
@@ -3356,6 +3383,8 @@ function buildCustomSelect(selectEl) {
   trigger.className = 'custom-select-trigger';
   trigger.setAttribute('tabindex', '0');
   trigger.setAttribute('role', 'combobox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-haspopup', 'listbox');
 
   const valueEl = document.createElement('span');
   valueEl.className = 'custom-select-value';
@@ -3445,10 +3474,32 @@ function buildCustomSelect(selectEl) {
     }
     dropdown.style.display = '';
     wrapper.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
   }
 
   function close() {
     wrapper.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+  }
+
+  // 키보드 탐색: 현재 강조/선택된 옵션 인덱스를 트래킹해 ArrowUp/Down으로 이동하고
+  // Enter로 확정한다. dropdown의 옵션은 refreshOptions()에서 재생성되므로 그때 읽는다.
+  function focusOptionByIndex(index) {
+    const items = Array.from(dropdown.querySelectorAll('.custom-select-option:not(.disabled)'));
+    if (!items.length) return;
+    const clamped = Math.max(0, Math.min(index, items.length - 1));
+    items.forEach((it, i) => {
+      it.classList.toggle('kbd-active', i === clamped);
+      if (i === clamped) it.setAttribute('aria-selected', 'true');
+      else it.removeAttribute('aria-selected');
+    });
+    return clamped;
+  }
+
+  function activeOptionIndex() {
+    const items = Array.from(dropdown.querySelectorAll('.custom-select-option:not(.disabled)'));
+    const current = items.findIndex((it) => it.classList.contains('kbd-active'));
+    return current >= 0 ? current : Math.max(0, items.findIndex((it) => it.classList.contains('selected')));
   }
 
   trigger.addEventListener('click', (e) => {
@@ -3461,10 +3512,37 @@ function buildCustomSelect(selectEl) {
     if (selectEl.disabled) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      open();
+      if (!wrapper.classList.contains('open')) {
+        open();
+        focusOptionByIndex(activeOptionIndex());
+      } else {
+        // 열린 상태에서 Enter/Space: 현재 강조된 옵션을 선택하고 닫는다.
+        const active = dropdown.querySelector('.custom-select-option.kbd-active');
+        if (active && !active.classList.contains('disabled')) {
+          selectEl.value = active.dataset.value;
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        close();
+      }
+      return;
     }
-    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!wrapper.classList.contains('open')) {
+        open();
+        focusOptionByIndex(activeOptionIndex());
+      }
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      focusOptionByIndex(activeOptionIndex() + dir);
+      return;
+    }
+    if (e.key === 'Escape') {
+      close();
+    }
   });
+
+  // Tab/blur 시 드롭다운을 닫아 키보드 포커스가 떠난 뒤에도 열린 채 남지 않게 한다.
+  trigger.addEventListener('blur', () => close());
 
   // 카드 클릭 위임은 initCustomSelects 내 본문 delegation으로 처리함. 여기서는 cursor만 설정.
   const clickArea = wrapper.closest('#localModelGroup, .setting-card');
@@ -4498,11 +4576,11 @@ function createCustomProviderCard(provider) {
   addField('format', d.customProviderFormatLabel || 'API 형식', provider.format, {
     choices: ['openai', 'anthropic', 'gemini'],
   });
-  addField('baseUrl', 'Base URL', provider.baseUrl, {
+  addField('baseUrl', d.customProviderBaseUrlLabel || 'Base URL', provider.baseUrl, {
     wide: true,
     placeholder: 'https://openrouter.ai/api/v1',
   });
-  addField('apiKey', 'API Key', provider.apiKey, { password: true });
+  addField('apiKey', d.customProviderApiKeyLabel || 'API Key', provider.apiKey, { password: true });
   addField('model', d.customProviderModelLabel || '모델', provider.model, {
     placeholder: 'deepseek/deepseek-v3',
     list: modelListId,
