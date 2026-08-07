@@ -1946,10 +1946,19 @@ function rebuildLanguageSelectOptions(lang) {
   if (codes.includes(originalValue)) sel.value = originalValue;
 }
 
-// GPU 비호환 경고 마크업을 캐시해 언어 변경/설정 로드가 deviceStatus를 덮어써도
-// 경고가 소실되지 않게 한다. checkGpuCompatibility가 설정하고
-// rebuildDeviceSelectOptions가 있을 때 복원한다.
-let _gpuWarningHtml = '';
+// GPU 비호환 경고 정보를 언어와 분리해 캐시한다. HTML을 캐시하면 언어 변경 시
+// 이전 언어 텍스트가 그대로 복원되는 문제가 있다(F1). 언어별 문구는 표시 시점에
+// 현재 UI 언어로 생성한다.
+let _gpuWarningData = null; // { name, computeCap } | null
+
+// 현재 언어로 GPU 경고 마크업을 만든다. 경고가 없으면 null.
+function getGpuWarningMarkup(lang) {
+  if (!_gpuWarningData) return null;
+  const l = I18N[lang] || I18N[currentUiLang];
+  return l.gpuIncompatibleHtml
+    ? l.gpuIncompatibleHtml(_gpuWarningData.name, _gpuWarningData.computeCap)
+    : `<strong style="color:#e74c3c;">⚠ ${_gpuWarningData.name} (Compute ${_gpuWarningData.computeCap})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`;
+}
 
 function rebuildDeviceSelectOptions(lang) {
   const sel = document.getElementById('deviceSelect');
@@ -1964,7 +1973,8 @@ function rebuildDeviceSelectOptions(lang) {
   const deviceStatus = document.getElementById('deviceStatus');
   if (deviceStatus) {
     // 비호환 GPU 경고가 있으면 기본 상태 문구 대신 경고를 유지한다.
-    setStatusMarkup(deviceStatus, _gpuWarningHtml || I18N[lang].deviceStatusHtml);
+    // (경고는 데이터로 캐시되고 여기서 현재 언어로 생성된다 — 언어 변경 반영)
+    setStatusMarkup(deviceStatus, getGpuWarningMarkup(lang) || I18N[lang].deviceStatusHtml);
   }
 }
 
@@ -2007,16 +2017,14 @@ async function checkGpuCompatibility() {
   if (!window.electronAPI?.getGpuInfo) return;
   const info = await window.electronAPI.getGpuInfo();
   if (!info || !info.available) return;
-  const lang = I18N[currentUiLang];
   const deviceStatus = document.getElementById('deviceStatus');
   if (!info.cudaCompatible && deviceStatus) {
-    _gpuWarningHtml = lang.gpuIncompatibleHtml
-      ? lang.gpuIncompatibleHtml(info.name, info.computeCap)
-      : `<strong style="color:#e74c3c;">⚠ ${info.name} (Compute ${info.computeCap})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`;
-    setStatusMarkup(deviceStatus, _gpuWarningHtml);
+    // 언어 독립 데이터로 저장해 언어 변경 시 재생성할 수 있게 한다.
+    _gpuWarningData = { name: info.name, computeCap: info.computeCap };
+    setStatusMarkup(deviceStatus, getGpuWarningMarkup(currentUiLang));
   } else {
     // 호환 GPU면 경고 캐시를 비워 이후 언어 변경 시 기본 상태 문구를 보여준다.
-    _gpuWarningHtml = '';
+    _gpuWarningData = null;
   }
 }
 
@@ -3384,6 +3392,9 @@ if (window.electronAPI?.onLocalModelProgress) {
 }
 
 // ── Custom Dropdown ─────────────────────────────────────────────────────
+// 커스텀 셀렉트 옵션 id에 쓰는 전역 카운터 (aria-activedescendant 참조용, F3).
+let _customSelectSeq = 0;
+
 function buildCustomSelect(selectEl) {
   if (!selectEl || selectEl.dataset.customized) return;
   selectEl.dataset.customized = '1';
@@ -3418,6 +3429,7 @@ function buildCustomSelect(selectEl) {
 
   const dropdown = document.createElement('div');
   dropdown.className = 'custom-select-dropdown';
+  dropdown.setAttribute('role', 'listbox');
 
   wrapper.appendChild(trigger);
   wrapper.appendChild(dropdown);
@@ -3437,6 +3449,9 @@ function buildCustomSelect(selectEl) {
         'custom-select-option' + (opt.disabled ? ' disabled' : '') + (opt.value === selectEl.value ? ' selected' : '');
       item.textContent = opt.text;
       item.dataset.value = opt.value;
+      item.setAttribute('role', 'option');
+      // aria-selected는 실제 선택 상태에만 부여한다 (키보드 강조와 구분 — F3).
+      if (opt.value === selectEl.value) item.setAttribute('aria-selected', 'true');
       if (!opt.disabled) {
         item.addEventListener('mousedown', (e) => {
           e.preventDefault();
@@ -3447,6 +3462,7 @@ function buildCustomSelect(selectEl) {
       }
       dropdown.appendChild(item);
     });
+    dropdown.removeAttribute('aria-activedescendant');
   }
 
   function updateValue() {
@@ -3502,9 +3518,16 @@ function buildCustomSelect(selectEl) {
     const clamped = Math.max(0, Math.min(index, items.length - 1));
     items.forEach((it, i) => {
       it.classList.toggle('kbd-active', i === clamped);
-      if (i === clamped) it.setAttribute('aria-selected', 'true');
-      else it.removeAttribute('aria-selected');
+      // aria-selected는 실제 선택에만 쓰고, 키보드 강조는 aria-activedescendant로
+      // 표현한다 (화면낭독기가 '선택됨'과 '이동 중'을 구분하게 한다 — F3).
+      if (i === clamped) {
+        if (!it.id) it.id = `custom-select-opt-${++_customSelectSeq}`;
+        dropdown.setAttribute('aria-activedescendant', it.id);
+      }
     });
+    // 강조 옵션이 max-height(280px) 스크롤 밖이면 보이도록 스크롤한다 (F4).
+    const active = items[clamped];
+    if (active) active.scrollIntoView({ block: 'nearest' });
     return clamped;
   }
 

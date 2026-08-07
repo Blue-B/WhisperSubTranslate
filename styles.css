@@ -1837,6 +1837,15 @@ body::after {
   background: var(--accent-dim);
 }
 
+/* 키보드 탐색(ArrowUp/Down) 강조 — F2: 토글만 되고 스타일이 없어 화면에 안 보이던 것.
+   selected와 구분되도록 외곽선으로 표현한다 (selected는 점 마커+배경). */
+.custom-select-option.kbd-active {
+  background: var(--accent-dim);
+  color: var(--text-primary);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .custom-select-option.selected::before {
   content: '';
   width: 6px;
