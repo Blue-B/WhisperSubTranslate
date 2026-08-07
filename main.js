@@ -814,6 +814,10 @@ function getMediaDuration(inputPath) {
     ];
 
     const proc = spawn(ffprobePath, args, { windowsHide: true });
+    // stop/quit 시 즉시 종료되도록 추적 자식에 등록 (30초 타임아웃과 별개로 중단 대응).
+    if (proc?.pid) childProcessIds.add(proc.pid);
+    proc.once('close', () => childProcessIds.delete(proc.pid));
+    proc.once('error', () => childProcessIds.delete(proc.pid));
     let output = '';
 
     const probeTimeout = setTimeout(() => {
@@ -944,7 +948,8 @@ async function splitAudioToSegments(wavPath, duration) {
       segmentIndex++;
       currentStart += SEGMENT_DURATION; // 다음 세그먼트 시작 (오버랩 포함)
     } catch (err) {
-      // 분할 실패 시 이미 생성된 세그먼트 정리 후 원본으로 진행
+      // 분할 실패 시 이미 생성된 세그먼트 + 실패한 세그먼트의 부분 파일까지 정리 후 원본으로 진행
+      // (타임아웃 킬로 부분 파일만 남은 segment_*.wav가 temp에 쌓이는 것 방지)
       console.error('[Split] Segment creation failed:', err.message);
       for (const seg of segments) {
         try {
@@ -952,6 +957,11 @@ async function splitAudioToSegments(wavPath, duration) {
         } catch (_e) {
           /* ignore */
         }
+      }
+      try {
+        if (segmentPath && fs.existsSync(segmentPath)) fs.unlinkSync(segmentPath);
+      } catch (_e) {
+        /* ignore */
       }
       return [{ path: wavPath, startTime: 0, isOriginal: true }];
     }
@@ -1411,8 +1421,9 @@ function convertToWav(inputPath) {
       // 하드링크/채 복사본이 있으면 정리.
       cleanupStagedInput();
       if (isUserStopped) {
-        // 임시 WAV 정리
-        if (usingSafeTemp && fs.existsSync(wavPath)) {
+        // 임시 WAV 정리 — safeTemp가 아니어도(원본 옆에 앱이 만든 형제 wav이므로)
+        // 잘린 부분 파일이 남으면 mtime 재사용으로 손상 자막을 만들 수 있어 삭제한다.
+        if (fs.existsSync(wavPath)) {
           try {
             fs.unlinkSync(wavPath);
           } catch (_e) {
@@ -3552,7 +3563,17 @@ app.on('before-quit', (event) => {
     try {
       if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
     } catch (_e) {}
-    await localTranslator.unloadModel().catch(() => {});
+    // 번역 중이면 먼저 중단해 unloadModel의 뮤텍스 대기가 빨리 풀리게 한다.
+    // (translateLocal은 acquireTranslateLock에서 abort 시그널을 대기 중에도
+    // 즉시 반환하므로 선행 abort 없이는 수 분 블록될 수 있다)
+    try {
+      if (translator && typeof translator.abort === 'function') translator.abort();
+    } catch (_e) {}
+    // unloadModel은 15초 안에 끝내고, 초과하면 강제로 진행한다 (종료 보장).
+    await Promise.race([
+      localTranslator.unloadModel().catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, 15000)),
+    ]);
     // GPU 리셋은 비동기 1회 시도로 충분하다 — 정리가 실패해도 종료는 보장한다.
     await forceMemoryCleanup('cuda', true).catch(() => {});
     _isCleaningUp = false;
