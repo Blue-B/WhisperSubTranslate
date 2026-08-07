@@ -135,8 +135,7 @@ async function runModelDownloadAbort() {
 
     requestCount = 0;
     destroyed = false;
-    https.get = (_url, _options, callback) => {
-      const cb = typeof _options === 'function' ? _options : callback;
+    https.get = (_url, _options, _callback) => {
       const request = new EventEmitter();
       request.destroy = () => {
         destroyed = true;
@@ -265,9 +264,16 @@ async function runLocalTranslationGuards() {
   assert.ok(validOutput.includes('Christopher') && validOutput.includes('Goodbye'));
 
   const onlineProperName = new EnhancedSubtitleTranslator();
-  onlineProperName.translateBatch = async (texts) => texts;
-  const onlineProperNameOutput = await onlineProperName.translateSRTContent(makeSrt(['Christopher']), 'chatgpt', 'en');
+  // 고유명사 'Christopher'가 원문 유지로 남아도 나머지 줄이 번역되면
+  // PASSTHROUGH가 아니다 (이름 보존은 정상 동작).
+  onlineProperName.translateBatch = async (_texts) => ['Christopher', 'Hello', 'Good morning', 'Thank you', 'Goodbye'];
+  const onlineProperNameOutput = await onlineProperName.translateSRTContent(
+    makeSrt(['Christopher', 'Hola', 'Buenos días', 'Gracias', 'Adiós']),
+    'chatgpt',
+    'en'
+  );
   assert.ok(onlineProperNameOutput.includes('Christopher'));
+  assert.ok(onlineProperNameOutput.includes('Hello'));
 
   const onlinePassthrough = new EnhancedSubtitleTranslator();
   onlinePassthrough.translateBatch = async (texts) => texts;
@@ -381,7 +387,7 @@ async function runSerialRetry429Propagation() {
   const translator = new EnhancedSubtitleTranslator();
   translator.apiKeys.batchTranslation = false; // 직렬 경로 강제
   let calls = 0;
-  translator.translateAuto = async (text, method) => {
+  translator.translateAuto = async (_text, _method) => {
     calls++;
     if (calls === 1) throw new Error('ECONNRESET network blip'); // 일시 장애
     throw new Error('Too many requests'); // retry(폴백)에서 429
@@ -473,7 +479,7 @@ async function runParallelPathSourceLang() {
     maxConcurrent: 2,
   };
   let receivedSourceLang = null;
-  translator.translateAuto = async (text, method, targetLang, sourceLang) => {
+  translator.translateAuto = async (_text, _method, _targetLang, sourceLang) => {
     receivedSourceLang = sourceLang;
     return 'translated';
   };
@@ -578,6 +584,95 @@ async function runLocalContextPrecheck() {
   console.log('[LocalPrecheck] overlong input rejected before model load (ok)');
 }
 
+async function runPassthroughProperNounBalance() {
+  // F1: 고유명사/약어만 있는 원문(OK·NASA·R2D2)은 echo로 세지 않아
+  // 1줄 SRT에서도 PASSTHROUGH 하드 실패가 나지 않아야 한다. 반대로
+  // 'Hello' 같은 일반 단어가 echo로 돌아오면 무성 실패로 잡혀야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = { preferredService: 'mymemory' };
+  const srt = (text) => `1\n00:00:01,000 --> 00:00:02,000\n${text}\n`;
+  const runCase = async (text) => {
+    translator.translateBatch = async (texts) => texts.map((t) => t.trim()); // echo 시뮬레이션
+    return translator.translateSRTContent(srt(text), 'mymemory', 'ko');
+  };
+  // 약어/고유명사 1줄 echo → 성공 (PASSTHROUGH 아님)
+  await runCase('OK');
+  await runCase('NASA');
+  await runCase('R2D2');
+  // 일반 단어 1줄 echo → TRANSLATION_PASSTHROUGH
+  await assert.rejects(
+    () => runCase('Hello'),
+    /TRANSLATION_PASSTHROUGH/,
+    'single-line echo of a normal word must be flagged'
+  );
+  console.log('[Passthrough] proper-noun/acronym echo passes, normal word echo fails (ok)');
+}
+
+async function runPermanentErrorNoRetry() {
+  // F3: MyMemory 영구 오류(입력/설정 오류)는 translateWithRetry에서도
+  // 재시도 없이 즉시 전파되어야 한다 (translateAuto 레벨 3회 재호출 방지).
+  const translator = new EnhancedSubtitleTranslator();
+  translator.maxRetries = 3;
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      translator.translateWithRetry(async () => {
+        calls++;
+        throw new Error('MyMemory returned an error message instead of a translation (permanent, not retried): X');
+      }),
+    /permanent, not retried/,
+    'permanent error must propagate'
+  );
+  assert.strictEqual(calls, 1, 'permanent error must not be retried');
+  console.log('[PermanentError] MyMemory permanent error is not retried (ok)');
+}
+
+async function runAbortSafeRetry() {
+  // F4: 사용자 중지(ABORTED) 후 직렬 재시도가 유료 API(LLM)를 다시 호출하지 않는다.
+  // 시나리오: 첫 시도가 네트워크 오류로 실패하는 사이 사용자가 중지 → 재시도 진입 시
+  // abort 상태를 감지해 유료 서비스를 호출하지 않고 원문 유지.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    preferredService: 'mymemory',
+    openai: 'sk-test',
+    batchTranslation: false,
+  };
+  let llmCalls = 0;
+  let myMemoryCalls = 0;
+  translator.translateAuto = async () => {
+    // 첫 시도는 네트워크 오류로 실패하고, 그 사이 사용자가 중지했다.
+    translator._aborted = true;
+    throw new Error('ECONNRESET network blip');
+  };
+  translator.translateWithMyMemory = async () => {
+    myMemoryCalls++;
+    throw new Error('ECONNRESET');
+  };
+  translator.translateWithLLM = async () => {
+    llmCalls++;
+    return 'should not happen';
+  };
+  await translator.translateBatch(['hello'], 'mymemory', 'ko', 'en');
+  assert.strictEqual(llmCalls, 0, 'aborted retry must not call paid LLM API');
+  assert.strictEqual(myMemoryCalls, 0, 'aborted retry must not call any API');
+  console.log('[AbortSafe] aborted retry skips paid API calls (ok)');
+}
+
+async function runCustomPromptFingerprint() {
+  // F5: 커스텀 공급자는 custom.prompt가 바뀌면 캐시 키(지문)가 달라져야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    customProviders: [
+      { id: 'p1', name: 'P1', model: 'm1', apiKey: 'k', baseUrl: 'https://x.test/v1', prompt: 'prompt-A' },
+    ],
+  };
+  const keyA = translator.resolveProvider('custom:p1').cacheKey;
+  translator.apiKeys.customProviders[0].prompt = 'prompt-B';
+  const keyB = translator.resolveProvider('custom:p1').cacheKey;
+  assert.notStrictEqual(keyA, keyB, 'custom prompt change must invalidate cache key');
+  console.log('[CustomFp] custom prompt changes cache fingerprint (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
@@ -633,6 +728,10 @@ async function run() {
   await runLoopLevelQuotaContinue();
   await runDeepLUnsupportedTargetSkip();
   await runLocalContextPrecheck();
+  await runPassthroughProperNounBalance();
+  await runPermanentErrorNoRetry();
+  await runAbortSafeRetry();
+  await runCustomPromptFingerprint();
 
   console.log('Smoke tests passed.');
 }
