@@ -1391,9 +1391,7 @@ function convertToWav(inputPath) {
         if (isRf64) {
           const ds64 = wavBuf.indexOf('ds64', 12);
           riffSizeOk =
-            ds64 >= 0 &&
-            wavBuf.length >= ds64 + 16 &&
-            wavBuf.readBigUInt64LE(ds64 + 8) === BigInt(wavBuf.length - 8);
+            ds64 >= 0 && wavBuf.length >= ds64 + 16 && wavBuf.readBigUInt64LE(ds64 + 8) === BigInt(wavBuf.length - 8);
         } else {
           riffSizeOk = wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8;
         }
@@ -3629,7 +3627,12 @@ ipcMain.handle(
       if (error.message && error.message.includes('ABORTED')) {
         // MED: 도중 중지여도 완료된 이전 언어 SRT 경로는 응답에 포함한다.
         // renderer가 읽는 기존 outputPaths 필드도 함께 유지한다.
-        event.sender.send('translation-progress', { stage: 'error', errorMessage: 'Stopped by user', outputPaths, sessionId });
+        event.sender.send('translation-progress', {
+          stage: 'error',
+          errorMessage: 'Stopped by user',
+          outputPaths,
+          sessionId,
+        });
         return {
           success: false,
           error: 'Stopped by user',
