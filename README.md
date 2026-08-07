@@ -33,7 +33,7 @@ npm install
 npm start
 ```
 
-- Node.js >= 20.19 or >= 22.12 (Electron 42 toolchain)
+- Node.js >= 20.19 or >= 22.12 (Electron 43 toolchain)
 - whisper.cpp is downloaded during `npm install` (CUDA build on Windows, ~700MB)
 - FFmpeg is included via npm; the selected GGML model downloads on first use
 
@@ -63,9 +63,10 @@ Translate subtitles fully offline with the bundled Tencent Hy-MT2 model, or rout
 | Hy-MT2 7B (local) | Yes | No | Free | ~6.16GB, VRAM 8GB / RAM 12GB, larger model |
 | MyMemory | No | No | Free | ~50K chars/day per IP |
 | DeepL | No | Yes | Free 500K/month | Deterministic output |
-| OpenAI GPT-5.4 mini | No | Yes | Paid | Context-aware |
-| OpenAI GPT-5.4 nano | No | Yes | Paid | Cheaper tier |
-| Gemini 3 Flash | No | Yes | Free / low-cost | Recommended low-cost route ([get key](https://aistudio.google.com/app/apikey)) |
+| OpenAI GPT-5.x (configurable, e.g. gpt-5.6-sol) | No | Yes | Paid | Default model; context-aware |
+| Gemini 3.x (configurable, e.g. gemini-3.6-flash) | No | Yes | Free / low-cost | Recommended low-cost route ([get key](https://aistudio.google.com/app/apikey)) |
+| Claude (configurable, e.g. claude-opus-5) | No | Yes | Paid | Strong at context understanding ([get key](https://console.anthropic.com/settings/keys)) |
+| Custom OpenAI-compatible providers | No | Yes | Varies | Bring your own endpoint (OpenRouter, Ollama, vLLM, …) |
 
 The local Hy-MT2 engine is the only option that needs no API key, no network, and no per-use cost, so your dialogue never leaves your machine.
 
@@ -94,7 +95,7 @@ Models download on demand into `_models/`. CUDA is used when available, otherwis
 | large-v2 Sync | ~4.4GB | ~4.5GB | Slow | Separate engine; fixes subtitle sync |
 | large-v2 Sync Lite | shared | ~3GB | Slow | Same file as Sync, int8, lower VRAM |
 
-Sync and Sync Lite use a separate Faster-Whisper engine (auto-downloaded once, ~4.4GB) and share the same model file, so one download covers both. Use them only when normal models drift out of sync; they are most accurate on non-English video (Japanese, Korean, Chinese). English is usually fine with large-v3-turbo.
+Sync and Sync Lite use a separate Faster-Whisper engine (auto-downloaded once; engine archive ~1.4GB, model file ~3GB, ~4.4GB combined) and share the same model file, so one download covers both. Use them only when normal models drift out of sync; they are most accurate on non-English video (Japanese, Korean, Chinese). English is usually fine with large-v3-turbo.
 
 VRAM figures for whisper.cpp models are with GGML optimization, much lower than PyTorch Whisper (~10GB for large). Sync figures are from the Faster-Whisper benchmark.
 
@@ -113,9 +114,13 @@ Everything stays local under your user data folder. Nothing is uploaded.
 | Settings & API keys | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
 | Job history | `%APPDATA%\whispersubtranslate\history.json` (up to 200 entries) |
 | Error logs | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| Models | `_models/` (in app folder) |
+| Models | `%APPDATA%\whispersubtranslate\_models` (user data folder; non-ASCII Windows accounts fall back to `C:\Users\Public\WhisperSubTranslate\_models`) |
 
 API keys are stored locally with OS-level safe storage, and the config is never committed or bundled. Job history is optional (toggle in Settings) and capped at 200 entries.
+
+### Portable data layout
+
+By default models, caches, and settings live under `%APPDATA%` (system SSD). To keep everything on a USB stick / external drive, create a `portable-data/` folder next to the executable (or set the `WHISPER_PORTABLE_DATA` environment variable to a folder path) — the app then redirects its `userData` there.
 
 ## Contributing
 
@@ -151,6 +156,10 @@ If this project saves you time, supporting it directly helps with bug fixes, mod
 - whisper.cpp by Georgi Gerganov: [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - Hy-MT2 by Tencent: [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+- Faster-Whisper-XXL: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- Silero VAD, `deepl-node`, `node-llama-cpp`, `axios`, and other npm dependencies
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full list of bundled/downloaded components and their licenses.
 
 ## License
 

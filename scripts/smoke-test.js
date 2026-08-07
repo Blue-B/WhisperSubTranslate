@@ -112,7 +112,9 @@ async function runModelDownloadAbort() {
 
   try {
     require.cache[electronPath].exports = { app: { getPath: () => modelDir } };
-    https.get = (_url, callback) => {
+    // 구현이 https.get(url, { headers }, callback) 형태로 바뀌어 mock도 옵션 인자를 받는다.
+    https.get = (_url, _options, callback) => {
+      const cb = typeof _options === 'function' ? _options : callback;
       const request = new EventEmitter();
       request.destroy = () => {
         destroyed = true;
@@ -120,7 +122,9 @@ async function runModelDownloadAbort() {
       };
       requestCount++;
       if (requestCount === 1) {
-        queueMicrotask(() => callback({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} }));
+        queueMicrotask(() =>
+          cb({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} })
+        );
       } else {
         queueMicrotask(() => controller.abort(new Error('ABORTED: test download')));
       }
@@ -133,7 +137,8 @@ async function runModelDownloadAbort() {
 
     requestCount = 0;
     destroyed = false;
-    https.get = () => {
+    https.get = (_url, _options, callback) => {
+      const cb = typeof _options === 'function' ? _options : callback;
       const request = new EventEmitter();
       request.destroy = () => {
         destroyed = true;
@@ -165,6 +170,15 @@ async function runLocalTranslationGuards() {
   assert.strictEqual(localTranslator.looksUntranslated('Hello world', 'Hola mundo', 'en'), false);
   assert.strictEqual(localTranslator.looksUntranslated('こんにちは', 'こんにちは', 'en'), true);
   assert.strictEqual(localTranslator.isEffectivelySameText('Original: Hola mundo', 'Hola mundo', 1), true);
+
+  // HIGH 1 — 고유명사/숫자 자막은 echo 오탐하지 않는다 (클라우드 폴백 비용 방지).
+  assert.strictEqual(localTranslator.looksUntranslated('Episode 7', 'Episode 7', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('John Smith Tokyo', 'John Smith Tokyo', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('123', '123', 'ko'), false);
+  assert.strictEqual(localTranslator.looksUntranslated('안녕하세요', 'Hello', 'ko'), false);
+  // 진짜 echo는 여전히 잡는다.
+  assert.strictEqual(localTranslator.looksUntranslated('Hello there', 'Hello there', 'ko'), true);
+  assert.strictEqual(localTranslator.isEffectivelySameText('Hi', 'Hi'), false, '2자 이하 스킵 (기존 동작 유지)');
 
   const waitForAbort = (signal) =>
     new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
@@ -265,11 +279,63 @@ async function runLocalTranslationGuards() {
   );
 }
 
+async function runMyMemoryErrorPhrase() {
+  // 이슈 #42: MyMemory는 실패해도 HTTP 200 + 에러 문구를 translatedText로 돌려준다.
+  // 이 문구가 번역 결과로 반환되어 자막 파일에 기록되지 않아야 한다.
+  const MyMemoryTranslator = require('../myMemoryTranslator');
+  const axios = require('axios');
+  const originalGet = axios.get;
+  const mem = new MyMemoryTranslator();
+  mem.maxRetries = 2; // 테스트 시간 단축
+  axios.get = async () => ({
+    data: {
+      responseData: { translatedText: 'PLEASE SELECT TWO DISTINCT LANGUAGES' },
+      responseStatus: 200,
+    },
+  });
+  try {
+    await assert.rejects(
+      () => mem.translate('こんにちは', 'ja', 'en'),
+      /error message instead of a translation|quota exceeded/
+    );
+    console.log('[MyMemory] error phrase not returned as translation (ok)');
+  } finally {
+    axios.get = originalGet;
+  }
+}
+
+async function runRetryOn429Case() {
+  // 이슈 #43: deepl-node는 'Too many requests'(소문자 m)를 던진다.
+  // 대소문자와 무관하게 429로 인식해 재시도하지 않아야 한다.
+  const translator = new EnhancedSubtitleTranslator();
+  let calls = 0;
+  const fn = async () => {
+    calls++;
+    throw new Error('Too many requests, DeepL servers are currently experiencing high load');
+  };
+  await assert.rejects(() => translator.translateWithRetry(fn, 'x', 5), /Too many requests/);
+  assert.strictEqual(calls, 1, 'lowercase "Too many requests" must be treated as permanent (no retry)');
+  console.log('[Retry] lowercase 429 message not retried (ok)');
+}
+
 async function run() {
   const translator = new EnhancedSubtitleTranslator();
 
+  // deepl-node 1.27: en/pt는 지역 코드가 아니면 deprecated로 throw(이슈 #41)
+  assert.strictEqual(translator.mapToDeepLLang('en'), 'EN-US');
+  assert.strictEqual(translator.mapToDeepLLang('pt'), 'PT-BR');
   assert.strictEqual(translator.mapToDeepLLang('ko'), 'KO');
+  assert.strictEqual(translator.mapToDeepLLang('ja'), 'JA');
+  assert.strictEqual(translator.mapToDeepLLang('zh'), 'ZH');
+  assert.strictEqual(translator.mapToDeepLLang('es'), 'ES');
+  assert.strictEqual(translator.mapToDeepLLang('fr'), 'FR');
+  assert.strictEqual(translator.mapToDeepLLang('de'), 'DE');
+  assert.strictEqual(translator.mapToDeepLLang('it'), 'IT');
+  assert.strictEqual(translator.mapToDeepLLang('ru'), 'RU');
   assert.strictEqual(translator.mapToDeepLLang('hu'), 'HU');
+  assert.strictEqual(translator.mapToDeepLLang('ar'), 'AR');
+  assert.strictEqual(translator.mapToDeepLLang('pl'), 'PL');
+  assert.strictEqual(translator.mapToDeepLLang('ko'), 'KO');
   assert.strictEqual(translator.mapToDeepLLang('tr'), 'TR');
   assert.strictEqual(translator.mapToHumanLang('tr'), 'Turkish (Türkçe)');
   assert.strictEqual(translator.mapToHumanLang('fa'), 'Persian (فارسی)');
@@ -293,6 +359,8 @@ async function run() {
   runWhisperRuntimeProbe();
   await runModelDownloadAbort();
   await runLocalTranslationGuards();
+  await runMyMemoryErrorPhrase();
+  await runRetryOn429Case();
 
   console.log('Smoke tests passed.');
 }

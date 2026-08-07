@@ -239,7 +239,12 @@
               <option value="cpu">CPU</option>
             </select>
             <div id="deviceStatus" class="setting-hint"></div>
-            <div id="deviceSyncLockNote" class="setting-hint sync-lock-note" data-i18n="deviceSyncLockNote" style="display: none">
+            <div
+              id="deviceSyncLockNote"
+              class="setting-hint sync-lock-note"
+              data-i18n="deviceSyncLockNote"
+              style="display: none"
+            >
               large-v2 싱크 모델은 GPU가 있으면 자동으로 GPU 가속을 사용합니다 (자동/GPU 선택 시, 없으면 CPU)
             </div>
           </div>
@@ -263,8 +268,8 @@
               <option value="mymemory"></option>
               <option value="deepl"></option>
               <option value="chatgpt"></option>
-              <option value="chatgpt-nano"></option>
               <option value="gemini"></option>
+              <option value="claude"></option>
             </select>
             <div id="translationStatus" class="setting-hint"></div>
             <!-- Local model sub-selector (HY-MT 1.8B / 7B) -->
@@ -630,8 +635,8 @@
               </label>
             </div>
             <p id="reduceRepetitionDesc" class="settings-hint cleanup-desc" data-i18n="reduceRepetitionDesc">
-              무음·음악·효과음 구간에서 같은 줄이 계속 반복되거나 없는 말이 지어나는 현상을 막아요. 말소리
-              구간만 골라 처리합니다. 대부분의 영상에 켜두는 걸 권장해요.
+              무음·음악·효과음 구간에서 같은 줄이 계속 반복되거나 없는 말이 지어나는 현상을 막아요. 말소리 구간만 골라
+              처리합니다. 대부분의 영상에 켜두는 걸 권장해요.
             </p>
             <div class="sound-settings-row">
               <label class="toggle-label">
@@ -655,8 +660,8 @@
               </label>
             </div>
             <p id="removeSDHDesc" class="settings-hint cleanup-desc" data-i18n="removeSDHDesc">
-              [music]·(applause)·♪ 처럼 소리를 설명하는 자막을 삭제해요. 줄 전체가 소리 설명일 때만 지우고,
-              대사 중간에 들어간 괄호는 건드리지 않아요.
+              [music]·(applause)·♪ 처럼 소리를 설명하는 자막을 삭제해요. 줄 전체가 소리 설명일 때만 지우고, 대사 중간에
+              들어간 괄호는 건드리지 않아요.
             </p>
           </div>
 
@@ -679,14 +684,12 @@
               <label class="toggle-label">
                 <input type="checkbox" id="autoRetryCheckbox" />
                 <span class="toggle-slider"></span>
-                <span id="autoRetryLabel" class="toggle-text" data-i18n="autoRetryLabel"
-                  >실패 항목 자동 재시도</span
-                >
+                <span id="autoRetryLabel" class="toggle-text" data-i18n="autoRetryLabel">실패 항목 자동 재시도</span>
               </label>
             </div>
             <p id="autoRetryDesc" class="settings-hint cleanup-desc" data-i18n="autoRetryDesc">
-              큐 처리가 끝난 뒤 실패한 파일을 자동으로 다시 시도해요(최대 2회). 긴 작업을 켜두고 자리를
-              비울 때 유용해요.
+              큐 처리가 끝난 뒤 실패한 파일을 자동으로 다시 시도해요(최대 2회). 긴 작업을 켜두고 자리를 비울 때
+              유용해요.
             </p>
           </div>
 
@@ -706,120 +709,308 @@
               </svg>
               번역 API 키
             </h4>
-            <div class="form-group">
-              <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
-              <div class="input-with-toggle">
-                <input
-                  type="password"
-                  id="deeplApiKey"
-                  class="form-input"
-                  data-i18n-placeholder="deeplApiKeyPlaceholder"
-                  placeholder="DeepL API 키를 입력하세요"
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  data-target="deeplApiKey"
-                  data-i18n-title="togglePasswordTitle"
-                  title="비밀번호 표시/숨기기"
-                >
-                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <svg
-                    class="eye-off-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    style="display: none"
-                  >
-                    <path
-                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                    />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                </button>
-              </div>
-              <p id="deeplHelp" class="form-hint"></p>
+
+            <div class="provider-tabs" id="providerTabs">
+              <button type="button" class="provider-tab active" data-panel="deepl">DeepL</button>
+              <button type="button" class="provider-tab" data-panel="openai">OpenAI</button>
+              <button type="button" class="provider-tab" data-panel="gemini">Gemini</button>
+              <button type="button" class="provider-tab" data-panel="claude">Claude</button>
+              <button type="button" class="provider-tab" data-panel="custom" id="customProviderTab">커스텀</button>
             </div>
-            <div class="form-group">
-              <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
-              <div class="input-with-toggle">
-                <input
-                  type="password"
-                  id="openaiApiKey"
-                  class="form-input"
-                  data-i18n-placeholder="openaiApiKeyPlaceholder"
-                  placeholder="OpenAI API 키를 입력하세요"
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  data-target="openaiApiKey"
-                  data-i18n-title="togglePasswordTitle"
-                  title="비밀번호 표시/숨기기"
-                >
-                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <svg
-                    class="eye-off-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    style="display: none"
+
+            <div class="provider-panel" data-panel="deepl">
+              <div class="form-group">
+                <label id="labelDeeplKey" class="form-label">DeepL API 키</label>
+                <div class="input-with-toggle">
+                  <input
+                    type="password"
+                    id="deeplApiKey"
+                    class="form-input"
+                    data-i18n-placeholder="deeplApiKeyPlaceholder"
+                    placeholder="DeepL API 키를 입력하세요"
+                  />
+                  <button
+                    type="button"
+                    class="toggle-password"
+                    data-target="deeplApiKey"
+                    data-i18n-title="togglePasswordTitle"
+                    title="비밀번호 표시/숨기기"
                   >
-                    <path
-                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                    />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                </button>
+                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <svg
+                      class="eye-off-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      style="display: none"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  </button>
+                </div>
+                <p id="deeplHelp" class="form-hint"></p>
               </div>
-              <p id="openaiHelp" class="form-hint"></p>
             </div>
-            <div class="form-group">
-              <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
-              <div class="input-with-toggle">
-                <input
-                  type="password"
-                  id="geminiApiKey"
-                  class="form-input"
-                  data-i18n-placeholder="geminiApiKeyPlaceholder"
-                  placeholder="Gemini API 키를 입력하세요"
-                />
-                <button
-                  type="button"
-                  class="toggle-password"
-                  data-target="geminiApiKey"
-                  data-i18n-title="togglePasswordTitle"
-                  title="비밀번호 표시/숨기기"
-                >
-                  <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                  <svg
-                    class="eye-off-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    style="display: none"
+
+            <div class="provider-panel" data-panel="openai" hidden>
+              <div class="form-group">
+                <label id="labelOpenaiKey" class="form-label">OpenAI API 키</label>
+                <div class="input-with-toggle">
+                  <input
+                    type="password"
+                    id="openaiApiKey"
+                    class="form-input"
+                    data-i18n-placeholder="openaiApiKeyPlaceholder"
+                    placeholder="OpenAI API 키를 입력하세요"
+                  />
+                  <button
+                    type="button"
+                    class="toggle-password"
+                    data-target="openaiApiKey"
+                    data-i18n-title="togglePasswordTitle"
+                    title="비밀번호 표시/숨기기"
                   >
-                    <path
-                      d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
-                    />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                </button>
+                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <svg
+                      class="eye-off-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      style="display: none"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  </button>
+                </div>
+                <p id="openaiHelp" class="form-hint"></p>
               </div>
-              <p id="geminiHelp" class="form-hint"></p>
+              <div class="provider-grid">
+                <label class="provider-field provider-field-wide">
+                  <span class="provider-field-label">Base URL</span>
+                  <input
+                    type="text"
+                    id="openaiBaseUrl"
+                    class="form-input"
+                    placeholder="https://api.openai.com/v1"
+                    spellcheck="false"
+                  />
+                </label>
+
+                <label class="provider-field">
+                  <span id="labelOpenaiModel" class="provider-field-label">모델</span>
+                  <div class="input-with-refresh">
+                    <input
+                      type="text"
+                      id="openaiModel"
+                      class="form-input"
+                      list="openaiModelList"
+                      placeholder="gpt-5.6-sol"
+                      spellcheck="false"
+                    />
+                    <button
+                      type="button"
+                      class="model-refresh"
+                      data-method="chatgpt"
+                      data-target="openaiModel"
+                      data-list="openaiModelList"
+                      title="모델 목록 불러오기"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                  <datalist id="openaiModelList"></datalist>
+                </label>
+              </div>
             </div>
+
+            <div class="provider-panel" data-panel="gemini" hidden>
+              <div class="form-group">
+                <label id="labelGeminiKey" class="form-label">Gemini API 키</label>
+                <div class="input-with-toggle">
+                  <input
+                    type="password"
+                    id="geminiApiKey"
+                    class="form-input"
+                    data-i18n-placeholder="geminiApiKeyPlaceholder"
+                    placeholder="Gemini API 키를 입력하세요"
+                  />
+                  <button
+                    type="button"
+                    class="toggle-password"
+                    data-target="geminiApiKey"
+                    data-i18n-title="togglePasswordTitle"
+                    title="비밀번호 표시/숨기기"
+                  >
+                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <svg
+                      class="eye-off-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      style="display: none"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  </button>
+                </div>
+                <p id="geminiHelp" class="form-hint"></p>
+              </div>
+              <div class="provider-grid">
+                <label class="provider-field provider-field-wide">
+                  <span class="provider-field-label">Base URL</span>
+                  <input
+                    type="text"
+                    id="geminiBaseUrl"
+                    class="form-input"
+                    placeholder="https://generativelanguage.googleapis.com/v1beta"
+                    spellcheck="false"
+                  />
+                </label>
+
+                <label class="provider-field">
+                  <span id="labelGeminiModel" class="provider-field-label">모델</span>
+                  <div class="input-with-refresh">
+                    <input
+                      type="text"
+                      id="geminiModel"
+                      class="form-input"
+                      list="geminiModelList"
+                      placeholder="gemini-3.6-flash"
+                      spellcheck="false"
+                    />
+                    <button
+                      type="button"
+                      class="model-refresh"
+                      data-method="gemini"
+                      data-target="geminiModel"
+                      data-list="geminiModelList"
+                      title="모델 목록 불러오기"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                  <datalist id="geminiModelList"></datalist>
+                </label>
+              </div>
+            </div>
+
+            <div class="provider-panel" data-panel="claude" hidden>
+              <div class="form-group">
+                <label id="labelClaudeKey" class="form-label">Claude API 키</label>
+                <div class="input-with-toggle">
+                  <input
+                    type="password"
+                    id="claudeApiKey"
+                    class="form-input"
+                    data-i18n-placeholder="claudeApiKeyPlaceholder"
+                    placeholder="Claude API 키를 입력하세요"
+                  />
+                  <button
+                    type="button"
+                    class="toggle-password"
+                    data-target="claudeApiKey"
+                    data-i18n-title="togglePasswordTitle"
+                    title="비밀번호 표시/숨기기"
+                  >
+                    <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <svg
+                      class="eye-off-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      style="display: none"
+                    >
+                      <path
+                        d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                      />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  </button>
+                </div>
+                <p id="claudeHelp" class="form-hint"></p>
+              </div>
+              <div class="provider-grid">
+                <label class="provider-field provider-field-wide">
+                  <span class="provider-field-label">Base URL</span>
+                  <input
+                    type="text"
+                    id="claudeBaseUrl"
+                    class="form-input"
+                    placeholder="https://api.anthropic.com/v1"
+                    spellcheck="false"
+                  />
+                </label>
+
+                <label class="provider-field">
+                  <span id="labelClaudeModel" class="provider-field-label">모델</span>
+                  <div class="input-with-refresh">
+                    <input
+                      type="text"
+                      id="claudeModel"
+                      class="form-input"
+                      list="claudeModelList"
+                      placeholder="claude-opus-5"
+                      spellcheck="false"
+                    />
+                    <button
+                      type="button"
+                      class="model-refresh"
+                      data-method="claude"
+                      data-target="claudeModel"
+                      data-list="claudeModelList"
+                      title="모델 목록 불러오기"
+                    >
+                      ↻
+                    </button>
+                  </div>
+                  <datalist id="claudeModelList"></datalist>
+                </label>
+              </div>
+            </div>
+
+            <div class="provider-panel" data-panel="custom" hidden>
+              <div class="form-group">
+                <div class="form-group-header">
+                  <label id="labelCustomProviders" class="form-label">커스텀 공급자</label>
+                  <button type="button" id="addCustomProviderBtn" class="btn-inline">공급자 추가</button>
+                </div>
+                <p id="customProvidersHint" class="form-hint"></p>
+                <div id="customProviderList" class="custom-provider-list"></div>
+              </div>
+            </div>
+
+            <details class="prompt-details">
+              <summary id="labelTranslationPrompt">번역 프롬프트</summary>
+              <textarea id="translationPrompt" class="form-input form-textarea" rows="6" spellcheck="false"></textarea>
+              <p id="promptHint" class="form-hint"></p>
+              <button type="button" id="resetPromptBtn" class="btn-inline">기본 프롬프트로 되돌리기</button>
+              <p id="resetPromptHint" class="form-hint"></p>
+            </details>
             <div id="apiKeyStatus" class="api-status"></div>
           </div>
         </div>

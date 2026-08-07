@@ -3422,3 +3422,284 @@ body.has-update-banner .main-container {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== 공급자 설정 (모델 · Base URL · 프롬프트 · 커스텀 공급자) ===== */
+/* 공급자를 탭으로 나누어 선택된 하나만 보여준다. 공급자가 늘어도 설정 화면 길이가 그대로다. */
+.provider-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.provider-tab {
+  padding: 7px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.provider-tab:hover {
+  color: var(--text-primary);
+}
+
+.provider-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* 키가 설정된 공급자는 탭에 점을 찍어 탭을 열어보지 않아도 상태를 알 수 있게 한다. */
+.provider-tab[data-configured='1']::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.provider-panel > .form-group:first-child {
+  margin-top: 0;
+}
+
+.input-with-refresh {
+  display: flex;
+  flex-wrap: wrap; /* 경고 문구가 아래 줄로 가도록 하고 모델 input 폭을 보존한다 */
+  gap: 4px;
+}
+
+/* 콤보박스 — datalist가 이 환경에서 클릭이 불안정해서 직접 만든 드롭다운 */
+.combo-btn {
+  flex-shrink: 0;
+  width: 34px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.combo-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.combo-menu {
+  position: fixed; /* 모달 스크롤 영역 밖으로 나가도 화면 안에 보이도록 viewport 기준 배치 */
+  z-index: 2000; /* modal-overlay(1000)보다 위 */
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg-secondary, #1e1e2e);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+}
+
+.combo-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.combo-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent);
+}
+
+.combo-empty {
+  padding: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+/* 모델 목록에 없는 이름을 넣었을 때의 경고 */
+.model-warning {
+  color: #b8860b;
+  font-size: 11px;
+  margin-top: 4px;
+  width: 100%;
+  flex-basis: 100%; /* 아래 줄 전체로 차지해 모델 input 폭이 줄지 않게 한다 */
+  order: 2;
+}
+
+/* 경고 문구가 비어 있으면 flex 아이템으로서 공간을 차지하지 않게 숨긴다 */
+.model-warning:empty {
+  display: none;
+}
+
+.input-with-refresh .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-refresh {
+  flex-shrink: 0;
+  width: 34px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.model-refresh:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.model-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.prompt-details {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.prompt-details > summary {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.prompt-details > summary:hover {
+  color: var(--text-primary);
+}
+
+.prompt-details > *:not(summary) {
+  margin-top: 8px;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.provider-field {
+  position: relative; /* 콤보박스 팝업이 input 아래에 붙도록 */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.provider-field-wide {
+  grid-column: 1 / -1;
+}
+
+.provider-field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 92px;
+  line-height: 1.5;
+}
+
+.form-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-inline {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-inline:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.form-group-header .btn-inline {
+  margin-top: 0;
+}
+
+.custom-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.custom-provider-card {
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.custom-provider-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.custom-provider-card-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-provider-remove {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.custom-provider-remove:hover {
+  border-color: var(--red, #f38ba8);
+  color: var(--red, #f38ba8);
+}
+
+.custom-provider-empty {
+  padding: 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}

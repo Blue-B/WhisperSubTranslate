@@ -33,7 +33,7 @@ npm install
 npm start
 ```
 
-- Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 42)
+- Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 43)
 - whisper.cpp jest pobierany podczas `npm install` (wersja CUDA na Windows, ~700MB)
 - FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
 
@@ -63,9 +63,10 @@ Tłumacz napisy w pełni offline dołączonym modelem Tencent Hy-MT2 albo kieruj
 | Hy-MT2 7B (lokalny) | Tak | Nie | Darmowy | ~6,16GB, VRAM 8GB / RAM 12GB, większy model |
 | MyMemory | Nie | Nie | Darmowy | ~50K znaków/dzień na IP |
 | DeepL | Nie | Tak | 500K/mies. darmowo | Stabilny wynik |
-| OpenAI GPT-5.4 mini | Nie | Tak | Płatny | Świadomy kontekstu |
-| OpenAI GPT-5.4 nano | Nie | Tak | Płatny | Tańszy poziom |
-| Gemini 3 Flash | Nie | Tak | Darmowy / tani | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey)) |
+| OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol) | Nie | Tak | Płatny | Domyślny model, świadomy kontekstu |
+| Gemini 3.x (konfigurowalny, domyślnie gemini-3.6-flash) | Nie | Tak | Darmowy / tani | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey)) |
+| Claude (konfigurowalny, domyślnie claude-opus-5) | Nie | Tak | Płatny | Świetny w rozumieniu kontekstu ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
+| Niestandardowy dostawca zgodny z OpenAI | Nie | Tak | Różny | Własny endpoint (OpenRouter, Ollama, vLLM, …) |
 
 Tylko lokalny silnik Hy-MT2 nie wymaga klucza API, sieci ani opłat za użycie, więc dialogi nie opuszczają komputera.
 
@@ -94,7 +95,7 @@ Modele pobierają się na żądanie do `_models/`. CUDA jest używana, gdy dost�
 | large-v2 Sync | ~4,4GB | ~4,5GB | Wolny | Osobny silnik, naprawa synchronizacji |
 | large-v2 Sync Lite | wspólny | ~3GB | Wolny | Ten sam plik co Sync, int8, niższy VRAM |
 
-Sync i Sync Lite używają osobnego silnika Faster-Whisper (pobieranego raz automatycznie, ~4,4GB) i współdzielą ten sam plik modelu, więc jedno pobranie obejmuje oba. Używaj ich tylko, gdy zwykłe modele tracą synchronizację. Są najdokładniejsze przy wideo nieangielskim (japoński, koreański, chiński). Angielski zwykle wystarczy z large-v3-turbo.
+Sync i Sync Lite używają osobnego silnika Faster-Whisper (pobieranego raz automatycznie; archiwum silnika ~1,4GB + plik modelu ~3GB, łącznie ~4,4GB) i współdzielą ten sam plik modelu, więc jedno pobranie obejmuje oba. Używaj ich tylko, gdy zwykłe modele tracą synchronizację. Są najdokładniejsze przy wideo nieangielskim (japoński, koreański, chiński). Angielski zwykle wystarczy z large-v3-turbo.
 
 VRAM modeli whisper.cpp podano dla optymalizacji GGML, znacznie niżej niż PyTorch Whisper (~10GB dla large). Wartości Sync pochodzą z benchmarku Faster-Whisper.
 
@@ -113,9 +114,13 @@ Wszystko zostaje lokalnie w folderze użytkownika. Nic nie jest wysyłane.
 | Ustawienia i klucze API | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
 | Historia zadań | `%APPDATA%\whispersubtranslate\history.json` (do 200 wpisów) |
 | Logi błędów | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| Modele | `_models/` (folder aplikacji) |
+| Modele | `%APPDATA%\whispersubtranslate\_models` (folder danych użytkownika; konta Windows z nie-ASCII znakami używają `C:\Users\Public\WhisperSubTranslate\_models`) |
 
 Klucze API są przechowywane lokalnie w bezpiecznym magazynie systemu, a plik konfiguracji nigdy nie trafia do Git ani do builda. Historia zadań jest opcjonalna (przełącznik w Ustawieniach) i ograniczona do 200 wpisów.
+
+### Przenośny układ danych
+
+Domyślnie modele, pamięć podręczna i ustawienia znajdują się w `%APPDATA%` (dysk systemowy). Aby trzymać wszystko na dysku USB / zewnętrznym, utwórz folder `portable-data/` obok pliku wykonywalnego (lub ustaw zmienną środowiskową `WHISPER_PORTABLE_DATA` na ścieżkę folderu) — aplikacja przekieruje tam swój `userData`.
 
 ## Współtworzenie
 
@@ -147,6 +152,10 @@ Jeśli ten projekt oszczędza Ci czas, wsparcie pomaga w poprawkach błędów, n
 - whisper.cpp: Georgi Gerganov [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp)
 - Hy-MT2: Tencent [Tencent-Hunyuan/Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)
 - FFmpeg: [ffmpeg.org](https://ffmpeg.org/)
+- Faster-Whisper-XXL: [Purfview/whisper-standalone-win](https://github.com/Purfview/whisper-standalone-win)
+- Silero VAD, `deepl-node`, `node-llama-cpp`, `axios` i inne zależności npm
+
+Pełna lista dołączanych/pobieranych komponentów i ich licencji: [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## Licencja
 
