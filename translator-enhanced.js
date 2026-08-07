@@ -1162,6 +1162,11 @@ class EnhancedSubtitleTranslator {
 
     const uniqueMethods = methods.filter((m, i, a) => a.findIndex((x) => x.name === m.name) === i);
 
+    // 쿼터는 서비스별 독립이라 한 서비스(예: MyMemory)의 쿼터가 다른 서비스(DeepL/LLM)
+    // 시도를 막으면 안 된다. 루프는 계속 돌고, 마지막 쿼터 에러를 기억해두었다가
+    // 전 서비스가 실패한 경우에만 최종 폴백 전에 전파한다. 다른 서비스가 성공하면
+    // 그 결과가 우선 반환되므로 쿼터는 자연히 무시된다.
+    let lastQuotaError = null;
     for (const m of uniqueMethods) {
       try {
         switch (m.name) {
@@ -1190,15 +1195,22 @@ class EnhancedSubtitleTranslator {
       } catch (err) {
         console.error(`[${m.name} Translation Failed] "${text.substring(0, 40)}..." - ${err.message}`);
 
-        // 429 에러 (할당량 초과)면 폴백하지 않고 즉시 throw
+        // 429/쿼터 초과면 즉시 중단하지 않고 다음 서비스로 넘어간다 (F2).
         const is429Error = isQuotaError(err.message);
         if (is429Error) {
-          console.error(`[Rate Limit] API quota exceeded in translateAuto - stopping`);
-          throw new Error('API_QUOTA_EXCEEDED: ' + err.message);
+          console.error(`[Rate Limit] ${m.name} quota exceeded - trying next service`);
+          lastQuotaError = new Error('API_QUOTA_EXCEEDED: ' + err.message);
+          continue;
         }
 
         continue;
       }
+    }
+
+    // 모든 서비스가 실패했고 그중 하나라도 쿼터 초과였다면 원문으로 삼키지 않고 전파한다.
+    if (lastQuotaError) {
+      console.error(`[Rate Limit] All services failed (quota exceeded)`);
+      throw lastQuotaError;
     }
 
     // 모든 서비스가 실패했을 때 최후의 수단 - 기본 번역 서비스로 재시도
@@ -1585,7 +1597,7 @@ ${lines}`;
           try {
             console.log(`[Parallel Translation] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
 
-            const result = await this.translateAuto(text, method, targetLang);
+            const result = await this.translateAuto(text, method, targetLang, _sourceLang);
             batchResults.push(result);
 
             console.log(`[Parallel Success] ${currentIndex}/${texts.length}: ${result.substring(0, 40)}...`);
@@ -1605,11 +1617,8 @@ ${lines}`;
             );
 
             // 429 에러 (할당량 초과) 체크 - 심각한 에러이므로 즉시 중지
-            const is429Error =
-              error.message.includes('429') ||
-              error.message.includes('quota') ||
-              error.message.toLowerCase().includes('too many requests') ||
-              error.message.includes('RESOURCE_EXHAUSTED');
+            // (isQuotaError로 통일: daily limit/rate limit/api_quota_exceeded/resource_exhausted 포함)
+            const is429Error = isQuotaError(error?.message || error);
 
             if (is429Error) {
               console.error(`[Rate Limit] API quota exceeded - stopping translation`);
@@ -1623,7 +1632,7 @@ ${lines}`;
             try {
               console.log(`[Parallel Retry] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
               await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 대기
-              retryResult = await this.translateAuto(text, method, targetLang);
+              retryResult = await this.translateAuto(text, method, targetLang, _sourceLang);
               console.log(
                 `[Parallel Retry Success] ${currentIndex}/${texts.length}: ${retryResult.substring(0, 40)}...`
               );
