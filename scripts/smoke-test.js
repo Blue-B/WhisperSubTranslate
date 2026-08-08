@@ -18,7 +18,7 @@ const {
   SYNC_MODEL_BYTES,
   SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
 } = require('../disk-space');
-const { backupStaleWav } = require('../file-safety');
+const { backupStaleWav, isCompleteWavFile } = require('../file-safety');
 
 async function runPostinstallRedirectDrain() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-postinstall-redirect-'));
@@ -115,6 +115,46 @@ function runRendererSourceLangPayload() {
     'completed queue items must open the generated output when available'
   );
   console.log('[SourceLangPayload] translation source and completed output paths are wired (ok)');
+}
+
+function runWavHeaderSafety() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-wav-header-'));
+  const wav = path.join(dir, 'header.wav');
+  const originalRead = fs.readSync;
+  let maxReadLength = 0;
+  fs.readSync = (fd, buffer, offset, length, position) => {
+    maxReadLength = Math.max(maxReadLength, length);
+    return originalRead(fd, buffer, offset, length, position);
+  };
+  try {
+    const riff = Buffer.alloc(44);
+    riff.write('RIFF', 0, 'latin1');
+    riff.writeUInt32LE(riff.length - 8, 4);
+    riff.write('WAVE', 8, 'latin1');
+    fs.writeFileSync(wav, riff);
+    assert.strictEqual(isCompleteWavFile(wav, riff.length), true);
+    riff.writeUInt32LE(1, 4);
+    fs.writeFileSync(wav, riff);
+    assert.strictEqual(isCompleteWavFile(wav, riff.length), false, 'truncated RIFF size must be rejected');
+
+    const rf64 = Buffer.alloc(48);
+    rf64.write('RF64', 0, 'latin1');
+    rf64.writeUInt32LE(0xffffffff, 4);
+    rf64.write('WAVE', 8, 'latin1');
+    rf64.write('ds64', 12, 'latin1');
+    rf64.writeUInt32LE(28, 16);
+    rf64.writeBigUInt64LE(BigInt(rf64.length - 8), 20);
+    fs.writeFileSync(wav, rf64);
+    assert.strictEqual(isCompleteWavFile(wav, rf64.length), true);
+    rf64.write('JUNK', 12, 'latin1');
+    fs.writeFileSync(wav, rf64);
+    assert.strictEqual(isCompleteWavFile(wav, rf64.length), false, 'RF64 without first ds64 chunk must be rejected');
+    assert.ok(maxReadLength <= 64, `WAV validation read too much: ${maxReadLength}`);
+    console.log('[WavHeaderSafety] RIFF/RF64 validated with at most 64 header bytes (ok)');
+  } finally {
+    fs.readSync = originalRead;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function runWavBackupSafety() {
@@ -1249,6 +1289,7 @@ async function run() {
 
   runSrtCleanup();
   runSrtFromWhisperJson();
+  runWavHeaderSafety();
   runWavBackupSafety();
   runWhisperRuntimeProbe();
   runDiskSpaceGuard();

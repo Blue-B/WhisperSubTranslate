@@ -219,6 +219,39 @@ async function run() {
   }
   ok('Settings: edits made during save remain dirty and keep the modal open');
 
+  const settingsLoadRecovery = await w.evaluate(async () => {
+    let attempts = 0;
+    const failOnce = () => {
+      attempts++;
+      return attempts === 1 ? Promise.reject(new Error('E2E_SETTINGS_LOAD_FAILURE')) : window.electronAPI.loadApiKeys();
+    };
+    showSettingsModal(failOnce);
+    while (!document.querySelector('#apiKeyStatus button')) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const prompt = document.getElementById('translationPrompt');
+    const lockedAfterFailure = prompt.disabled;
+    document.querySelector('#apiKeyStatus button').click();
+    while (document.getElementById('settingsModal')?.getAttribute('aria-busy') === 'true') {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const unlockedAfterRetry = !prompt.disabled;
+    const retryCleared = document.getElementById('apiKeyStatus').style.display === 'none';
+    hideSettingsModal();
+    return { attempts, lockedAfterFailure, unlockedAfterRetry, retryCleared };
+  });
+  const expectedLoadError = consoleErrors.findIndex((message) => message.includes('E2E_SETTINGS_LOAD_FAILURE'));
+  if (expectedLoadError !== -1) consoleErrors.splice(expectedLoadError, 1);
+  if (
+    settingsLoadRecovery.attempts !== 2 ||
+    !settingsLoadRecovery.lockedAfterFailure ||
+    !settingsLoadRecovery.unlockedAfterRetry ||
+    !settingsLoadRecovery.retryCleared
+  ) {
+    fail(`Settings load recovery failed: ${JSON.stringify(settingsLoadRecovery)}`);
+  }
+  ok('Settings: failed load stays locked and Retry restores editable values');
+
   // -------------------------------------------------------------------------
   // 7. Empty queue
   // -------------------------------------------------------------------------

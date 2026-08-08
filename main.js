@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { assertDownloadDiskSpace, assertSyncInstallDiskSpace } = require('./disk-space');
-const { backupStaleWav } = require('./file-safety');
+const { backupStaleWav, isCompleteWavFile } = require('./file-safety');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
 try {
   app.setName('WhisperSubTranslate');
@@ -1371,30 +1371,11 @@ function convertToWav(inputPath) {
       try {
         const wavStat = fs.statSync(wavPath);
         const srcStat = fs.statSync(inputPath);
-        // RIFF/WAVE 매직 헤더 검증: ffmpeg가 만드는 WAV는 항상 12바이트
-        // 'RIFF' + 'WAVE' 헤더로 시작한다. 이전 세션에서 ffmpeg가 죽어 남은
-        // 잘린 WAV(헤더만 있거나 손상)를 mtime이 최신이라고 재사용하면 손상
-        // 자막이 재생산된다 (P1). 크기 게이트(1080바이트) 대신 헤더 검증을
-        // 쓰면 유효한 작은 WAV(사용자 제공 100바이트대 짧은 클립)도 보존된다.
-        const wavBuf = fs.readFileSync(wavPath);
-        const header = wavBuf.subarray(0, 12).toString('latin1');
-        const isRf64 = header.startsWith('RF64');
-        const hasRiffWave = (header.startsWith('RIFF') || isRf64) && header.slice(8, 12) === 'WAVE';
-        // RIFF chunk size 필드(4-7바이트 LE)는 '파일 크기 - 8'과 일치해야 한다.
-        // 44B~1KB 크기 게이트만 통과하는 잘린 WAV(헤더만 유효하고 데이터가
-        // 잘린 경우)를 여기서 걸러낸다 (MED-2). RF64(4GB 초과)는 RIFF 크기
-        // 필드가 0xFFFFFFFF 고정이라 ds64 청크의 riffSize64 필드(청크 헤더
-        // 12바이트 뒤 8바이트 LE, 첫 청크면 @20)로 실제 크기를 대조한다.
-        // ds64가 없거나 불일치면 잘린 파일이므로 stale 처리한다 (MED-5).
-        let riffSizeOk;
-        if (isRf64) {
-          const ds64 = wavBuf.indexOf('ds64', 12);
-          riffSizeOk =
-            ds64 >= 0 && wavBuf.length >= ds64 + 16 && wavBuf.readBigUInt64LE(ds64 + 8) === BigInt(wavBuf.length - 8);
-        } else {
-          riffSizeOk = wavBuf.length >= 8 && wavBuf.readUInt32LE(4) === wavBuf.length - 8;
-        }
-        if (hasRiffWave && riffSizeOk && wavBuf.length >= 44 && wavStat.mtimeMs >= srcStat.mtimeMs) {
+        // 전체 WAV를 메인 프로세스에 동기 로드하지 않고 고정 64바이트 헤더와
+        // stat 크기만 검증한다. 긴 영상의 수백 MB 메모리 급증을 막고, 4GB를
+        // 넘는 RF64도 Buffer 최대 크기에 막히지 않고 ds64 크기를 확인한다.
+        const wavComplete = isCompleteWavFile(wavPath, wavStat.size);
+        if (wavComplete && wavStat.mtimeMs >= srcStat.mtimeMs) {
           console.log(`[Audio] WAV already exists: ${path.basename(wavPath)}`);
           // reused: 기존 형제 WAV를 재사용한 경우. 앱이 만든 게 아니라 사용자가 둔
           // 파일일 수 있으므로 추출 후 정리 단계에서 삭제하지 않는다 (F3).
@@ -3154,7 +3135,7 @@ function isAllowedOpenExternalUrl(rawUrl) {
     if (parsed.protocol !== 'https:') return false;
     if (!ALLOWED_OPEN_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) return false;
     // github.com은 <소유자>/<레포> 하위 경로만 허용한다. 릴리스 노트 링크는
-    // /releases/tag/v2.4.4, 엔진 다운로드는 /releases/download/... 형태라
+    // /releases/tag/v2.4.5, 엔진 다운로드는 /releases/download/... 형태라
     // 레포 루트 두 세그먼트만 고정하고 그 아래는 허용한다.
     // (경로 세그먼트에 .. 이 섞이면 거부해 상위 탈출 표기를 막는다.)
     const pathname = parsed.pathname.replace(/\/$/, '');

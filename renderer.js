@@ -4121,6 +4121,24 @@ function setProviderSettingsLoading(loading) {
     });
 }
 
+function showSettingsLoadError(error, loadToken, modal, retryLoad) {
+  if (loadToken !== _settingsLoadToken || !modal?.classList.contains('active')) return;
+  const status = document.getElementById('apiKeyStatus');
+  if (!status) return;
+  const retryButton = document.createElement('button');
+  retryButton.type = 'button';
+  retryButton.className = 'btn-warning btn-sm';
+  retryButton.textContent = (I18N[currentUiLang] || I18N.ko).btnRetry || 'Retry';
+  retryButton.addEventListener('click', () => {
+    if (loadToken === _settingsLoadToken && modal.classList.contains('active')) {
+      showSettingsModal(retryLoad);
+    }
+  });
+  status.className = 'api-status error';
+  status.replaceChildren(document.createTextNode(`Settings load failed: ${error.message || error} `), retryButton);
+  status.style.display = 'block';
+}
+
 function requestHideSettingsModal() {
   if (_settingsApiDirty) {
     const prompts = {
@@ -4137,11 +4155,16 @@ function requestHideSettingsModal() {
   return true;
 }
 
-function showSettingsModal() {
+function showSettingsModal(loadApiKeys = () => window.electronAPI.loadApiKeys()) {
   const modal = document.getElementById('settingsModal');
   if (modal) {
     _settingsApiDirty = false;
     setProviderSettingsLoading(true);
+    const status = document.getElementById('apiKeyStatus');
+    if (status) {
+      status.replaceChildren();
+      status.style.display = 'none';
+    }
     // 포커스 복원용: 열기 직전 활성 요소 저장
     _lastFocusedBeforeModal = document.activeElement || null;
     modal.classList.add('active');
@@ -4203,8 +4226,7 @@ function showSettingsModal() {
   // IPC 응답이 사용자가 먼저 입력한 값을 덮어쓰는 경쟁을 없앤다.
   const loadToken = ++_settingsLoadToken;
   try {
-    window.electronAPI
-      .loadApiKeys()
+    loadApiKeys()
       .then(async (res) => {
         if (loadToken !== _settingsLoadToken || !modal?.classList.contains('active')) return;
         if (res && res.success && res.keys) {
@@ -4246,22 +4268,11 @@ function showSettingsModal() {
       })
       .catch((error) => {
         console.error('[Settings] Failed to load API settings:', error);
-        if (loadToken !== _settingsLoadToken) return;
-        const status = document.getElementById('apiKeyStatus');
-        if (status) {
-          status.className = 'api-status error';
-          status.textContent = `Settings load failed: ${error.message || error}`;
-          status.style.display = 'block';
-        }
+        showSettingsLoadError(error, loadToken, modal, loadApiKeys);
       });
   } catch (error) {
     console.error('[Settings] Failed to start API settings load:', error);
-    const status = document.getElementById('apiKeyStatus');
-    if (status) {
-      status.className = 'api-status error';
-      status.textContent = `Settings load failed: ${error.message || error}`;
-      status.style.display = 'block';
-    }
+    showSettingsLoadError(error, loadToken, modal, loadApiKeys);
   }
 }
 

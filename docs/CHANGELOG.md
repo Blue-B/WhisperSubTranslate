@@ -2,6 +2,20 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.5] - Unreleased
+
+Patch follow-up for two edge cases found during a post-release full-diff audit.
+
+### Fixed
+
+- **Settings-load recovery** — provider inputs remain protected from stale values after a failed load, while a visible Retry action restores the editable settings once loading succeeds.
+- **Large WAV validation** — existing RIFF/RF64 files are validated from a fixed 64-byte header plus file metadata instead of synchronously loading the entire WAV into Electron's main process.
+
+### Internal
+
+- Dependabot now groups `node-llama-cpp` and all platform binary packages into one coordinated update instead of opening version-mismatched PRs.
+- Added settings retry E2E coverage and bounded RIFF/RF64 header regression checks.
+
 ## [2.4.4] - 2026-08-08
 
 Stability patch release for translation correctness, data preservation, download safety, and Windows packaging.
