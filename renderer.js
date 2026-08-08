@@ -24,6 +24,9 @@ let _stoppedAt = 0; // timestamp when stopProcessing() was called
 // 캠처한 epoch와 현재 epoch가 다르면 무시한다 (중지 후 재시작 stale 이벤트 방지).
 let _processingEpoch = 0;
 let _lastFocusedBeforeModal = null; // 설정 모달 열기 직전 포커스 (닫을 때 복원용)
+let _settingsApiDirty = false;
+let _settingsEditRevision = 0;
+let _settingsLoadToken = 0;
 let _maxTranslatedCurrent = 0; // monotonic counter for parallel translation progress display
 let _curLangIndex = 0; // 다국어 번역 시 현재 언어 순번(변경되면 X/total 카운터 리셋)
 
@@ -1044,6 +1047,7 @@ async function continueProcessing() {
         filePath: file.path,
         method: methodAtStart,
         targetLangs: targetLangs,
+        sourceLang: language === 'auto' ? null : language,
         device: document.getElementById('deviceSelect')?.value || 'auto',
         localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
         sessionId: _processingEpoch,
@@ -1107,6 +1111,27 @@ async function continueProcessing() {
   if (shouldStop) {
     addOutput(`${I18N[currentUiLang].userStopped}\n`);
     return;
+  }
+
+  // Models 화면과 동일하게, Run 경로에서도 대용량 모델을 받기 전에 동의를 받는다.
+  const availabilityKey = model.startsWith('large-v2-sync') ? 'large-v2-sync' : model;
+  if (!availableModels[availabilityKey]) {
+    // Sync 엔진은 main 프로세스가 추출 중 설치하므로 renderer 캐시가 뒤처질 수 있다.
+    // 디스크를 다시 확인해 이미 설치된 모델에 확인창을 반복 표시하지 않는다.
+    try {
+      Object.assign(availableModels, (await window.electronAPI.checkModelStatus()) || {});
+    } catch (_e) {}
+  }
+  if (!availableModels[availabilityKey]) {
+    const modelSelect = document.getElementById('modelSelect');
+    const modelLabel = modelSelect?.selectedOptions?.[0]?.textContent?.trim() || model;
+    if (!confirm(`${modelLabel}\n\n${I18N[currentUiLang].confirmDownloadModel || 'Start download?'}`)) {
+      isProcessing = false;
+      currentProcessingIndex = -1;
+      updateQueueDisplay();
+      updateUIMode();
+      return;
+    }
   }
 
   console.log(
@@ -1300,6 +1325,7 @@ async function continueProcessing() {
             filePath: srtPathFromResult,
             method: translationMethod,
             targetLangs: targetLangs,
+            sourceLang: language === 'auto' ? null : language,
             device: document.getElementById('deviceSelect')?.value || 'auto',
             localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
             sessionId: _processingEpoch,
@@ -1615,8 +1641,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // start processing (처리 시작 함수)
   async function startProcessing() {
-    // 새 배치 시작 시 상태 완전 리셋 (이전 중지로 인한 잔존 값 제거)
+    // 중복 클릭을 먼저 막고, 저장된 키를 다시 읽어 번역 설정을 실행 직전에 확인한다.
+    // 키 없는 유료 엔진이면 추출부터 시작하지 않고 사용자가 설정을 고치게 한다.
     isProcessing = true;
+    if (await updateTranslationEngineOptions()) {
+      isProcessing = false;
+      updateQueueDisplay();
+      updateUIMode();
+      return;
+    }
+
+    // 새 배치 시작 시 상태 완전 리셋 (이전 중지로 인한 잔존 값 제거)
     shouldStop = false;
     _stoppedAt = 0;
     _maxTranslatedCurrent = 0;
@@ -1693,7 +1728,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const action = btn.dataset.action;
       const index = parseInt(btn.dataset.index, 10);
-      if (action === 'open') openFileLocation(fileQueue[index]?.path);
+      if (action === 'open') {
+        const file = fileQueue[index];
+        openFileLocation(file?.outputPath || file?.path);
+      }
       if (action === 'retry') retryQueueItem(index);
       if (action === 'remove') removeFromQueue(index);
     });
@@ -1895,6 +1933,14 @@ function getLocalizedError(errorMessage) {
   if (!errorMessage) return I18N[currentUiLang].errorUnknown;
 
   const lang = I18N[currentUiLang];
+
+  // 모델 다운로드 경로들의 공통 디스크 부족 메시지.
+  const diskSpace = String(errorMessage).match(/Not enough disk space: need ([\d.]+) GB, free ([\d.]+) GB/i);
+  if (diskSpace) {
+    return (lang.errorDiskSpace || 'Not enough disk space. Required: {required} GB, free: {free} GB.')
+      .replace('{required}', diskSpace[1])
+      .replace('{free}', diskSpace[2]);
+  }
 
   // main.js에서 오는 영어 에러 메시지 → 현지화
   if (errorMessage.includes('GPU memory shortage') || errorMessage.includes('GPU 메모리 부족')) {
@@ -3890,16 +3936,31 @@ function initSettingsModal() {
     refreshModelsBtn.addEventListener('click', () => renderModels());
   }
 
+  // API/provider 입력만 저장 버튼 대상이다. 사운드·정리 토글은 즉시 저장되므로
+  // 닫기 경고 대상에서 제외한다. 동적으로 추가되는 custom provider도 위임으로 잡는다.
+  const markApiSettingsDirty = (event) => {
+    if (
+      event.target.matches(
+        '.provider-panel input, .provider-panel select, .provider-panel textarea, #translationPrompt'
+      )
+    ) {
+      _settingsApiDirty = true;
+      _settingsEditRevision++;
+    }
+  };
+  settingsModal.addEventListener('input', markApiSettingsDirty);
+  settingsModal.addEventListener('change', markApiSettingsDirty);
+
   // 설정 모달 닫기
   closeSettingsBtn.addEventListener('click', () => {
-    hideSettingsModal();
+    requestHideSettingsModal();
   });
 
   // 모달 열림 중 키보드: ESC 닫기 + 포커스 트랩 (Tab 순환)
   settingsModal.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      hideSettingsModal();
+      requestHideSettingsModal();
       return;
     }
     if (e.key === 'Tab') {
@@ -3923,7 +3984,7 @@ function initSettingsModal() {
   // 모달 외부 클릭시 닫기
   settingsModal.addEventListener('click', (e) => {
     if (e.target === settingsModal) {
-      hideSettingsModal();
+      requestHideSettingsModal();
     }
   });
 
@@ -3953,10 +4014,18 @@ function initSettingsModal() {
 
   // 저장 버튼 (API 키 저장 + 설정 저장)
   saveSettingsBtn.addEventListener('click', async () => {
-    await saveApiKeys();
-    // 설정 저장 완료 후 모달 닫기 (약간의 지연)
+    const saveRevision = _settingsEditRevision;
+    const saved = await saveApiKeys();
+    if (!saved || saveRevision !== _settingsEditRevision) return;
+    _settingsApiDirty = false;
+    // 성공 메시지를 읽을 시간을 주되, 같은 세션에서 새 입력이 생기거나 모달을
+    // 닫았다 다시 열었으면 이전 timer가 현재 입력을 닫지 못하게 한다.
+    const savedSession = _settingsLoadToken;
     setTimeout(() => {
-      hideSettingsModal();
+      const modal = document.getElementById('settingsModal');
+      if (savedSession === _settingsLoadToken && !_settingsApiDirty && modal?.classList.contains('active')) {
+        hideSettingsModal();
+      }
     }, 1500);
   });
 
@@ -3967,6 +4036,8 @@ function initSettingsModal() {
       const current = readCustomProvidersFromUI();
       current.push({ id: `custom-${Date.now()}`, name: '', format: 'openai', baseUrl: '', apiKey: '', model: '' });
       renderCustomProviders(current);
+      _settingsApiDirty = true;
+      _settingsEditRevision++;
     });
   }
 
@@ -3991,7 +4062,11 @@ function initSettingsModal() {
       if (!textarea || !window.electronAPI?.getProviderDefaults) return;
       try {
         const res = await window.electronAPI.getProviderDefaults();
-        if (res?.success) textarea.value = res.defaults.prompts.translationPrompt;
+        if (res?.success) {
+          textarea.value = res.defaults.prompts.translationPrompt;
+          _settingsApiDirty = true;
+          _settingsEditRevision++;
+        }
       } catch (error) {
         console.error('[resetPrompt] Failed:', error);
       }
@@ -4033,9 +4108,40 @@ function initSettingsModal() {
   }
 }
 
+function setProviderSettingsLoading(loading) {
+  const modal = document.getElementById('settingsModal');
+  if (!modal) return;
+  modal.setAttribute('aria-busy', loading ? 'true' : 'false');
+  modal
+    .querySelectorAll(
+      '.provider-panel input, .provider-panel select, .provider-panel textarea, .provider-panel button, #translationPrompt, #saveSettingsBtn'
+    )
+    .forEach((element) => {
+      element.disabled = loading;
+    });
+}
+
+function requestHideSettingsModal() {
+  if (_settingsApiDirty) {
+    const prompts = {
+      ko: '저장하지 않은 API 및 공급자 설정이 있습니다. 변경사항을 버리고 닫을까요?',
+      en: 'You have unsaved API and provider settings. Discard them and close?',
+      ja: '保存していないAPI・プロバイダー設定があります。変更を破棄して閉じますか？',
+      zh: 'API 和服务商设置尚未保存。要放弃更改并关闭吗？',
+      pl: 'Masz niezapisane ustawienia API i dostawców. Odrzucić zmiany i zamknąć?',
+    };
+    if (!confirm(prompts[currentUiLang] || prompts.ko)) return false;
+  }
+  _settingsApiDirty = false;
+  hideSettingsModal();
+  return true;
+}
+
 function showSettingsModal() {
   const modal = document.getElementById('settingsModal');
   if (modal) {
+    _settingsApiDirty = false;
+    setProviderSettingsLoading(true);
     // 포커스 복원용: 열기 직전 활성 요소 저장
     _lastFocusedBeforeModal = document.activeElement || null;
     modal.classList.add('active');
@@ -4093,11 +4199,14 @@ function showSettingsModal() {
       }
     }
   }
-  // API 키 · 공급자 설정 로드
+  // API 키 · 공급자 설정 로드. 입력은 로드가 끝날 때까지만 잠가 늦게 도착한
+  // IPC 응답이 사용자가 먼저 입력한 값을 덮어쓰는 경쟁을 없앤다.
+  const loadToken = ++_settingsLoadToken;
   try {
     window.electronAPI
       .loadApiKeys()
       .then(async (res) => {
+        if (loadToken !== _settingsLoadToken || !modal?.classList.contains('active')) return;
         if (res && res.success && res.keys) {
           cachedApiConfig = res.keys;
           // 기본 프롬프트를 미리 받아 둔다 — 저장 시 기본값과 같으면 비워 저장해 향후 기본값 개선을 따라가게 한다.
@@ -4108,6 +4217,7 @@ function showSettingsModal() {
               cachedModelPresets = defaultsRes.defaults.modelPresets || {};
             }
           } catch (_) {}
+          if (loadToken !== _settingsLoadToken || !modal?.classList.contains('active')) return;
           const setValue = (id, value) => {
             const el = document.getElementById(id);
             if (el) el.value = value || '';
@@ -4129,14 +4239,36 @@ function showSettingsModal() {
           updateProviderTabBadges();
           // 알려진 모델 목록을 채워 키 없이도 드롭다운에서 고를 수 있게 한다.
           fillModelPresets();
+          setProviderSettingsLoading(false);
+        } else {
+          throw new Error(res?.error || 'Settings load returned no configuration');
         }
       })
-      .catch(() => {});
-  } catch (_) {}
+      .catch((error) => {
+        console.error('[Settings] Failed to load API settings:', error);
+        if (loadToken !== _settingsLoadToken) return;
+        const status = document.getElementById('apiKeyStatus');
+        if (status) {
+          status.className = 'api-status error';
+          status.textContent = `Settings load failed: ${error.message || error}`;
+          status.style.display = 'block';
+        }
+      });
+  } catch (error) {
+    console.error('[Settings] Failed to start API settings load:', error);
+    const status = document.getElementById('apiKeyStatus');
+    if (status) {
+      status.className = 'api-status error';
+      status.textContent = `Settings load failed: ${error.message || error}`;
+      status.style.display = 'block';
+    }
+  }
 }
 
 function hideSettingsModal() {
   const modal = document.getElementById('settingsModal');
+  _settingsLoadToken++;
+  setProviderSettingsLoading(false);
   if (modal) {
     modal.classList.remove('active');
     // 모달 닫히면 배경 다시 접근 가능하게
@@ -4587,6 +4719,8 @@ function createCustomProviderCard(provider) {
   removeBtn.textContent = d.customProviderRemoveBtn || '삭제';
   removeBtn.addEventListener('click', () => {
     renderCustomProviders(readCustomProvidersFromUI().filter((item) => item.id !== provider.id));
+    _settingsApiDirty = true;
+    _settingsEditRevision++;
   });
   header.append(title, removeBtn);
 
@@ -4799,10 +4933,12 @@ async function saveApiKeys() {
     pl: 'Błąd',
   };
 
+  let saved = false;
   try {
     const res = await window.electronAPI.saveApiKeys(keys);
+    saved = !!(res && res.success);
     if (status) {
-      if (res && res.success) {
+      if (saved) {
         status.className = 'api-status success';
         status.textContent = successMsg[currentUiLang] || successMsg.ko;
         if (res.insecure) {
@@ -4822,13 +4958,14 @@ async function saveApiKeys() {
   }
   // 설정 저장 후 번역 엔진 옵션 상태 업데이트
   updateProviderTabBadges();
-  updateTranslationEngineOptions();
+  await updateTranslationEngineOptions();
+  return saved;
 }
 
 // ===== 번역 엔진 옵션 상태 업데이트 (API 키 없으면 비활성화) =====
 async function updateTranslationEngineOptions() {
   const translationSelect = document.getElementById('translationSelect');
-  if (!translationSelect) return;
+  if (!translationSelect) return false;
 
   try {
     const res = await window.electronAPI.loadApiKeys();
@@ -4885,10 +5022,22 @@ async function updateTranslationEngineOptions() {
     });
     if (autoSwitched) {
       const d = I18N[currentUiLang] || I18N.ko;
-      showToast(d.apiKeyMissingFallback || 'API key missing — switched to "No translation"');
+      showToast(d.apiKeyMissingFallback || 'API key missing, switched to "No translation"');
     }
+    return autoSwitched;
   } catch (error) {
     console.error('[updateTranslationEngineOptions] Error:', error);
+    const requiresStoredConfig =
+      ['deepl', 'chatgpt', 'gemini', 'claude'].includes(translationSelect.value) ||
+      translationSelect.value.startsWith('custom:');
+    if (requiresStoredConfig) {
+      translationSelect.value = 'none';
+      translationSelect.dispatchEvent(new Event('change'));
+      const d = I18N[currentUiLang] || I18N.ko;
+      showToast(d.apiKeyMissingFallback || 'API key missing, switched to "No translation"');
+      return true;
+    }
+    return false;
   }
 }
 
@@ -5544,6 +5693,10 @@ function _wireModelProgress() {
 const _downloadingModels = new Set();
 window._downloadingModels = _downloadingModels;
 
+function isCancelledDownloadResult(result) {
+  return result?.success === false && (result.userStopped || /cancel(?:l)?ed/i.test(String(result.error || '')));
+}
+
 function _updateModelCardProgress(cardId, percent) {
   const card = document.querySelector(`.model-card[data-card-id="${cardId}"]`);
   if (!card) return;
@@ -5842,9 +5995,13 @@ async function renderModels() {
           } catch (_e) {}
           try {
             _updateModelCardProgress(m.id, 0);
-            await window.electronAPI.localModelDownload(hyId);
+            const result = await window.electronAPI.localModelDownload(hyId);
+            if (isCancelledDownloadResult(result)) return;
+            if (result?.success === false) throw new Error(result.error || 'failed');
           } catch (e) {
-            alert(`${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${e?.message || e}`);
+            alert(
+              `${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${getLocalizedError(e?.message || e)}`
+            );
           } finally {
             _downloadingModels.delete(m.id);
             renderModels();
@@ -5862,13 +6019,16 @@ async function renderModels() {
         try {
           syncCardIds.forEach((cid) => _updateModelCardProgress(cid, 0));
           const r = await window.electronAPI.downloadSyncEngine();
-          if (r && r.success === false && !r.userStopped) throw new Error(r.error || 'failed');
+          if (isCancelledDownloadResult(r)) return;
+          if (r?.success === false) throw new Error(r.error || 'failed');
           // 정밀/라이트는 같은 엔진+모델을 공유 → 한 번 받으면 둘 다 사용 가능.
           availableModels['large-v2-sync'] = true;
           availableModels['large-v2-sync-lite'] = true;
           if (typeof updateModelSelect === 'function') updateModelSelect();
         } catch (e) {
-          alert(`${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${e?.message || e}`);
+          alert(
+            `${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${getLocalizedError(e?.message || e)}`
+          );
         } finally {
           syncCardIds.forEach((cid) => _downloadingModels.delete(cid));
           renderModels();
@@ -5883,11 +6043,15 @@ async function renderModels() {
         } catch (_e) {}
         try {
           _updateModelCardProgress(m.id, 0);
-          await window.electronAPI.downloadModel(m.whisperKey);
+          const result = await window.electronAPI.downloadModel(m.whisperKey);
+          if (isCancelledDownloadResult(result)) return;
+          if (result?.success === false) throw new Error(result.error || 'failed');
           availableModels[m.whisperKey] = true;
           if (typeof updateModelSelect === 'function') updateModelSelect();
         } catch (e) {
-          alert(`${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${e?.message || e}`);
+          alert(
+            `${(I18N[currentUiLang] || I18N.ko).toastDownloadFailed || 'Download failed'}: ${getLocalizedError(e?.message || e)}`
+          );
         } finally {
           _downloadingModels.delete(m.id);
           renderModels();

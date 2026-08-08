@@ -54,6 +54,7 @@
   "errorDllCpuAvailable": "DLL entry point not found (0xC0000139). CUDA DLLs are incompatible with your GPU driver. CPU build is already installed - please change device to CPU in settings.",
   "errorDllNotFound": "Required DLL not found (0xC0000135). Install Visual C++ Redistributable 2015-2022 or use CPU-only build.",
   "errorUnknown": "Unknown error",
+  "errorDiskSpace": "Not enough disk space. Required: {required} GB, free: {free} GB.",
   "errorSrtPathMissing": "SRT file path missing after extraction",
   "errorEmptyTranslation": "Translation result is empty",
   "errorApiQuotaExceeded": "API quota exceeded - please wait and retry, or use a different translation engine",
@@ -305,8 +306,8 @@
   "resetPromptHint": "Restores the default prompt if you made a mistake.",
   "modelSelectNames": {
     "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐Recommended",
-    "large-v2-sync": "large-v2 Sync (fix bad sync, very slow)",
-    "large-v2-sync-lite": "large-v2 Sync Lite (int8, low VRAM)",
+    "large-v2-sync": "large-v2 Sync (~4.4GB shared, fixes bad sync, very slow)",
+    "large-v2-sync-lite": "large-v2 Sync Lite (~4.4GB shared, int8, low VRAM)",
     "large-v3": "large-v3 (3.1GB)",
     "medium": "medium (1.5GB)",
     "small": "small (466MB)",

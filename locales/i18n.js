@@ -68,6 +68,7 @@ const I18N = {
     errorDllNotFound:
       '필요한 DLL을 찾을 수 없음 (0xC0000135). Visual C++ Redistributable 2015-2022를 설치하거나 CPU 전용 빌드를 사용하세요.',
     errorUnknown: '알 수 없는 오류',
+    errorDiskSpace: '디스크 공간이 부족합니다. 필요: {required}GB, 여유: {free}GB.',
     errorSrtPathMissing: '자막 추출 후 SRT 파일 경로를 찾을 수 없음',
     errorEmptyTranslation: '번역 결과가 비어있음',
     errorApiQuotaExceeded: 'API 할당량 초과 - 잠시 후 다시 시도하거나 다른 번역 엔진을 사용하세요',
@@ -332,8 +333,8 @@ const I18N = {
     resetPromptHint: '프롬프트를 잘못 수정했을 때 기본값으로 되돌립니다.',
     modelSelectNames: {
       'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐추천',
-      'large-v2-sync': 'large-v2 싱크 (싱크 문제 해결용, 매우 느림)',
-      'large-v2-sync-lite': 'large-v2 싱크 라이트 (int8, 저사양/저VRAM)',
+      'large-v2-sync': 'large-v2 싱크 (~4.4GB 공유, 싱크 문제 해결용, 매우 느림)',
+      'large-v2-sync-lite': 'large-v2 싱크 라이트 (~4.4GB 공유, int8, 저사양/저VRAM)',
       'large-v3': 'large-v3 (3.1GB)',
       medium: 'medium (1.5GB)',
       small: 'small (466MB)',
@@ -468,6 +469,7 @@ const I18N = {
     errorDllNotFound:
       'Required DLL not found (0xC0000135). Install Visual C++ Redistributable 2015-2022 or use CPU-only build.',
     errorUnknown: 'Unknown error',
+    errorDiskSpace: 'Not enough disk space. Required: {required} GB, free: {free} GB.',
     errorSrtPathMissing: 'SRT file path missing after extraction',
     errorEmptyTranslation: 'Translation result is empty',
     errorApiQuotaExceeded: 'API quota exceeded - please wait and retry, or use a different translation engine',
@@ -738,8 +740,8 @@ const I18N = {
     resetPromptHint: 'Restores the default prompt if you made a mistake.',
     modelSelectNames: {
       'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Recommended',
-      'large-v2-sync': 'large-v2 Sync (fix bad sync, very slow)',
-      'large-v2-sync-lite': 'large-v2 Sync Lite (int8, low VRAM)',
+      'large-v2-sync': 'large-v2 Sync (~4.4GB shared, fixes bad sync, very slow)',
+      'large-v2-sync-lite': 'large-v2 Sync Lite (~4.4GB shared, int8, low VRAM)',
       'large-v3': 'large-v3 (3.1GB)',
       medium: 'medium (1.5GB)',
       small: 'small (466MB)',
@@ -873,6 +875,7 @@ const I18N = {
     errorDllNotFound:
       '必要なDLLが見つかりません (0xC0000135)。Visual C++ Redistributable 2015-2022をインストールするか、CPU専用ビルドを使用してください。',
     errorUnknown: '不明なエラー',
+    errorDiskSpace: 'ディスクの空き容量が不足しています。必要: {required} GB、空き: {free} GB。',
     errorSrtPathMissing: '字幕抽出後にSRTファイルパスが見つかりません',
     errorEmptyTranslation: '翻訳結果が空です',
     errorApiQuotaExceeded: 'API割り当て超過 - しばらく待ってから再試行するか、別の翻訳エンジンを使用してください',
@@ -1139,8 +1142,8 @@ const I18N = {
     resetPromptHint: 'プロンプトを間違えて編集したとき、デフォルトに戻します。',
     modelSelectNames: {
       'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推奨',
-      'large-v2-sync': 'large-v2 同期 (同期ずれ対策, 非常に低速)',
-      'large-v2-sync-lite': 'large-v2 同期 ライト (int8, 低VRAM)',
+      'large-v2-sync': 'large-v2 同期 (~4.4GB共有, 同期ずれ対策, 非常に低速)',
+      'large-v2-sync-lite': 'large-v2 同期 ライト (~4.4GB共有, int8, 低VRAM)',
       'large-v3': 'large-v3 (3.1GB)',
       medium: 'medium (1.5GB)',
       small: 'small (466MB)',
@@ -1271,6 +1274,7 @@ const I18N = {
       '未找到DLL入口点 (0xC0000139)。CUDA DLL与GPU驱动不兼容。CPU构建已安装，请在设置中将设备更改为CPU。',
     errorDllNotFound: '未找到所需DLL (0xC0000135)。请安装Visual C++ Redistributable 2015-2022或使用CPU专用构建。',
     errorUnknown: '未知错误',
+    errorDiskSpace: '磁盘空间不足。需要：{required} GB，可用：{free} GB。',
     errorSrtPathMissing: '字幕提取后未找到SRT文件路径',
     errorEmptyTranslation: '翻译结果为空',
     errorApiQuotaExceeded: 'API配额超限 - 请稍后重试或使用其他翻译引擎',
@@ -1531,8 +1535,8 @@ const I18N = {
     resetPromptHint: '修改出错时恢复默认提示词。',
     modelSelectNames: {
       'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐推荐',
-      'large-v2-sync': 'large-v2 同步 (修复错位, 非常慢)',
-      'large-v2-sync-lite': 'large-v2 同步 轻量 (int8, 低显存)',
+      'large-v2-sync': 'large-v2 同步 (~4.4GB共享, 修复错位, 非常慢)',
+      'large-v2-sync-lite': 'large-v2 同步 轻量 (~4.4GB共享, int8, 低显存)',
       'large-v3': 'large-v3 (3.1GB)',
       medium: 'medium (1.5GB)',
       small: 'small (466MB)',
@@ -1667,6 +1671,7 @@ const I18N = {
     errorDllNotFound:
       'Nie znaleziono wymaganej biblioteki DLL (0xC0000135). Zainstaluj Visual C++ Redistributable 2015-2022 lub użyj wersji tylko CPU.',
     errorUnknown: 'Nieznany błąd',
+    errorDiskSpace: 'Za mało miejsca na dysku. Wymagane: {required} GB, dostępne: {free} GB.',
     errorSrtPathMissing: 'Nie znaleziono ścieżki pliku SRT po ekstrakcji',
     errorEmptyTranslation: 'Wynik tłumaczenia jest pusty',
     errorApiQuotaExceeded: 'Przekroczono limit API - spróbuj ponownie później lub użyj innego silnika tłumaczenia',
@@ -1938,8 +1943,8 @@ const I18N = {
     resetPromptHint: 'Przywraca domyślny prompt po błędnej edycji.',
     modelSelectNames: {
       'large-v3-turbo': 'large-v3-turbo (1.6GB) ⭐Zalecany',
-      'large-v2-sync': 'large-v2 Sync (naprawa złej synch., bardzo wolny)',
-      'large-v2-sync-lite': 'large-v2 Sync Lite (int8, niski VRAM)',
+      'large-v2-sync': 'large-v2 Sync (~4.4GB wspólne, naprawa złej synch., bardzo wolny)',
+      'large-v2-sync-lite': 'large-v2 Sync Lite (~4.4GB wspólne, int8, niski VRAM)',
       'large-v3': 'large-v3 (3.1GB)',
       medium: 'medium (1.5GB)',
       small: 'small (466MB)',

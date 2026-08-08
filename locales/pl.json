@@ -54,6 +54,7 @@
   "errorDllCpuAvailable": "Nie znaleziono punktu wejścia DLL (0xC0000139). Biblioteki CUDA DLL są niezgodne ze sterownikiem GPU. Wersja CPU jest już zainstalowana - zmień urządzenie na CPU w ustawieniach.",
   "errorDllNotFound": "Nie znaleziono wymaganej biblioteki DLL (0xC0000135). Zainstaluj Visual C++ Redistributable 2015-2022 lub użyj wersji tylko CPU.",
   "errorUnknown": "Nieznany błąd",
+  "errorDiskSpace": "Za mało miejsca na dysku. Wymagane: {required} GB, dostępne: {free} GB.",
   "errorSrtPathMissing": "Nie znaleziono ścieżki pliku SRT po ekstrakcji",
   "errorEmptyTranslation": "Wynik tłumaczenia jest pusty",
   "errorApiQuotaExceeded": "Przekroczono limit API - spróbuj ponownie później lub użyj innego silnika tłumaczenia",
@@ -305,8 +306,8 @@
   "resetPromptHint": "Przywraca domyślny prompt po błędnej edycji.",
   "modelSelectNames": {
     "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐Zalecany",
-    "large-v2-sync": "large-v2 Sync (naprawa złej synch., bardzo wolny)",
-    "large-v2-sync-lite": "large-v2 Sync Lite (int8, niski VRAM)",
+    "large-v2-sync": "large-v2 Sync (~4.4GB wspólne, naprawa złej synch., bardzo wolny)",
+    "large-v2-sync-lite": "large-v2 Sync Lite (~4.4GB wspólne, int8, niski VRAM)",
     "large-v3": "large-v3 (3.1GB)",
     "medium": "medium (1.5GB)",
     "small": "small (466MB)",

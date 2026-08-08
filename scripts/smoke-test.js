@@ -2,12 +2,195 @@
 
 const assert = require('assert');
 const fs = require('fs');
+const https = require('https');
 const os = require('os');
 const path = require('path');
+const { EventEmitter } = require('events');
+const { PassThrough } = require('stream');
 const EnhancedSubtitleTranslator = require('../translator-enhanced');
 const localTranslator = require('../local-translator');
-const { hasWhisperRuntimeLibraries } = require('./postinstall');
+const { hasWhisperRuntimeLibraries, downloadFile } = require('./postinstall');
 const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
+const {
+  assertDownloadDiskSpace,
+  assertSyncInstallDiskSpace,
+  getSyncInstallRequiredBytes,
+  SYNC_MODEL_BYTES,
+  SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
+} = require('../disk-space');
+const { backupStaleWav } = require('../file-safety');
+
+async function runPostinstallRedirectDrain() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-postinstall-redirect-'));
+  const dest = path.join(dir, 'download.bin');
+  const originalGet = https.get;
+  let redirectResumed = false;
+  let errorResumed = false;
+  try {
+    https.get = (url, _options, callback) => {
+      const request = new EventEmitter();
+      process.nextTick(() => {
+        const response = new PassThrough();
+        if (url === 'https://initial.test/file') {
+          response.statusCode = 302;
+          response.headers = { location: 'https://final.test/file' };
+          const originalResume = response.resume.bind(response);
+          response.resume = () => {
+            redirectResumed = true;
+            return originalResume();
+          };
+          callback(response);
+          response.end();
+        } else if (url === 'https://error.test/file') {
+          response.statusCode = 503;
+          response.headers = {};
+          const originalResume = response.resume.bind(response);
+          response.resume = () => {
+            errorResumed = true;
+            return originalResume();
+          };
+          callback(response);
+          response.end('unavailable');
+        } else {
+          response.statusCode = 200;
+          response.headers = { 'content-length': url === 'https://incomplete.test/file' ? '4' : '3' };
+          callback(response);
+          response.end('abc');
+        }
+      });
+      return request;
+    };
+    await downloadFile('https://initial.test/file', dest);
+    assert.strictEqual(redirectResumed, true, 'postinstall must drain redirect responses');
+    assert.strictEqual(fs.readFileSync(dest, 'utf8'), 'abc');
+
+    fs.writeFileSync(dest, 'existing-user-file');
+    await assert.rejects(downloadFile('https://error.test/file', dest), /HTTP 503/);
+    assert.strictEqual(errorResumed, true, 'postinstall must drain failed responses');
+    assert.strictEqual(
+      fs.readFileSync(dest, 'utf8'),
+      'existing-user-file',
+      'HTTP failure must not delete existing file'
+    );
+
+    await assert.rejects(downloadFile('https://incomplete.test/file', dest), /Download incomplete/);
+    assert.strictEqual(fs.existsSync(dest), false, 'partial download must be removed after its stream closes');
+    console.log('[PostinstallRedirect] redirect/failure responses drain and partial files clean up (ok)');
+  } finally {
+    https.get = originalGet;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function runSyncPreflightOrdering() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const preflight = source.indexOf('assertSyncInstallDiskSpace(');
+  const firstDownload = source.indexOf('await ensureFasterWhisperEngine((pct)');
+  assert.ok(
+    preflight >= 0 && firstDownload >= 0 && preflight < firstDownload,
+    'Sync disk preflight must run before download'
+  );
+  assert.match(
+    source,
+    /engineInstalled = !!\(existingExePath && fs\.existsSync\(existingExePath\)\)/,
+    'Sync preflight must verify that the resolved engine executable actually exists'
+  );
+  console.log('[SyncDiskPreflight] full-install guard runs before network download (ok)');
+}
+
+function runRendererSourceLangPayload() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+  const calls = [...source.matchAll(/window\.electronAPI\.translateSubtitle\(\{([\s\S]*?)\n\s*\}\);/g)];
+  assert.strictEqual(calls.length, 2, 'renderer must have direct-SRT and post-extraction translation calls');
+  for (const [, payload] of calls) {
+    assert.match(
+      payload,
+      /sourceLang:\s*language === 'auto' \? null : language/,
+      'each renderer translation payload must forward the selected source language'
+    );
+  }
+  assert.match(
+    source,
+    /openFileLocation\(file\?\.outputPath \|\| file\?\.path\)/,
+    'completed queue items must open the generated output when available'
+  );
+  console.log('[SourceLangPayload] translation source and completed output paths are wired (ok)');
+}
+
+function runWavBackupSafety() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-wav-backup-'));
+  const wav = path.join(dir, 'video.wav');
+  const backup = `${wav}.stale.bak`;
+  try {
+    fs.writeFileSync(wav, 'current-user-wav');
+    fs.writeFileSync(backup, 'previous-backup');
+    const originalRename = fs.renameSync;
+    fs.renameSync = () => {
+      throw new Error('forced backup rotation failure');
+    };
+    try {
+      assert.throws(() => backupStaleWav(wav), /forced backup rotation failure/);
+    } finally {
+      fs.renameSync = originalRename;
+    }
+    assert.strictEqual(fs.readFileSync(wav, 'utf8'), 'current-user-wav', 'backup failure must preserve source WAV');
+    assert.strictEqual(fs.readFileSync(backup, 'utf8'), 'previous-backup', 'backup failure must preserve old backup');
+    assert.strictEqual(backupStaleWav(wav), backup);
+    assert.strictEqual(fs.existsSync(wav), false);
+    assert.strictEqual(fs.readFileSync(backup, 'utf8'), 'current-user-wav');
+
+    fs.writeFileSync(wav, 'next-user-wav');
+    const renameForRotation = fs.renameSync;
+    let renameCalls = 0;
+    fs.renameSync = (...args) => {
+      renameCalls++;
+      if (renameCalls === 2) throw new Error('forced source rename failure');
+      return renameForRotation(...args);
+    };
+    try {
+      assert.throws(() => backupStaleWav(wav), /forced source rename failure/);
+    } finally {
+      fs.renameSync = renameForRotation;
+    }
+    assert.strictEqual(fs.readFileSync(wav, 'utf8'), 'next-user-wav', 'source rename failure must preserve source');
+    assert.strictEqual(
+      fs.readFileSync(backup, 'utf8'),
+      'current-user-wav',
+      'source rename failure must restore backup'
+    );
+    console.log('[WavBackupSafety] failures preserve source and previous backup (ok)');
+  } finally {
+    try {
+      fs.chmodSync(dir, 0o755);
+    } catch {}
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function runDiskSpaceGuard() {
+  assert.strictEqual(getSyncInstallRequiredBytes(true, true), 0);
+  assert.strictEqual(getSyncInstallRequiredBytes(true, false), SYNC_MODEL_BYTES);
+  assert.strictEqual(getSyncInstallRequiredBytes(false, true), SYNC_ENGINE_EXTRACTION_PEAK_BYTES);
+  assert.ok(
+    getSyncInstallRequiredBytes(false, false) >= SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
+    'fresh Sync install must reserve the extraction peak before downloading'
+  );
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-disk-space-'));
+  const dest = path.join(dir, 'models', 'model.bin');
+  try {
+    assert.strictEqual(assertSyncInstallDiskSpace(dest, true, true), 0);
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const freeBytes = bavail * bsize;
+    if (freeBytes > 256 * 1024 * 1024 + 1) {
+      assert.doesNotThrow(() => assertDownloadDiskSpace(dest, 1));
+      assert.ok(fs.existsSync(path.dirname(dest)), 'first-run model directory is created before statfs');
+    }
+    assert.throws(() => assertDownloadDiskSpace(dest, freeBytes), /Not enough disk space/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 function runSrtCleanup() {
   // no-op when no options selected
@@ -96,6 +279,64 @@ function runWhisperRuntimeProbe() {
     assert.strictEqual(hasWhisperRuntimeLibraries(process.execPath, path.dirname(process.execPath)), true);
   } finally {
     fs.rmSync(runtimeDir, { recursive: true, force: true });
+  }
+}
+
+async function runModelResumeDiskSpace() {
+  const https = require('https');
+  const { EventEmitter } = require('events');
+  const electronPath = require.resolve('electron');
+  const originalElectron = require.cache[electronPath].exports;
+  const originalGet = https.get;
+  const originalStatfs = fs.statfsSync;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-model-resume-'));
+  const controller = new AbortController();
+  let rangeHeader = '';
+
+  try {
+    require.cache[electronPath].exports = { app: { getPath: () => root } };
+    const model = localTranslator.MODELS[localTranslator.DEFAULT_MODEL_ID];
+    const tmp = path.join(root, 'hy-mt-models', model.file + '.tmp');
+    fs.mkdirSync(path.dirname(tmp), { recursive: true });
+    fs.writeFileSync(tmp, '');
+    fs.truncateSync(tmp, 800 * 1024 * 1024);
+    // 전체 모델+예비 공간은 부족하지만, 남은 333MB+예비 공간은 충분한 상태.
+    fs.statfsSync = () => ({ bavail: 900, bsize: 1024 * 1024 });
+    https.get = (_url, options) => {
+      rangeHeader = options?.headers?.Range || '';
+      const request = new EventEmitter();
+      request.destroy = () => request.emit('error', new Error('socket closed'));
+      queueMicrotask(() => controller.abort(new Error('ABORTED: resume probe')));
+      return request;
+    };
+
+    await assert.rejects(() => localTranslator.downloadModel(null, controller.signal), /ABORTED: resume probe/);
+    assert.strictEqual(rangeHeader, 'bytes=838860800-', 'disk guard must allow download resume from the partial size');
+
+    // Range를 무시한 200 응답에서 전체 재다운로드 공간이 부족하면 partial을 지우지 않는다.
+    fs.writeFileSync(tmp, '');
+    fs.truncateSync(tmp, 800 * 1024 * 1024);
+    const controller2 = new AbortController();
+    https.get = (_url, options, callback) => {
+      rangeHeader = options?.headers?.Range || '';
+      const request = new EventEmitter();
+      request.destroy = () => request.emit('error', new Error('socket closed'));
+      const response = new EventEmitter();
+      response.statusCode = 200;
+      response.headers = { 'content-length': String(model.sizeBytes) };
+      response.resume = () => {};
+      response.destroy = () => {};
+      queueMicrotask(() => callback(response));
+      return request;
+    };
+    await assert.rejects(() => localTranslator.downloadModel(null, controller2.signal), /Not enough disk space/);
+    assert.strictEqual(rangeHeader, 'bytes=838860800-');
+    assert.strictEqual(fs.statSync(tmp).size, 800 * 1024 * 1024, 'Range-ignored disk failure must preserve partial');
+  } finally {
+    https.get = originalGet;
+    fs.statfsSync = originalStatfs;
+    require.cache[electronPath].exports = originalElectron;
+    fs.rmSync(root, { recursive: true, force: true });
   }
 }
 
@@ -354,8 +595,14 @@ function runCacheKeyConsistency() {
   const base = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko');
   const withSrc = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', 'en');
   const withCtx = translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', null, true);
+  // 이 두 문맥은 기존 32비트 hashString에서 실제로 충돌한다. SHA-256 문맥
+  // 지문은 길이와 구형 해시가 같은 문맥도 분리해야 한다.
+  assert.strictEqual(translator.hashString('before Aa'), translator.hashString('before BB'));
+  const withDeepLCtxA = translator.getCacheKey('hello', 'deepl', 'ko', 'en', 'before Aa');
+  const withDeepLCtxB = translator.getCacheKey('hello', 'deepl', 'ko', 'en', 'before BB');
   assert.notStrictEqual(base, withSrc, 'sourceLang must be part of cache key');
   assert.notStrictEqual(base, withCtx, 'contextAware flag must be part of cache key');
+  assert.notStrictEqual(withDeepLCtxA, withDeepLCtxB, 'DeepL context content must be part of cache key');
   // 동일 입력·동일 소스는 같은 키 (캐시 적중 유지)
   assert.strictEqual(
     translator.getCacheKey('hello', 'chatgpt:gpt-5.6-sol', 'ko', 'en'),
@@ -363,6 +610,65 @@ function runCacheKeyConsistency() {
     'same sourceLang must produce same key'
   );
   console.log('[CacheKey] sourceLang/contextAware flags isolated (ok)');
+}
+
+async function runDeepLNeighborContext() {
+  const texts = ['cue A', 'cue B', 'cue C', 'cue D', 'cue E'];
+  const srt = texts
+    .map((text, index) => `${index + 1}\n00:00:0${index},000 --> 00:00:0${index + 1},000\n${text}`)
+    .join('\n\n');
+  const translator = new EnhancedSubtitleTranslator();
+  translator.apiKeys = {
+    preferredService: 'deepl',
+    batchTranslation: true,
+    maxConcurrent: 2,
+  };
+  translator.getOptimalBatchSize = () => 2;
+  const received = new Map();
+  translator.translateAuto = async (text, method, targetLang, sourceLang, context) => {
+    received.set(text, { method, targetLang, sourceLang, context });
+    return `번역-${texts.indexOf(text)}`;
+  };
+
+  await translator.translateSRTContent(srt, 'deepl', 'KO', null, 'ja');
+  assert.deepStrictEqual(
+    texts.map((text) => received.get(text)?.context),
+    ['cue B\ncue C', 'cue A\ncue C\ncue D', 'cue A\ncue B\ncue D\ncue E', 'cue B\ncue C\ncue E', 'cue C\ncue D'],
+    'DeepL must receive the two preceding and two following cues'
+  );
+  assert.ok([...received.values()].every((item) => item.sourceLang === 'ja'));
+
+  const nonDeepL = new EnhancedSubtitleTranslator();
+  nonDeepL.apiKeys.batchTranslation = false;
+  const nonDeepLContexts = [];
+  nonDeepL.translateAuto = async (_text, _method, _targetLang, _sourceLang, context) => {
+    nonDeepLContexts.push(context);
+    return '번역';
+  };
+  await nonDeepL.translateSRTContent(srt, 'mymemory', 'ko', null, 'ja');
+  assert.ok(
+    nonDeepLContexts.every((context) => context == null),
+    'non-DeepL engines must not receive DeepL context'
+  );
+
+  const cached = new EnhancedSubtitleTranslator();
+  cached.apiKeys.deepl = 'test-key';
+  cached.apiKeys.enableCache = true;
+  cached.throttleRequest = async () => {};
+  const apiContexts = [];
+  cached.deeplTranslator = {
+    translateText: async (_text, _sourceLang, _targetLang, options) => {
+      apiContexts.push(options?.context || null);
+      return { text: `translated with ${options?.context}` };
+    },
+  };
+  const first = await cached.translateWithDeepL('same cue', 'KO', 'ja', 'before Aa');
+  const firstCached = await cached.translateWithDeepL('same cue', 'KO', 'ja', 'before Aa');
+  const second = await cached.translateWithDeepL('same cue', 'KO', 'ja', 'before BB');
+  assert.strictEqual(firstCached, first, 'same DeepL context must reuse the cache');
+  assert.notStrictEqual(second, first, 'different DeepL context must not reuse a stale translation');
+  assert.deepStrictEqual(apiContexts, ['before Aa', 'before BB']);
+  console.log('[DeepLContext] neighboring cues forwarded and cache isolated (ok)');
 }
 
 async function runSerial429Propagation() {
@@ -903,6 +1209,9 @@ async function runQuotaMessagePrecision() {
 }
 
 async function run() {
+  runRendererSourceLangPayload();
+  runSyncPreflightOrdering();
+  await runPostinstallRedirectDrain();
   const translator = new EnhancedSubtitleTranslator();
 
   // deepl-node 1.27: en/pt는 지역 코드가 아니면 deprecated로 throw(이슈 #41)
@@ -940,7 +1249,10 @@ async function run() {
 
   runSrtCleanup();
   runSrtFromWhisperJson();
+  runWavBackupSafety();
   runWhisperRuntimeProbe();
+  runDiskSpaceGuard();
+  await runModelResumeDiskSpace();
   await runModelDownloadAbort();
   await runLocalTranslationGuards();
   await runMyMemoryErrorPhrase();
@@ -948,6 +1260,7 @@ async function run() {
   await runRetryOn429Case();
   await runThrottleSerialization();
   runCacheKeyConsistency();
+  await runDeepLNeighborContext();
   await runSerial429Propagation();
   await runSerialRetry429Propagation();
   await runSrtFileNoOutputOn429();

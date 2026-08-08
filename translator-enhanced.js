@@ -631,7 +631,13 @@ class EnhancedSubtitleTranslator {
     // sourceLang/contextAware는 선택 플래그다: 소스 언어가 다른 요청끼리
     // 번역 결과가 교차하지 않고, 컨텍스트(문맥) 번역 결과가 일반 번역과
     // 섞이지 않게 한다. 기본값이 null/false라 기존 호출은 동일 키를 쓴다.
-    const flags = [sourceLang && sourceLang !== 'auto' ? `sl:${sourceLang}` : '', contextAware ? 'ctx:1' : '']
+    let contextFlag = '';
+    if (typeof contextAware === 'string' && contextAware) {
+      contextFlag = `ctx:${crypto.createHash('sha256').update(contextAware).digest('hex')}`;
+    } else if (contextAware) {
+      contextFlag = 'ctx:1';
+    }
+    const flags = [sourceLang && sourceLang !== 'auto' ? `sl:${sourceLang}` : '', contextFlag]
       .filter(Boolean)
       .join('_');
     return `${filePrefix}${method}_${targetLang}_${text.length}_${flags ? flags + '_' : ''}${this.hashString(text)}`;
@@ -802,7 +808,7 @@ class EnhancedSubtitleTranslator {
     }
 
     // 캐시 확인
-    const cached = this.getCachedTranslation(text, 'deepl', targetLang, sourceLang);
+    const cached = this.getCachedTranslation(text, 'deepl', targetLang, sourceLang, context || false);
     if (cached) {
       console.log('[DeepL Cache Hit]', {
         text: text.substring(0, 30) + '...',
@@ -846,7 +852,7 @@ class EnhancedSubtitleTranslator {
       });
 
       // 결과 캐시
-      this.setCachedTranslation(text, 'deepl', targetLang, translation, sourceLang);
+      this.setCachedTranslation(text, 'deepl', targetLang, translation, sourceLang, context || false);
       return translation;
     } catch (error) {
       console.error('[DeepL Translation Failed]', {
@@ -1514,7 +1520,14 @@ ${lines}`;
   }
 
   // 배치 번역 (성능 향상) - 동적 배치 크기 조정
-  async translateBatch(texts, method = null, targetLang = null, _sourceLang = null, progressCallback = null) {
+  async translateBatch(
+    texts,
+    method = null,
+    targetLang = null,
+    _sourceLang = null,
+    progressCallback = null,
+    contexts = null
+  ) {
     const preferredMethod = method || this.apiKeys.preferredService;
 
     if (preferredMethod === 'local' || !this.apiKeys.batchTranslation || texts.length <= 1) {
@@ -1527,7 +1540,7 @@ ${lines}`;
         try {
           console.log(`[Batch Translation] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
 
-          const result = await this.translateAuto(texts[i], method, targetLang, _sourceLang);
+          const result = await this.translateAuto(texts[i], method, targetLang, _sourceLang, contexts?.[i] || null);
           results.push(result);
           if (preferredMethod === 'local') localProcessed++;
 
@@ -1690,12 +1703,19 @@ ${lines}`;
           }
 
           const text = batch[j];
-          const currentIndex = results.length + batchIndex * optimalBatchSize + j + 1;
+          const textIndex = (i + batchIndex) * optimalBatchSize + j;
+          const currentIndex = textIndex + 1;
 
           try {
             console.log(`[Parallel Translation] ${currentIndex}/${texts.length}: ${text.substring(0, 40)}...`);
 
-            const result = await this.translateAuto(text, method, targetLang, _sourceLang);
+            const result = await this.translateAuto(
+              text,
+              method,
+              targetLang,
+              _sourceLang,
+              contexts?.[textIndex] || null
+            );
             batchResults.push(result);
 
             console.log(`[Parallel Success] ${currentIndex}/${texts.length}: ${result.substring(0, 40)}...`);
@@ -1944,9 +1964,18 @@ ${lines}`;
       progressCallback({ stage: 'translating', current: 0, total: textsToTranslate.length });
     }
 
+    const deeplContexts =
+      this.normalizeTranslationMethod(method) === 'deepl'
+        ? textsToTranslate.map((_, index) =>
+            textsToTranslate
+              .slice(Math.max(0, index - 2), index)
+              .concat(textsToTranslate.slice(index + 1, index + 3))
+              .join('\n')
+          )
+        : null;
     const translatedTexts = this.supportsContextAware(method)
       ? await this.translateContextAwareBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback)
-      : await this.translateBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback);
+      : await this.translateBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback, deeplContexts);
 
     // 3단계: 결과 삽입
     for (let k = 0; k < translatedTexts.length; k++) {
