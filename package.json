@@ -143,11 +143,11 @@
   "devDependencies": {
     "electron": "^43.3.0",
     "electron-builder": "^26.8.1",
-    "eslint": "^9.39.2",
+    "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.1.0",
-    "playwright": "^1.60.0",
-    "prettier": "^3.8.1"
+    "globals": "^17.9.0",
+    "playwright": "^1.62.1",
+    "prettier": "^3.9.6"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
