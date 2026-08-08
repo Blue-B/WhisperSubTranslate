@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      node-llama-cpp:
+        patterns:
+          - "node-llama-cpp"
+          - "@node-llama-cpp/*"
     commit-message:
       prefix: "chore(deps)"
 
