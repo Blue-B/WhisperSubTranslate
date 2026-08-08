@@ -377,12 +377,14 @@ class EnhancedSubtitleTranslator {
     this.batchSize = 5; // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null; // mainWindow 참조 저장
     this._aborted = false; // 사용자 중지 플래그
+    this._sleepAborters = new Set();
     this.cacheHits = 0;
     this.cacheMisses = 0;
   }
 
   abort() {
     this._aborted = true;
+    for (const abortSleep of [...this._sleepAborters]) abortSleep();
     localTranslator.abortTranslation();
     console.log('[Translator] Abort requested');
   }
@@ -737,7 +739,22 @@ class EnhancedSubtitleTranslator {
   }
 
   sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    if (this._aborted) return Promise.reject(new Error('ABORTED: Translation stopped by user'));
+    return new Promise((resolve, reject) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this._sleepAborters.delete(abortSleep);
+      };
+      const abortSleep = () => {
+        finish();
+        reject(new Error('ABORTED: Translation stopped by user'));
+      };
+      const timer = setTimeout(() => {
+        finish();
+        resolve();
+      }, ms);
+      this._sleepAborters.add(abortSleep);
+    });
   }
 
   // Enhanced error handling (향상된 에러 처리) - 콘솔 + 파일 로그
@@ -771,12 +788,14 @@ class EnhancedSubtitleTranslator {
     let lastError;
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+      if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
       try {
         if (attempt > 0) {
           await this.sleep(1000 * Math.pow(2, attempt)); // exponential backoff (지수 백오프)
         }
         return await translateFn(text);
       } catch (error) {
+        if (String(error?.message || error).includes('ABORTED')) throw error;
         lastError = error;
         this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed`, error);
 

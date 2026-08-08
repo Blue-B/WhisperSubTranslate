@@ -4,17 +4,21 @@ All notable changes to WhisperSubTranslate are documented here. This project adh
 
 ## [2.4.5] - Unreleased
 
-Patch follow-up for two edge cases found during a post-release full-diff audit.
+Patch follow-up for reliability issues found during a post-release full-diff audit.
 
 ### Fixed
 
-- **Settings-load recovery** — provider inputs remain protected from stale values after a failed load, while a visible Retry action restores the editable settings once loading succeeds.
-- **Large WAV validation** — existing RIFF/RF64 files are validated from a fixed 64-byte header plus file metadata instead of synchronously loading the entire WAV into Electron's main process.
+- **Settings-load recovery:** provider inputs remain protected from stale values after a failed load, while a visible Retry action restores the editable settings once loading succeeds.
+- **Large WAV handling:** RIFF and RF64 files are validated from a fixed 64-byte header instead of loading the entire WAV into Electron's main process. Invalid or outdated sibling WAV files stay untouched while conversion uses temporary storage.
+- **Sync installation safety:** first-time disk checks include the extracted engine and model together, and failed Sync downloads remove partial files.
+- **Model download recovery:** the first caller receives progress updates, interrupted local-model downloads retain resumable data, and cancellation state no longer leaks between processing and download flows.
+- **Translation cancellation:** stopping a translation interrupts an active retry delay instead of waiting through the remaining backoff.
+- **Installer failure reporting:** llama and whisper installation failures are tracked independently, redirect handoffs ignore retired-request errors, and cross-platform binary installs run through the declared sequential path.
 
 ### Internal
 
-- Dependabot now groups `node-llama-cpp` and all platform binary packages into one coordinated update instead of opening version-mismatched PRs.
-- Added settings retry E2E coverage and bounded RIFF/RF64 header regression checks.
+- Dependabot groups `node-llama-cpp` platform packages, npm development dependencies, and GitHub Actions into coordinated updates with tighter open-PR limits.
+- Added regression coverage for settings recovery, bounded WAV validation, complete Sync disk calculations, partial download cleanup, resumable downloads, retry cancellation, redirect races, and installer failure scopes.
 
 ## [2.4.4] - 2026-08-08
 

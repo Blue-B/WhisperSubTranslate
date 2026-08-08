@@ -147,69 +147,73 @@ async function downloadFile(url, destPath) {
         return;
       }
 
-      https
-        .get(currentUrl, { headers: { 'User-Agent': 'WhisperSubTranslate-Installer' } }, (res) => {
-          // Handle redirect
-          if (res.statusCode === 302 || res.statusCode === 301) {
-            redirectCount++;
-            const location = res.headers.location;
-            // Redirect 응답 body를 소비하지 않으면 Windows Node의 socket이 열린 채
-            // 남아 postinstall/npm ci가 끝난 뒤에도 프로세스가 종료되지 않는다.
-            res.resume();
-            if (!location) {
-              fail(new Error('Redirect without location header'));
-              return;
-            }
-            request(location);
+      let redirected = false;
+      const req = https.get(currentUrl, { headers: { 'User-Agent': 'WhisperSubTranslate-Installer' } }, (res) => {
+        // Handle redirect
+        if (res.statusCode === 302 || res.statusCode === 301) {
+          redirected = true;
+          redirectCount++;
+          const location = res.headers.location;
+          // Redirect 응답 body를 소비하지 않으면 Windows Node의 socket이 열린 채
+          // 남아 postinstall/npm ci가 끝난 뒤에도 프로세스가 종료되지 않는다.
+          res.on('error', () => {});
+          res.resume();
+          if (!location) {
+            fail(new Error('Redirect without location header'));
             return;
           }
+          request(location);
+          return;
+        }
 
-          // Validate response before opening/truncating the destination file.
-          if (res.statusCode !== 200) {
-            res.resume();
-            fail(new Error(`Download failed: HTTP ${res.statusCode}`));
+        // Validate response before opening/truncating the destination file.
+        if (res.statusCode !== 200) {
+          res.resume();
+          fail(new Error(`Download failed: HTTP ${res.statusCode}`));
+          return;
+        }
+
+        file = fs.createWriteStream(destPath);
+        const totalSize = parseInt(res.headers['content-length'], 10) || 0;
+        let downloadedSize = 0;
+        let lastPercent = 0;
+
+        res.on('data', (chunk) => {
+          downloadedSize += chunk.length;
+          if (totalSize > 0) {
+            const percent = Math.floor((downloadedSize / totalSize) * 100);
+            if (percent >= lastPercent + 10) {
+              process.stdout.write(`\r  Downloading: ${percent}%`);
+              lastPercent = percent;
+            }
+          }
+        });
+        res.on('error', fail);
+        file.on('error', fail);
+        file.on('close', () => {
+          if (settled) return;
+          if (!file.writableFinished) {
+            fail(new Error('Download stream closed before completion'));
             return;
           }
-
-          file = fs.createWriteStream(destPath);
-          const totalSize = parseInt(res.headers['content-length'], 10) || 0;
-          let downloadedSize = 0;
-          let lastPercent = 0;
-
-          res.on('data', (chunk) => {
-            downloadedSize += chunk.length;
-            if (totalSize > 0) {
-              const percent = Math.floor((downloadedSize / totalSize) * 100);
-              if (percent >= lastPercent + 10) {
-                process.stdout.write(`\r  Downloading: ${percent}%`);
-                lastPercent = percent;
-              }
-            }
-          });
-          res.on('error', fail);
-          file.on('error', fail);
-          file.on('close', () => {
-            if (settled) return;
-            if (!file.writableFinished) {
-              fail(new Error('Download stream closed before completion'));
-              return;
-            }
-            // content-length가 알려진 경우 받은 크기와 다르면 손상 파일로
-            // 취급해 삭제 + 실패시킨다 (MED-7).
-            if (totalSize > 0 && downloadedSize !== totalSize) {
-              fail(new Error(`Download incomplete (${downloadedSize}/${totalSize} bytes)`));
-              return;
-            }
-            if (totalSize > 0) {
-              console.log('\r  Downloading: 100%');
-            } else {
-              console.log('\r  Download complete');
-            }
-            succeed();
-          });
-          res.pipe(file);
-        })
-        .on('error', fail);
+          // content-length가 알려진 경우 받은 크기와 다르면 손상 파일로
+          // 취급해 삭제 + 실패시킨다 (MED-7).
+          if (totalSize > 0 && downloadedSize !== totalSize) {
+            fail(new Error(`Download incomplete (${downloadedSize}/${totalSize} bytes)`));
+            return;
+          }
+          if (totalSize > 0) {
+            console.log('\r  Downloading: 100%');
+          } else {
+            console.log('\r  Download complete');
+          }
+          succeed();
+        });
+        res.pipe(file);
+      });
+      req.on('error', (error) => {
+        if (!redirected) fail(error);
+      });
     };
 
     request(url);
@@ -279,12 +283,12 @@ function hasCudaToolkit() {
  * Check if a command exists on the system
  */
 function hasCommand(cmd) {
-  try {
-    execSync(`which ${cmd}`, { stdio: 'ignore', timeout: 3000 });
-    return true;
-  } catch {
-    return false;
-  }
+  return (
+    spawnSync(process.platform === 'win32' ? 'where' : 'which', [cmd], {
+      stdio: 'ignore',
+      timeout: 3000,
+    }).status === 0
+  );
 }
 
 /**
@@ -473,7 +477,7 @@ function ensureLlamaBinaries() {
   });
   if (missing.length === 0) {
     console.log('  [llama] All cross-platform binaries already installed.');
-    return;
+    return [];
   }
   // Read version from main node-llama-cpp
   let version = '3.18.1';
@@ -496,46 +500,31 @@ function ensureLlamaBinaries() {
     else if (pkg.includes('arm64')) cpu = 'arm64';
     return `--os=${os} --cpu=${cpu}`;
   }
-  // 병렬 설치: npm install은 동일 node_modules에 동시 쓰기가 안전하지 않아
-  // 3개 동시 제한으로 진행한다 (전체 순차 65분 → ~20분). 실패한 패키지는
-  // 마지막에 1회 재시도해 네트워크 일시 오류를 흡수한다.
-  async function installOne(pkg) {
+  // npm install은 같은 node_modules와 lockfile을 수정하므로 순차 실행한다.
+  // 실패한 패키지만 마지막에 한 번 재시도해 일시적인 레지스트리 오류를 흡수한다.
+  function installOne(pkg) {
     const cmd = `npm install --no-save --force --ignore-scripts ${flagsFor(pkg)} ${pkg}@${version}`;
-    return new Promise((resolve) => {
-      execFileSync(cmd, { stdio: 'inherit', cwd: root, timeout: 300000, shell: true });
-      resolve(true);
-    });
+    execFileSync(cmd, { stdio: 'inherit', cwd: root, timeout: 300000, shell: true });
   }
-  async function run() {
-    const failed = [];
-    const CONCURRENCY = 3;
-    let idx = 0;
-    async function worker() {
-      while (idx < missing.length) {
-        const pkg = missing[idx++];
-        try {
-          await installOne(pkg);
-        } catch (err) {
-          failed.push(pkg);
-          console.log(`  [llama] Failed to install ${pkg}: ${err.message}`);
-        }
-      }
+  const failed = [];
+  for (const pkg of missing) {
+    try {
+      installOne(pkg);
+    } catch (err) {
+      failed.push(pkg);
+      console.log(`  [llama] Failed to install ${pkg}: ${err.message}`);
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing.length) }, worker));
-    // 실패 재시도 1회 (동시 설치로 인한 레지스트리 일시 오류 대비)
-    const stillFailed = [];
-    for (const pkg of failed) {
-      try {
-        await installOne(pkg);
-      } catch (err) {
-        stillFailed.push(pkg);
-        console.log(`  [llama] Retry failed for ${pkg}: ${err.message}`);
-      }
-    }
-    return stillFailed;
   }
-  const failures = run();
-  return failures;
+  const stillFailed = [];
+  for (const pkg of failed) {
+    try {
+      installOne(pkg);
+    } catch (err) {
+      stillFailed.push(pkg);
+      console.log(`  [llama] Retry failed for ${pkg}: ${err.message}`);
+    }
+  }
+  return stillFailed;
 }
 
 /**
@@ -551,8 +540,9 @@ async function main() {
     llamaFailures = ['<unknown>'];
   }
   if (llamaFailures.length > 0) {
-    markInstallFailure(`llama cross-platform binaries failed: ${llamaFailures.join(', ')}`);
+    markInstallFailure('llama', `cross-platform binaries failed: ${llamaFailures.join(', ')}`);
   } else {
+    clearInstallFailure('llama');
     console.log('  [llama] Cross-platform binaries installed.\n');
   }
 
@@ -561,7 +551,7 @@ async function main() {
   // Skip if already installed
   if (hasWhisperRuntimeLibraries()) {
     console.log('  whisper-cpp already installed. Skipping.\n');
-    clearInstallFailure();
+    clearInstallFailure('whisper');
     // VAD 모델은 이전 실패로 누락됐을 수 있으니 조기 반환 전에도 항상
     // 다운로드를 시도한다 (MED-7).
     await downloadVadModel();
@@ -835,15 +825,15 @@ async function main() {
     console.log('  Please download manually from: https://github.com/ggml-org/whisper.cpp/releases\n');
     // npm install 자체는 실패시키지 않되, 설치 실패를 CI/사용자가 감지할 수 있게
     // 마커 파일을 남긴다 (이전엔 조용히 exit 0였다).
-    markInstallFailure(`whisper-cpp download/install failed: ${error.message}`);
+    markInstallFailure('whisper', `download/install failed: ${error.message}`);
   }
 
   // whisper-cpp 설치가 불완전하면 실패 마커 (런타임에서 경고 표시 가능).
   // 성공 경로에서는 이전 실패 마커를 제거한다 (LOW-5).
   if (hasWhisperRuntimeLibraries()) {
-    clearInstallFailure();
+    clearInstallFailure('whisper');
   } else {
-    markInstallFailure('whisper-cpp runtime libraries are missing or broken');
+    markInstallFailure('whisper', 'runtime libraries are missing or broken');
   }
 
   // Silero VAD model (separate from the whisper-cli release). Optional — a
@@ -851,28 +841,35 @@ async function main() {
   await downloadVadModel();
 }
 
-// 설치 실패 마커: postinstall이 실패해도 npm install은 성공해야 하므로(설계),
-// 대신 실패 사실을 파일로 남겨 앱 실행 시/CI에서 감지할 수 있게 한다.
-function markInstallFailure(reason) {
+// llama와 whisper 상태를 독립 저장해 한쪽 성공이 다른 쪽 실패를 지우지 않게 한다.
+function updateInstallFailureMarker(markerPath, scope, reason) {
+  let issues = {};
   try {
-    const markerPath = path.join(WHISPER_CPP_DIR, 'install-failed.txt');
-    fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
-    fs.writeFileSync(markerPath, `WhisperSubTranslate postinstall issue at ${new Date().toISOString()}\n${reason}\n`);
-    console.log(`  [WARN] install-failed.txt written: ${reason}`);
+    issues = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+  } catch (_e) {}
+  if (reason) issues[scope] = { at: new Date().toISOString(), reason };
+  else delete issues[scope];
+  if (Object.keys(issues).length === 0) {
+    fs.rmSync(markerPath, { force: true });
+  } else {
+    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+    fs.writeFileSync(markerPath, `${JSON.stringify(issues, null, 2)}\n`);
+  }
+  return issues;
+}
+
+function markInstallFailure(scope, reason) {
+  try {
+    updateInstallFailureMarker(path.join(WHISPER_CPP_DIR, 'install-failed.txt'), scope, reason);
+    console.log(`  [WARN] install-failed.txt updated: ${scope}: ${reason}`);
   } catch (_e) {
     /* ignore */
   }
 }
 
-// 설치 성공 시 실패 마커 제거: 이전 실패 흔적이 남아 있으면 런타임이
-// 계속 경고를 띄운다 (LOW-5).
-function clearInstallFailure() {
+function clearInstallFailure(scope) {
   try {
-    const markerPath = path.join(WHISPER_CPP_DIR, 'install-failed.txt');
-    if (fs.existsSync(markerPath)) {
-      fs.unlinkSync(markerPath);
-      console.log('  install-failed.txt removed (install succeeded).');
-    }
+    updateInstallFailureMarker(path.join(WHISPER_CPP_DIR, 'install-failed.txt'), scope);
   } catch (_e) {
     /* ignore */
   }
@@ -909,4 +906,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { hasWhisperRuntimeLibraries, downloadFile };
+module.exports = { hasWhisperRuntimeLibraries, downloadFile, updateInstallFailureMarker };

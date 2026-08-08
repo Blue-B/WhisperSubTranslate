@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { pipeline } = require('stream/promises');
 
 function isCompleteWavFile(wavPath, fileSize) {
   if (fileSize < 44) return false;
@@ -29,33 +30,19 @@ function isCompleteWavFile(wavPath, fileSize) {
   return false;
 }
 
-function backupStaleWav(wavPath) {
-  const backupPath = `${wavPath}.stale.bak`;
-  if (!fs.existsSync(backupPath)) {
-    fs.renameSync(wavPath, backupPath);
-    return backupPath;
-  }
-
-  const previousPath = `${backupPath}.previous-${process.pid}-${Date.now()}`;
-  fs.renameSync(backupPath, previousPath);
+async function writeDownloadStream(readable, destPath, onWriter) {
+  const writer = fs.createWriteStream(destPath);
+  onWriter?.(writer);
   try {
-    fs.renameSync(wavPath, backupPath);
+    await pipeline(readable, writer);
   } catch (error) {
     try {
-      fs.renameSync(previousPath, backupPath);
-    } catch (restoreError) {
-      throw new Error(
-        `${error.message}; previous backup preserved at ${previousPath}; restore failed: ${restoreError.message}`
-      );
+      fs.rmSync(destPath, { force: true });
+    } catch (cleanupError) {
+      throw new Error(`${error.message}; partial cleanup failed: ${cleanupError.message}`, { cause: error });
     }
     throw error;
   }
-  try {
-    fs.unlinkSync(previousPath);
-  } catch (error) {
-    console.warn(`[WAV] Previous backup cleanup failed, preserved at ${previousPath}: ${error.message}`);
-  }
-  return backupPath;
 }
 
-module.exports = { backupStaleWav, isCompleteWavFile };
+module.exports = { isCompleteWavFile, writeDownloadStream };

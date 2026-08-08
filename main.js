@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { assertDownloadDiskSpace, assertSyncInstallDiskSpace } = require('./disk-space');
-const { backupStaleWav, isCompleteWavFile } = require('./file-safety');
+const { isCompleteWavFile, writeDownloadStream } = require('./file-safety');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
 try {
   app.setName('WhisperSubTranslate');
@@ -1351,22 +1351,9 @@ function convertToWav(inputPath) {
       );
     }
 
-    // WAV 파일이 이미 존재하면 스킵 (원본 위치만 체크).
-    // 단, 소스 미디어가 WAV보다 새로워졌거나(재인코딩됨) 0바이트 잔재면 재변환한다.
-    // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV를 재사용하면 틀린 자막이 나오므로
-    // mtime 비교로 스테일 파일을 걸러낸다.
-    // 백업에 실패하면 원본 WAV를 그대로 두고 변환을 중단한다. 실패 후 같은
-    // 경로로 ffmpeg를 실행하면 -y가 사용자 파일을 덮어쓸 수 있으므로 계속하지 않는다.
-    const preserveStaleWav = () => {
-      try {
-        backupStaleWav(wavPath);
-        return true;
-      } catch (error) {
-        reject(new Error(`WAV_BACKUP_FAILED: ${error.message}. Original WAV was preserved: ${wavPath}`));
-        return false;
-      }
-    };
-
+    // WAV 파일이 이미 존재하면 완전하고 소스보다 최신인 경우에만 재사용한다.
+    // 손상되었거나 오래된 형제 WAV는 사용자 파일일 수 있으므로 이동·삭제하지 않고,
+    // 새 변환 결과를 safe temp에 만들어 추출 후 정리한다.
     if (!usingSafeTemp && fs.existsSync(wavPath)) {
       try {
         const wavStat = fs.statSync(wavPath);
@@ -1382,20 +1369,12 @@ function convertToWav(inputPath) {
           resolve({ wavPath, usingSafeTemp, originalWavPath, reused: true });
           return;
         }
-        // 스테일/잘린 WAV (헤더 검증 실패 또는 소스가 더 새로움): 삭제하지 않고
-        // .stale.bak로 백업 후 재변환 — 사용자가 둔 WAV(형제 파일)를 지우는
-        // 데이터 손실 방지 (MED-5). 백업은 유일 사본일 수 있어 삭제하지 않고
-        // 동일 소스당 1개만 유지한다 (backupStaleWav, MED-5).
-        // (ponytail: 보존 기간 제한이 필요하면 날짜 접미사 + 오래된 백업 정리로 확장)
-        console.log(
-          `[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`
-        );
-        if (!preserveStaleWav()) return;
+        console.log(`[Audio] Preserving stale sibling WAV: ${path.basename(wavPath)}`);
       } catch (statErr) {
-        // stat 실패 시 스킵하지 않고 재변환 시도 (동일하게 백업 우선)
-        console.log(`[Audio] WAV stat failed, re-converting: ${statErr.message}`);
-        if (!preserveStaleWav()) return;
+        console.log(`[Audio] WAV validation failed, preserving sibling: ${statErr.message}`);
       }
+      wavPath = path.join(getSafeTempDir(), `whisper_${Date.now()}.wav`);
+      usingSafeTemp = true;
     }
 
     // 입력 미디어 경로 자체도 비ASCII면 ffmpeg에 바로 넘기지 않고
@@ -1861,8 +1840,6 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
       response.data.destroy();
       throw error;
     }
-    const writer = fs.createWriteStream(destPath);
-    tracker.writer = writer;
     let received = 0;
     let lastPct = -1;
     let lastSentAt = 0;
@@ -1885,27 +1862,22 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
         }
       }
     });
-    response.data.pipe(writer);
-    await new Promise((resolve, reject) => {
-      writer.on('finish', () => {
-        if (received !== total) {
-          reject(new Error(`${label}: download incomplete (got ${received} of ${total} bytes)`));
-        } else {
-          resolve();
-        }
+    try {
+      await writeDownloadStream(response.data, destPath, (writer) => {
+        tracker.writer = writer;
       });
-      writer.on('error', reject);
-      response.data.on('error', reject);
-      // 취소/abort 시 writer.destroy()가 close만 발생시켜 finish/error 없이
-      // 영구 pending 되는 것 방지 — download-model과 동일 패턴 (MED-6).
-      writer.on('close', () => {
-        if (writer.writableFinished) return;
-        // 취소 시 close가 finish/error보다 먼저 settle할 수 있다 — 취소를
-        // 네트워크 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
-        if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
-        else reject(new Error(`${label}: Download stream closed before finish`));
-      });
-    });
+    } catch (error) {
+      if (downloadsCancelled) throw new Error('cancelled');
+      throw error;
+    }
+    if (received !== total) {
+      throw new Error(`${label}: download incomplete (got ${received} of ${total} bytes)`);
+    }
+  } catch (error) {
+    try {
+      fs.rmSync(destPath, { force: true });
+    } catch (_e) {}
+    throw error;
   } finally {
     activeDownloads.delete(tracker);
   }
@@ -3298,8 +3270,6 @@ ipcMain.handle('download-model', async (_event, modelName) => {
           response.data.destroy();
           throw error;
         }
-        const writer = fs.createWriteStream(destPath);
-        tracker.writer = writer;
         let received = 0;
         let lastPct = -1;
         let lastSentAt = 0;
@@ -3335,33 +3305,20 @@ ipcMain.handle('download-model', async (_event, modelName) => {
         response.data.on('error', () => {
           activeDownloads.delete(tracker);
         });
-        response.data.pipe(writer);
-        await new Promise((resolve, reject) => {
-          // 스트림 에러(연결 중단/취소 abort)를 reject로 연결하지 않으면
-          // renderer가 영원히 pending 상태로 남는다 (HIGH-3).
-          response.data.on('error', reject);
-          writer.on('finish', () => {
-            // content-length가 알려진 경우(전송/연결 중단 등으로) 받은 크기와 다르면
-            // 손상 파일로 취급해 부분 파일 삭제 + 실패시킨다.
-            if (total > 0 && received !== total) {
-              try {
-                fs.unlinkSync(destPath);
-              } catch (_e) {}
-              reject(new Error(`Download incomplete (${received}/${total} bytes)`));
-            } else {
-              resolve();
-            }
+        try {
+          await writeDownloadStream(response.data, destPath, (writer) => {
+            tracker.writer = writer;
           });
-          writer.on('error', reject);
-          // writer가 finish/error 없이 닫히는 예외 경로에서도 settle 보장 (HIGH-3)
-          writer.on('close', () => {
-            if (writer.writableFinished) return;
-            // 취소 시 close가 finish/error보다 먼저 settle한다 — 취소를 네트워크
-            // 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
-            if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
-            else reject(new Error('Download stream closed before finish'));
-          });
-        });
+        } catch (error) {
+          if (downloadsCancelled) throw new Error('cancelled');
+          throw error;
+        }
+        if (total > 0 && received !== total) {
+          try {
+            fs.rmSync(destPath, { force: true });
+          } catch (_e) {}
+          throw new Error(`Download incomplete (${received}/${total} bytes)`);
+        }
       } finally {
         activeDownloads.delete(tracker);
       }

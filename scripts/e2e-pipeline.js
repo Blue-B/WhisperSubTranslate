@@ -5,8 +5,8 @@
  *
  * Covers:
  *   1. check-model-status → enumerates installed _models/*.bin
- *   2. extract-subtitles → runs whisper-cli on nya.wav, produces a real .srt
- *   3. Verifies .srt content (non-empty, has timecode line)
+ *   2. extract-subtitles → runs whisper-cli on a real audio fixture, produces a real .srt
+ *   3. Verifies .srt content and stale sibling WAV preservation
  *
  * Does NOT download models or hit external APIs.
  * Skips gracefully if no model is installed.
@@ -14,6 +14,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const ROOT = path.resolve(__dirname, '..');
 
 let playwright;
@@ -90,11 +91,17 @@ async function run() {
   ok(`picked smallest installed model: ${pickedModel}`);
 
   // -------------------------------------------------------------------------
-  // 2. extract-subtitles on nya.wav
+  // 2. extract-subtitles while preserving an invalid sibling WAV
   // -------------------------------------------------------------------------
   const nya = path.join(ROOT, 'nya.wav');
   if (!fs.existsSync(nya)) fail('nya.wav missing — cannot run extraction');
-  console.log(`  · running whisper-cli on ${nya} with model=${pickedModel}, device=cpu...`);
+  const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-pipeline-'));
+  const media = path.join(fixtureDir, 'source.mp3');
+  const siblingWav = path.join(fixtureDir, 'source.wav');
+  const siblingBytes = Buffer.from('USER_WAV_MUST_SURVIVE');
+  fs.copyFileSync(nya, media); // ffmpeg probes the WAV header even with this media extension.
+  fs.writeFileSync(siblingWav, siblingBytes);
+  console.log(`  · running whisper-cli on ${media} with model=${pickedModel}, device=cpu...`);
 
   const t0 = Date.now();
   const result = await w.evaluate(
@@ -107,7 +114,7 @@ async function run() {
         device: 'cpu',
       });
     },
-    { file: nya, model: pickedModel }
+    { file: media, model: pickedModel }
   );
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
@@ -126,9 +133,17 @@ async function run() {
   const hasTimecode = /\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}/.test(srtContent);
   if (!hasTimecode) fail(`SRT missing timecode line:\n${srtContent.slice(0, 300)}`);
   ok(`SRT valid: ${srtPath} (${srtContent.length} bytes, has timecode)`);
+  assertSiblingPreserved();
   console.log('  · SRT preview:', srtContent.slice(0, 200).replace(/\n/g, ' | '));
 
+  function assertSiblingPreserved() {
+    if (!fs.readFileSync(siblingWav).equals(siblingBytes)) fail('existing sibling WAV was modified');
+    if (fs.existsSync(`${siblingWav}.stale.bak`)) fail('stale WAV backup accumulated beside user media');
+    ok('stale sibling WAV preserved in place without backup accumulation');
+  }
+
   await app.close();
+  fs.rmSync(fixtureDir, { recursive: true, force: true });
 
   console.log(`\n[e2e-pipeline] consoleErrors=${consoleErrors.length} pageErrors=${pageErrors.length}`);
   if (consoleErrors.length) console.error('console errors:', consoleErrors);

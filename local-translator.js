@@ -348,6 +348,10 @@ async function downloadModel(onProgress, signal, modelId = DEFAULT_MODEL_ID) {
     }
     return await waitForDownload(_downloadPromises[modelId], signal);
   }
+  if (onProgress) {
+    if (!_downloadSubscribers.has(modelId)) _downloadSubscribers.set(modelId, new Set());
+    _downloadSubscribers.get(modelId).add(onProgress);
+  }
   _downloadPromises[modelId] = _downloadModelImpl(signal, modelId).finally(() => {
     delete _downloadPromises[modelId];
     _downloadSubscribers.delete(modelId);
@@ -414,6 +418,7 @@ async function _downloadModelImpl(signal, modelId) {
 
       let out = null;
       let req = null;
+      let redirected = false;
       const detachAbort = () => signal?.removeEventListener('abort', abortRequest);
       const abortRequest = () => {
         req?.destroy();
@@ -425,7 +430,9 @@ async function _downloadModelImpl(signal, modelId) {
       if (resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
       req = https.get(url, { headers }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
+          redirected = true;
           detachAbort();
+          res.on('error', () => {});
           res.resume();
           return doRequest(res.headers.location, redirects + 1, resumeOffset);
         }
@@ -479,7 +486,9 @@ async function _downloadModelImpl(signal, modelId) {
             try {
               // 잘린 다운로드 방지: content-length가 주어졌고 받은 양이 다르면 실패 (MED 4).
               if (res.headers['content-length'] && downloaded !== total) {
-                return fail(new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`));
+                return failPreservingTmp(
+                  new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`)
+                );
               }
               fs.renameSync(tmp, dest);
               settled = true;
@@ -493,14 +502,16 @@ async function _downloadModelImpl(signal, modelId) {
         res.on('error', (error) => {
           detachAbort();
           out.destroy();
-          fail(error);
+          failPreservingTmp(error);
         });
       });
 
       signal?.addEventListener('abort', abortRequest, { once: true });
       req.on('error', (error) => {
         detachAbort();
-        fail(signal?.aborted ? abortError() : error);
+        if (redirected) return;
+        if (signal?.aborted) fail(abortError());
+        else failPreservingTmp(error);
       });
     };
 

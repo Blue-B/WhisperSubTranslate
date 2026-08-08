@@ -9,16 +9,17 @@ const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
 const EnhancedSubtitleTranslator = require('../translator-enhanced');
 const localTranslator = require('../local-translator');
-const { hasWhisperRuntimeLibraries, downloadFile } = require('./postinstall');
+const { hasWhisperRuntimeLibraries, downloadFile, updateInstallFailureMarker } = require('./postinstall');
 const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
 const {
   assertDownloadDiskSpace,
   assertSyncInstallDiskSpace,
   getSyncInstallRequiredBytes,
   SYNC_MODEL_BYTES,
+  SYNC_ENGINE_EXTRACTED_BYTES,
   SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
 } = require('../disk-space');
-const { backupStaleWav, isCompleteWavFile } = require('../file-safety');
+const { isCompleteWavFile, writeDownloadStream } = require('../file-safety');
 
 async function runPostinstallRedirectDrain() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-postinstall-redirect-'));
@@ -41,6 +42,7 @@ async function runPostinstallRedirectDrain() {
           };
           callback(response);
           response.end();
+          request.emit('error', new Error('retired redirect request failed'));
         } else if (url === 'https://error.test/file') {
           response.statusCode = 503;
           response.headers = {};
@@ -75,7 +77,15 @@ async function runPostinstallRedirectDrain() {
 
     await assert.rejects(downloadFile('https://incomplete.test/file', dest), /Download incomplete/);
     assert.strictEqual(fs.existsSync(dest), false, 'partial download must be removed after its stream closes');
-    console.log('[PostinstallRedirect] redirect/failure responses drain and partial files clean up (ok)');
+
+    const marker = path.join(dir, 'install-failed.txt');
+    updateInstallFailureMarker(marker, 'llama', 'llama failed');
+    updateInstallFailureMarker(marker, 'whisper', 'whisper failed');
+    updateInstallFailureMarker(marker, 'whisper');
+    assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(marker, 'utf8'))), ['llama']);
+    updateInstallFailureMarker(marker, 'llama');
+    assert.strictEqual(fs.existsSync(marker), false, 'marker is removed only after every subsystem recovers');
+    console.log('[PostinstallSafety] redirects retire old requests and failure scopes remain independent (ok)');
   } finally {
     https.get = originalGet;
     fs.rmSync(dir, { recursive: true, force: true });
@@ -95,7 +105,14 @@ function runSyncPreflightOrdering() {
     /engineInstalled = !!\(existingExePath && fs\.existsSync\(existingExePath\)\)/,
     'Sync preflight must verify that the resolved engine executable actually exists'
   );
-  console.log('[SyncDiskPreflight] full-install guard runs before network download (ok)');
+  assert.match(
+    source,
+    /catch \(error\) \{\s+try \{\s+fs\.rmSync\(destPath, \{ force: true \}\)/,
+    'failed Sync downloads must remove partial files'
+  );
+  assert.match(source, /Preserving stale sibling WAV/, 'stale sibling WAVs must stay in place');
+  assert.doesNotMatch(source, /backupStaleWav/, 'conversion must not create accumulating stale WAV backups');
+  console.log('[SyncDiskPreflight] install peak, partial cleanup, and stale WAV preservation are wired (ok)');
 }
 
 function runRendererSourceLangPayload() {
@@ -115,6 +132,26 @@ function runRendererSourceLangPayload() {
     'completed queue items must open the generated output when available'
   );
   console.log('[SourceLangPayload] translation source and completed output paths are wired (ok)');
+}
+
+async function runDownloadStreamSafety() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-download-stream-'));
+  const dest = path.join(dir, 'partial.bin');
+  try {
+    const source = new PassThrough();
+    let writer;
+    const writing = writeDownloadStream(source, dest, (stream) => {
+      writer = stream;
+    });
+    source.write('partial');
+    source.destroy(new Error('forced stream failure'));
+    await assert.rejects(writing, /forced stream failure/);
+    assert.ok(writer.closed || writer.destroyed, 'failed download writer must be closed');
+    assert.strictEqual(fs.existsSync(dest), false, 'failed download partial must be removed after close');
+    console.log('[DownloadStreamSafety] stream errors close writer before partial cleanup (ok)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 function runWavHeaderSafety() {
@@ -157,63 +194,14 @@ function runWavHeaderSafety() {
   }
 }
 
-function runWavBackupSafety() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-wav-backup-'));
-  const wav = path.join(dir, 'video.wav');
-  const backup = `${wav}.stale.bak`;
-  try {
-    fs.writeFileSync(wav, 'current-user-wav');
-    fs.writeFileSync(backup, 'previous-backup');
-    const originalRename = fs.renameSync;
-    fs.renameSync = () => {
-      throw new Error('forced backup rotation failure');
-    };
-    try {
-      assert.throws(() => backupStaleWav(wav), /forced backup rotation failure/);
-    } finally {
-      fs.renameSync = originalRename;
-    }
-    assert.strictEqual(fs.readFileSync(wav, 'utf8'), 'current-user-wav', 'backup failure must preserve source WAV');
-    assert.strictEqual(fs.readFileSync(backup, 'utf8'), 'previous-backup', 'backup failure must preserve old backup');
-    assert.strictEqual(backupStaleWav(wav), backup);
-    assert.strictEqual(fs.existsSync(wav), false);
-    assert.strictEqual(fs.readFileSync(backup, 'utf8'), 'current-user-wav');
-
-    fs.writeFileSync(wav, 'next-user-wav');
-    const renameForRotation = fs.renameSync;
-    let renameCalls = 0;
-    fs.renameSync = (...args) => {
-      renameCalls++;
-      if (renameCalls === 2) throw new Error('forced source rename failure');
-      return renameForRotation(...args);
-    };
-    try {
-      assert.throws(() => backupStaleWav(wav), /forced source rename failure/);
-    } finally {
-      fs.renameSync = renameForRotation;
-    }
-    assert.strictEqual(fs.readFileSync(wav, 'utf8'), 'next-user-wav', 'source rename failure must preserve source');
-    assert.strictEqual(
-      fs.readFileSync(backup, 'utf8'),
-      'current-user-wav',
-      'source rename failure must restore backup'
-    );
-    console.log('[WavBackupSafety] failures preserve source and previous backup (ok)');
-  } finally {
-    try {
-      fs.chmodSync(dir, 0o755);
-    } catch {}
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
-
 function runDiskSpaceGuard() {
   assert.strictEqual(getSyncInstallRequiredBytes(true, true), 0);
   assert.strictEqual(getSyncInstallRequiredBytes(true, false), SYNC_MODEL_BYTES);
   assert.strictEqual(getSyncInstallRequiredBytes(false, true), SYNC_ENGINE_EXTRACTION_PEAK_BYTES);
-  assert.ok(
-    getSyncInstallRequiredBytes(false, false) >= SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
-    'fresh Sync install must reserve the extraction peak before downloading'
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(false, false),
+    SYNC_ENGINE_EXTRACTED_BYTES + SYNC_MODEL_BYTES,
+    'fresh Sync install must include the extracted engine and model together'
   );
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-disk-space-'));
@@ -372,6 +360,43 @@ async function runModelResumeDiskSpace() {
     await assert.rejects(() => localTranslator.downloadModel(null, controller2.signal), /Not enough disk space/);
     assert.strictEqual(rangeHeader, 'bytes=838860800-');
     assert.strictEqual(fs.statSync(tmp).size, 800 * 1024 * 1024, 'Range-ignored disk failure must preserve partial');
+
+    fs.writeFileSync(tmp, 'resume-me');
+    fs.statfsSync = () => ({ bavail: 4096, bsize: 1024 * 1024 });
+    https.get = () => {
+      const request = new EventEmitter();
+      request.destroy = () => {};
+      queueMicrotask(() => request.emit('error', new Error('network interrupted')));
+      return request;
+    };
+    await assert.rejects(() => localTranslator.downloadModel(null), /network interrupted/);
+    assert.strictEqual(fs.readFileSync(tmp, 'utf8'), 'resume-me', 'network failures must preserve resumable data');
+
+    fs.rmSync(tmp, { force: true });
+    let firstProgressCalls = 0;
+    let redirectRequests = 0;
+    https.get = (_url, _options, callback) => {
+      const request = new EventEmitter();
+      request.destroy = () => {};
+      queueMicrotask(() => {
+        const response = new PassThrough();
+        if (redirectRequests++ === 0) {
+          response.statusCode = 302;
+          response.headers = { location: 'https://final.test/model' };
+          callback(response);
+          response.end();
+          request.emit('error', new Error('retired model redirect failed'));
+          return;
+        }
+        response.statusCode = 200;
+        response.headers = { 'content-length': '3' };
+        callback(response);
+        response.end('abc');
+      });
+      return request;
+    };
+    await localTranslator.downloadModel(() => firstProgressCalls++);
+    assert.ok(firstProgressCalls > 0, 'the first download caller must receive progress');
   } finally {
     https.get = originalGet;
     fs.statfsSync = originalStatfs;
@@ -403,7 +428,13 @@ async function runModelDownloadAbort() {
       };
       requestCount++;
       if (requestCount === 1) {
-        queueMicrotask(() => cb({ statusCode: 302, headers: { location: 'https://example.test/model' }, resume() {} }));
+        queueMicrotask(() => {
+          const response = new EventEmitter();
+          response.statusCode = 302;
+          response.headers = { location: 'https://example.test/model' };
+          response.resume = () => {};
+          cb(response);
+        });
       } else {
         queueMicrotask(() => controller.abort(new Error('ABORTED: test download')));
       }
@@ -1001,7 +1032,19 @@ async function runAbortSafeRetry() {
   await translator.translateBatch(['hello'], 'mymemory', 'ko', 'en');
   assert.strictEqual(llmCalls, 0, 'aborted retry must not call paid LLM API');
   assert.strictEqual(myMemoryCalls, 0, 'aborted retry must not call any API');
-  console.log('[AbortSafe] aborted retry skips paid API calls (ok)');
+
+  const duringBackoff = new EnhancedSubtitleTranslator();
+  let retryCalls = 0;
+  const started = Date.now();
+  const retrying = duringBackoff.translateWithRetry(async () => {
+    retryCalls++;
+    throw new Error('temporary network error');
+  }, 'hello');
+  setTimeout(() => duringBackoff.abort(), 25);
+  await assert.rejects(retrying, /ABORTED/);
+  assert.ok(Date.now() - started < 500, 'abort must interrupt retry backoff immediately');
+  assert.strictEqual(retryCalls, 1, 'abort during backoff must prevent another API call');
+  console.log('[AbortSafe] abort skips paid retries and interrupts active backoff (ok)');
 }
 
 async function runCustomPromptFingerprint() {
@@ -1289,8 +1332,8 @@ async function run() {
 
   runSrtCleanup();
   runSrtFromWhisperJson();
+  await runDownloadStreamSafety();
   runWavHeaderSafety();
-  runWavBackupSafety();
   runWhisperRuntimeProbe();
   runDiskSpaceGuard();
   await runModelResumeDiskSpace();
