@@ -147,7 +147,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.1.0",
     "playwright": "^1.60.0",
-    "prettier": "^3.8.1"
+    "prettier": "^3.9.6"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",
