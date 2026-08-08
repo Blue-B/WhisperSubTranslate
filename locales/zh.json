@@ -54,6 +54,7 @@
   "errorDllCpuAvailable": "未找到DLL入口点 (0xC0000139)。CUDA DLL与GPU驱动不兼容。CPU构建已安装，请在设置中将设备更改为CPU。",
   "errorDllNotFound": "未找到所需DLL (0xC0000135)。请安装Visual C++ Redistributable 2015-2022或使用CPU专用构建。",
   "errorUnknown": "未知错误",
+  "errorDiskSpace": "磁盘空间不足。需要：{required} GB，可用：{free} GB。",
   "errorSrtPathMissing": "字幕提取后未找到SRT文件路径",
   "errorEmptyTranslation": "翻译结果为空",
   "errorApiQuotaExceeded": "API配额超限 - 请稍后重试或使用其他翻译引擎",
@@ -305,8 +306,8 @@
   "resetPromptHint": "修改出错时恢复默认提示词。",
   "modelSelectNames": {
     "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐推荐",
-    "large-v2-sync": "large-v2 同步 (修复错位, 非常慢)",
-    "large-v2-sync-lite": "large-v2 同步 轻量 (int8, 低显存)",
+    "large-v2-sync": "large-v2 同步 (~4.4GB共享, 修复错位, 非常慢)",
+    "large-v2-sync-lite": "large-v2 同步 轻量 (~4.4GB共享, int8, 低显存)",
     "large-v3": "large-v3 (3.1GB)",
     "medium": "medium (1.5GB)",
     "small": "small (466MB)",

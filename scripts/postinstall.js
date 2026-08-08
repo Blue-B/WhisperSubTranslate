@@ -110,18 +110,40 @@ async function getLatestRelease() {
  */
 async function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
+    let file = null;
     let redirectCount = 0;
+    let settled = false;
+
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      if (!file) {
+        reject(error);
+        return;
+      }
+      const removePartial = () => fs.rm(destPath, { force: true }, () => reject(error));
+      if (file.closed) {
+        removePartial();
+      } else {
+        file.once('close', removePartial);
+        file.destroy();
+      }
+    };
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
 
     const request = (currentUrl) => {
       // Validate URL
       if (!currentUrl.startsWith('https://')) {
-        reject(new Error('Invalid URL: must use HTTPS'));
+        fail(new Error('Invalid URL: must use HTTPS'));
         return;
       }
 
       if (redirectCount >= MAX_REDIRECTS) {
-        reject(new Error('Too many redirects'));
+        fail(new Error('Too many redirects'));
         return;
       }
 
@@ -131,21 +153,25 @@ async function downloadFile(url, destPath) {
           if (res.statusCode === 302 || res.statusCode === 301) {
             redirectCount++;
             const location = res.headers.location;
+            // Redirect 응답 body를 소비하지 않으면 Windows Node의 socket이 열린 채
+            // 남아 postinstall/npm ci가 끝난 뒤에도 프로세스가 종료되지 않는다.
+            res.resume();
             if (!location) {
-              reject(new Error('Redirect without location header'));
+              fail(new Error('Redirect without location header'));
               return;
             }
             request(location);
             return;
           }
 
-          // Validate response
+          // Validate response before opening/truncating the destination file.
           if (res.statusCode !== 200) {
-            fs.unlink(destPath, () => {});
-            reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+            res.resume();
+            fail(new Error(`Download failed: HTTP ${res.statusCode}`));
             return;
           }
 
+          file = fs.createWriteStream(destPath);
           const totalSize = parseInt(res.headers['content-length'], 10) || 0;
           let downloadedSize = 0;
           let lastPercent = 0;
@@ -160,16 +186,18 @@ async function downloadFile(url, destPath) {
               }
             }
           });
-
-          res.pipe(file);
-
-          file.on('finish', () => {
-            file.close();
+          res.on('error', fail);
+          file.on('error', fail);
+          file.on('close', () => {
+            if (settled) return;
+            if (!file.writableFinished) {
+              fail(new Error('Download stream closed before completion'));
+              return;
+            }
             // content-length가 알려진 경우 받은 크기와 다르면 손상 파일로
             // 취급해 삭제 + 실패시킨다 (MED-7).
             if (totalSize > 0 && downloadedSize !== totalSize) {
-              fs.unlink(destPath, () => {});
-              reject(new Error(`Download incomplete (${downloadedSize}/${totalSize} bytes)`));
+              fail(new Error(`Download incomplete (${downloadedSize}/${totalSize} bytes)`));
               return;
             }
             if (totalSize > 0) {
@@ -177,18 +205,11 @@ async function downloadFile(url, destPath) {
             } else {
               console.log('\r  Download complete');
             }
-            resolve();
+            succeed();
           });
-
-          file.on('error', (err) => {
-            fs.unlink(destPath, () => {});
-            reject(err);
-          });
+          res.pipe(file);
         })
-        .on('error', (err) => {
-          fs.unlink(destPath, () => {});
-          reject(err);
-        });
+        .on('error', fail);
     };
 
     request(url);
@@ -888,4 +909,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { hasWhisperRuntimeLibraries };
+module.exports = { hasWhisperRuntimeLibraries, downloadFile };

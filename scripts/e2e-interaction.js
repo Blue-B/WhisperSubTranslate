@@ -15,6 +15,8 @@
  * Does NOT invoke whisper-cli or hit network. Purely renderer state + DOM.
  */
 
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 
@@ -36,12 +38,18 @@ const fail = (m) => {
 async function run() {
   const consoleErrors = [];
   const pageErrors = [];
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-e2e-interaction-'));
 
   const app = await electron.launch({
     args: ['.'],
     cwd: ROOT,
     timeout: 30000,
-    env: { ...process.env, ELECTRON_DISABLE_SANDBOX: '1', E2E_SMOKE: '1' },
+    env: {
+      ...process.env,
+      ELECTRON_DISABLE_SANDBOX: '1',
+      E2E_SMOKE: '1',
+      WHISPER_PORTABLE_DATA: userData,
+    },
   });
   const w = await app.firstWindow({ timeout: 30000 });
   w.on('console', (m) => {
@@ -136,17 +144,83 @@ async function run() {
   // -------------------------------------------------------------------------
   for (const lang of ['ko', 'en', 'ja', 'zh', 'pl']) {
     const before = pageErrors.length;
-    const dropHint = await w.evaluate((L) => {
+    const localized = await w.evaluate((L) => {
       window.__E2E_HOOK__.setUiLang(L);
-      return document.getElementById('dropHint1')?.textContent || '';
+      return {
+        dropHint: document.getElementById('dropHint1')?.textContent || '',
+        diskError: getLocalizedError('Not enough disk space: need 2.00 GB, free 1.00 GB'),
+      };
     }, lang);
     if (pageErrors.length > before) fail(`Locale '${lang}' produced page error`);
-    if (!dropHint) fail(`Locale '${lang}': dropHint1 empty`);
-    ok(`Locale '${lang}': applied, hint="${dropHint.slice(0, 30)}..."`);
+    if (!localized.dropHint) fail(`Locale '${lang}': dropHint1 empty`);
+    if (
+      localized.diskError.includes('{') ||
+      !localized.diskError.includes('2.00') ||
+      !localized.diskError.includes('1.00')
+    ) {
+      fail(`Locale '${lang}': disk-space error was not localized: ${localized.diskError}`);
+    }
+    ok(`Locale '${lang}': applied, hint="${localized.dropHint.slice(0, 30)}..."`);
   }
 
   // -------------------------------------------------------------------------
-  // 6. Empty queue
+  // 6. Settings unsaved-change guard
+  // -------------------------------------------------------------------------
+  const settingsGuard = await w.evaluate(async () => {
+    showSettingsModal();
+    while (document.getElementById('settingsModal')?.getAttribute('aria-busy') === 'true') {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const prompt = document.getElementById('translationPrompt');
+    prompt.value = 'UNSAVED_E2E_VALUE';
+    prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    const originalConfirm = window.confirm;
+    let confirmCalls = 0;
+    window.confirm = () => {
+      confirmCalls++;
+      return false;
+    };
+    const refused = requestHideSettingsModal();
+    const stayedOpen = document.getElementById('settingsModal').classList.contains('active');
+    window.confirm = () => true;
+    const discarded = requestHideSettingsModal();
+    const closed = !document.getElementById('settingsModal').classList.contains('active');
+    window.confirm = originalConfirm;
+    return { refused, stayedOpen, discarded, closed, confirmCalls };
+  });
+  if (settingsGuard.refused || !settingsGuard.stayedOpen || !settingsGuard.discarded || !settingsGuard.closed) {
+    fail(`Settings guard failed: ${JSON.stringify(settingsGuard)}`);
+  }
+  if (settingsGuard.confirmCalls !== 1) fail('Settings guard did not prompt exactly once before refusing close');
+  ok('Settings: unsaved provider input blocks close until discard is confirmed');
+
+  const saveRace = await w.evaluate(async () => {
+    showSettingsModal();
+    while (document.getElementById('settingsModal')?.getAttribute('aria-busy') === 'true') {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const prompt = document.getElementById('translationPrompt');
+    prompt.value = 'VALUE_AT_SAVE';
+    prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('saveSettingsBtn').click();
+    prompt.value = 'EDIT_DURING_SAVE';
+    prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+    const active = document.getElementById('settingsModal').classList.contains('active');
+    const value = prompt.value;
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    requestHideSettingsModal();
+    window.confirm = originalConfirm;
+    return { active, value };
+  });
+  if (!saveRace.active || saveRace.value !== 'EDIT_DURING_SAVE') {
+    fail(`Settings save race lost new input: ${JSON.stringify(saveRace)}`);
+  }
+  ok('Settings: edits made during save remain dirty and keep the modal open');
+
+  // -------------------------------------------------------------------------
+  // 7. Empty queue
   // -------------------------------------------------------------------------
   await w.evaluate(() => {
     window.__E2E_HOOK__.setFileQueue([]);
@@ -161,7 +235,7 @@ async function run() {
   ok(`Empty queue: empty state rendered (hasImg=${emptyState.hasImg})`);
 
   // -------------------------------------------------------------------------
-  // 7. Stress: rapid translation toggle (regression for the re-entrancy bug)
+  // 8. Stress: rapid translation toggle (regression for the re-entrancy bug)
   // -------------------------------------------------------------------------
   const stressBefore = pageErrors.length;
   await w.evaluate(() => {
@@ -178,6 +252,7 @@ async function run() {
   ok('Stress: 50 rapid translation-method toggles, no recursion/error');
 
   await app.close();
+  fs.rmSync(userData, { recursive: true, force: true });
 
   console.log(`\n[e2e-interaction] consoleErrors=${consoleErrors.length} pageErrors=${pageErrors.length}`);
   if (consoleErrors.length) console.error('console errors:', consoleErrors);

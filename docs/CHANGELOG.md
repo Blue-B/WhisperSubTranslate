@@ -2,6 +2,26 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.4] - 2026-08-08
+
+Stability patch release for translation correctness, data preservation, download safety, and Windows packaging.
+
+### Fixed
+
+- **Source-language forwarding** — the selected source language now reaches direct-SRT and post-extraction translation API paths. (#44)
+- **DeepL context and cache isolation** — neighbouring cues are sent as context, with collision-resistant context-aware cache keys. (#49)
+- **Provider error handling** — improved `:fx` key hints, rate-limit classification, and protection against writing provider error messages into subtitle files. (#41, #42, #43, #48)
+- **Subtitle and VAD edge cases** — strengthened duplicate/1 ms cue merging and maximum VAD speech-duration handling. (#46, #47)
+- **Sync model compatibility** — stabilized compute-type selection and CUDA/CPU fallback behavior. (#45)
+- **Portable data layout** — models, settings, and caches can use `portable-data/` or `WHISPER_PORTABLE_DATA`. (#50)
+- **Data preservation** — failed WAV backups preserve the source, settings edits survive asynchronous save/load races, and download cancellation/partial-file paths are safe.
+- **Installation safety** — API-key and aggregate Sync peak-disk preflights run before expensive work, and Windows postinstall redirects are drained correctly.
+
+### Internal
+
+- Added regression coverage for WAV backup rollback, settings close/save races, Sync disk calculations, postinstall redirects, and real Windows model flows.
+- Verified Windows native GGML CPU and large-v2 Sync extraction, CUDA runtime packaging, ffprobe staging, and ASAR/source synchronization.
+
 ## [2.4.3] - 2026-07-20
 
 Patch release for the Turkish translation target, macOS whisper runtime detection, and local Hy-MT2 reliability.

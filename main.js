@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
+const { assertDownloadDiskSpace, assertSyncInstallDiskSpace } = require('./disk-space');
+const { backupStaleWav } = require('./file-safety');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
 try {
   app.setName('WhisperSubTranslate');
@@ -1353,18 +1355,15 @@ function convertToWav(inputPath) {
     // 단, 소스 미디어가 WAV보다 새로워졌거나(재인코딩됨) 0바이트 잔재면 재변환한다.
     // 이전 세션에서 ffmpeg가 죽어 남은 잘린 WAV를 재사용하면 틀린 자막이 나오므로
     // mtime 비교로 스테일 파일을 걸러낸다.
-    // 스테일 WAV 백업: 같은 소스의 .stale.bak은 1개만 유지한다 (기존 백업
-    // 덮어쓰기). 백업은 사용자 원본의 유일 사본일 수 있어 삭제하지 않는다
-    // (MED-5). Windows rename은 대상 존재 시 실패하므로 기존 백업을 먼저 지운다.
-    const backupStaleWav = (wavPath) => {
-      const bakPath = `${wavPath}.stale.bak`;
+    // 백업에 실패하면 원본 WAV를 그대로 두고 변환을 중단한다. 실패 후 같은
+    // 경로로 ffmpeg를 실행하면 -y가 사용자 파일을 덮어쓸 수 있으므로 계속하지 않는다.
+    const preserveStaleWav = () => {
       try {
-        if (fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
-        fs.renameSync(wavPath, bakPath);
-      } catch (_e) {
-        try {
-          fs.unlinkSync(wavPath);
-        } catch (_e2) {}
+        backupStaleWav(wavPath);
+        return true;
+      } catch (error) {
+        reject(new Error(`WAV_BACKUP_FAILED: ${error.message}. Original WAV was preserved: ${wavPath}`));
+        return false;
       }
     };
 
@@ -1410,11 +1409,11 @@ function convertToWav(inputPath) {
         console.log(
           `[Audio] WAV stale (bad header or source newer), backing up & re-converting: ${path.basename(wavPath)}`
         );
-        backupStaleWav(wavPath);
+        if (!preserveStaleWav()) return;
       } catch (statErr) {
         // stat 실패 시 스킵하지 않고 재변환 시도 (동일하게 백업 우선)
         console.log(`[Audio] WAV stat failed, re-converting: ${statErr.message}`);
-        backupStaleWav(wavPath);
+        if (!preserveStaleWav()) return;
       }
     }
 
@@ -1714,6 +1713,8 @@ const FASTER_WHISPER_MODEL = 'large-v2';
 // 디스크 다운로드/삭제는 둘이 하나를 공유한다(모델 관리 카드 1개).
 const SYNC_ENGINE_MODEL_ID = 'large-v2-sync';
 const SYNC_ENGINE_LITE_MODEL_ID = 'large-v2-sync-lite';
+let syncAssetsPromise = null;
+const syncProgressListeners = new Set();
 function isSyncEngineModel(model) {
   return model === SYNC_ENGINE_MODEL_ID || model === SYNC_ENGINE_LITE_MODEL_ID;
 }
@@ -1862,8 +1863,7 @@ function execFileAsync(file, args, options = {}) {
 async function downloadFileWithProgress(url, destPath, label, onPercent) {
   if (downloadsCancelled) throw new Error('cancelled');
   const controller = new AbortController();
-  const writer = fs.createWriteStream(destPath);
-  const tracker = { controller, writer, destPath };
+  const tracker = { controller, writer: null, destPath };
   activeDownloads.add(tracker);
   try {
     const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
@@ -1871,8 +1871,17 @@ async function downloadFileWithProgress(url, destPath, label, onPercent) {
     // 무결성 검증: content-length가 없거나 받은 양과 다르면 실패 처리한다.
     // 잘린 1.42GB 7z가 '설치됨'으로 남으면 sync 엔진이 조용히 깨진다 (P1).
     if (!total || total <= 0) {
+      response.data.destroy();
       throw new Error(`${label}: server did not provide content-length, refusing partial download`);
     }
+    try {
+      assertDownloadDiskSpace(destPath, total);
+    } catch (error) {
+      response.data.destroy();
+      throw error;
+    }
+    const writer = fs.createWriteStream(destPath);
+    tracker.writer = writer;
     let received = 0;
     let lastPct = -1;
     let lastSentAt = 0;
@@ -1950,6 +1959,9 @@ async function ensureFasterWhisperEngine(onPercent) {
   fs.renameSync(partialPath, archivePath);
 
   mainWindow?.webContents?.send('output-update', 'Extracting GPU sync engine (this can take a minute)...\n');
+  // 압축 파일과 추출 결과가 동시에 존재한다. 실제 압축률을 알 수 없으므로
+  // 아카이브 크기의 3배를 추출 여유 공간으로 보수적으로 확보한다.
+  assertDownloadDiskSpace(path.join(engineDir, '.extracting'), fs.statSync(archivePath).size * 3);
   await extract7z(archivePath, engineDir);
   try {
     fs.unlinkSync(archivePath);
@@ -1962,6 +1974,72 @@ async function ensureFasterWhisperEngine(onPercent) {
   }
   mainWindow?.webContents?.send('output-update', 'GPU sync engine ready.\n');
   return exePath;
+}
+
+async function ensureFasterWhisperModel(emit = () => {}) {
+  const modelDir = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`);
+  fs.mkdirSync(modelDir, { recursive: true });
+  const baseUrl = `https://huggingface.co/Systran/faster-whisper-${FASTER_WHISPER_MODEL}/resolve/main`;
+  const smallFiles = ['config.json', 'tokenizer.json', 'vocabulary.txt'];
+
+  for (let i = 0; i < smallFiles.length; i++) {
+    const dest = path.join(modelDir, smallFiles[i]);
+    if (!fs.existsSync(dest)) {
+      const partial = dest + '.partial';
+      await downloadFileWithProgress(`${baseUrl}/${smallFiles[i]}`, partial, smallFiles[i]);
+      fs.renameSync(partial, dest);
+    }
+    emit(35 + i);
+  }
+
+  const binDest = path.join(modelDir, 'model.bin');
+  if (!fs.existsSync(binDest)) {
+    const partial = binDest + '.partial';
+    await downloadFileWithProgress(`${baseUrl}/model.bin`, partial, 'model.bin', (pct) => emit(38 + pct * 0.62));
+    fs.renameSync(partial, binDest);
+  }
+  emit(100);
+  return modelDir;
+}
+
+async function ensureFasterWhisperAssets(onProgress) {
+  if (typeof onProgress === 'function') syncProgressListeners.add(onProgress);
+  const emit = (percent) => {
+    for (const listener of syncProgressListeners) {
+      try {
+        listener(percent);
+      } catch (_e) {}
+    }
+  };
+
+  if (!syncAssetsPromise) {
+    downloadsCancelled = false;
+    syncAssetsPromise = (async () => {
+      // 엔진 다운로드, 압축 해제 피크, model.bin까지 필요한 최대 공간을 첫
+      // 네트워크 요청 전에 검사한다. 단계별 Content-Length 검사는 아래에서도 유지한다.
+      const existingExePath = getFasterWhisperExePath();
+      const engineInstalled = !!(existingExePath && fs.existsSync(existingExePath));
+      const modelInstalled = fs.existsSync(
+        path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin')
+      );
+      assertSyncInstallDiskSpace(path.join(getFasterWhisperRootDir(), '.installing'), engineInstalled, modelInstalled);
+
+      const exePath = await ensureFasterWhisperEngine((pct) => emit(pct * 0.32));
+      emit(34);
+      await ensureFasterWhisperModel(emit);
+      _cachedFwExePath = null;
+      return exePath;
+    })().finally(() => {
+      syncAssetsPromise = null;
+      syncProgressListeners.clear();
+    });
+  }
+
+  try {
+    return await syncAssetsPromise;
+  } finally {
+    if (typeof onProgress === 'function') syncProgressListeners.delete(onProgress);
+  }
 }
 
 function buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite = false, computeType = null) {
@@ -2020,7 +2098,8 @@ async function runFasterWhisperExtraction(
 ) {
   const lite = model === SYNC_ENGINE_LITE_MODEL_ID;
   const modeLabel = lite ? 'large-v2 lite' : 'large-v2';
-  const exePath = await ensureFasterWhisperEngine();
+  if (isUserStopped) throw new Error('Stopped by user');
+  const exePath = await ensureFasterWhisperAssets();
   const outputDir = path.join(getSafeTempDir(), `fw_out_${Date.now()}`);
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(getFasterWhisperModelsDir(), { recursive: true });
@@ -3075,7 +3154,7 @@ function isAllowedOpenExternalUrl(rawUrl) {
     if (parsed.protocol !== 'https:') return false;
     if (!ALLOWED_OPEN_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) return false;
     // github.com은 <소유자>/<레포> 하위 경로만 허용한다. 릴리스 노트 링크는
-    // /releases/tag/v2.4.3, 엔진 다운로드는 /releases/download/... 형태라
+    // /releases/tag/v2.4.4, 엔진 다운로드는 /releases/download/... 형태라
     // 레포 루트 두 세그먼트만 고정하고 그 아래는 허용한다.
     // (경로 세그먼트에 .. 이 섞이면 거부해 상위 탈출 표기를 막는다.)
     const pathname = parsed.pathname.replace(/\/$/, '');
@@ -3131,37 +3210,14 @@ ipcMain.handle('download-sync-engine', async () => {
     } catch (_e) {}
   };
   try {
-    downloadsCancelled = false;
-    // 1) 엔진(약 1.42GB): 전체 진행의 0~32%로 매핑
-    await ensureFasterWhisperEngine((pct) => emit(pct * 0.32));
-    emit(34);
-
-    // 2) 모델 파일(Systran/faster-whisper-large-v2): 작은 파일 먼저, model.bin을 38~100%로
-    const modelDir = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`);
-    fs.mkdirSync(modelDir, { recursive: true });
-    const HF = `https://huggingface.co/Systran/faster-whisper-${FASTER_WHISPER_MODEL}/resolve/main`;
-    const small = ['config.json', 'tokenizer.json', 'vocabulary.txt'];
-    for (let i = 0; i < small.length; i++) {
-      const dest = path.join(modelDir, small[i]);
-      if (!fs.existsSync(dest)) {
-        const partial = dest + '.partial';
-        await downloadFileWithProgress(`${HF}/${small[i]}`, partial, small[i]);
-        fs.renameSync(partial, dest);
-      }
-      emit(34 + (i + 1));
-    }
-    const binDest = path.join(modelDir, 'model.bin');
-    if (!fs.existsSync(binDest)) {
-      const partial = binDest + '.partial';
-      await downloadFileWithProgress(`${HF}/model.bin`, partial, 'model.bin', (pct) => emit(38 + pct * 0.62));
-      fs.renameSync(partial, binDest);
-    }
-    emit(100);
-    _cachedFwExePath = null;
+    // 엔진과 모델 전체를 일반 실행 경로와 같은 단일 in-flight 다운로드로 공유한다.
+    await ensureFasterWhisperAssets(emit);
     return { success: true };
   } catch (error) {
     const msg = String(error?.message || error);
-    if (msg === 'cancelled' || isUserStopped) return { success: false, error: 'cancelled', userStopped: true };
+    const cancelled =
+      /cancell?ed/i.test(msg) || error?.name === 'CanceledError' || String(error?.name || '').includes('AbortError');
+    if (cancelled) return { success: false, error: 'cancelled', userStopped: true };
     return { success: false, error: msg };
   }
 });
@@ -3246,73 +3302,88 @@ ipcMain.handle('download-model', async (_event, modelName) => {
     const downloadFile = async (url, destPath) => {
       if (downloadsCancelled) throw new Error('cancelled');
       const controller = new AbortController();
-      const writer = fs.createWriteStream(destPath);
-      const tracker = { controller, writer, destPath };
+      const tracker = { controller, writer: null, destPath };
       activeDownloads.add(tracker);
-      const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
-      const total = Number(response.headers['content-length'] || 0);
-      let received = 0;
-      let lastPct = -1;
-      let lastSentAt = 0;
-      const emit = (pct) => {
+      try {
+        const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
+        const total = Number(response.headers['content-length'] || 0);
+        if (!total || total <= 0) {
+          response.data.destroy();
+          throw new Error('Server did not provide model size');
+        }
         try {
-          mainWindow.webContents.send('output-update', `${path.basename(destPath)} ${pct}%\n`);
-          mainWindow.webContents.send('whisper-model-progress', {
-            modelName,
-            percent: pct,
-            received,
-            total,
+          assertDownloadDiskSpace(destPath, total);
+        } catch (error) {
+          response.data.destroy();
+          throw error;
+        }
+        const writer = fs.createWriteStream(destPath);
+        tracker.writer = writer;
+        let received = 0;
+        let lastPct = -1;
+        let lastSentAt = 0;
+        const emit = (pct) => {
+          try {
+            mainWindow.webContents.send('output-update', `${path.basename(destPath)} ${pct}%\n`);
+            mainWindow.webContents.send('whisper-model-progress', {
+              modelName,
+              percent: pct,
+              received,
+              total,
+            });
+          } catch (_e) {
+            console.log('[Download] Failed to send progress update:', _e.message);
+          }
+        };
+        response.data.on('data', (chunk) => {
+          received += chunk.length;
+          if (total > 0) {
+            const pct = Math.floor((received / total) * 100);
+            const now = Date.now();
+            if (pct !== lastPct && (pct === 100 || pct - lastPct >= 5 || now - lastSentAt >= 1000)) {
+              emit(pct);
+              lastPct = pct;
+              lastSentAt = now;
+            }
+          }
+        });
+        response.data.on('end', () => {
+          if (total > 0 && lastPct < 100) emit(100);
+          activeDownloads.delete(tracker);
+        });
+        response.data.on('error', () => {
+          activeDownloads.delete(tracker);
+        });
+        response.data.pipe(writer);
+        await new Promise((resolve, reject) => {
+          // 스트림 에러(연결 중단/취소 abort)를 reject로 연결하지 않으면
+          // renderer가 영원히 pending 상태로 남는다 (HIGH-3).
+          response.data.on('error', reject);
+          writer.on('finish', () => {
+            // content-length가 알려진 경우(전송/연결 중단 등으로) 받은 크기와 다르면
+            // 손상 파일로 취급해 부분 파일 삭제 + 실패시킨다.
+            if (total > 0 && received !== total) {
+              try {
+                fs.unlinkSync(destPath);
+              } catch (_e) {}
+              reject(new Error(`Download incomplete (${received}/${total} bytes)`));
+            } else {
+              resolve();
+            }
           });
-        } catch (_e) {
-          console.log('[Download] Failed to send progress update:', _e.message);
-        }
-      };
-      response.data.on('data', (chunk) => {
-        received += chunk.length;
-        if (total > 0) {
-          const pct = Math.floor((received / total) * 100);
-          const now = Date.now();
-          if (pct !== lastPct && (pct === 100 || pct - lastPct >= 5 || now - lastSentAt >= 1000)) {
-            emit(pct);
-            lastPct = pct;
-            lastSentAt = now;
-          }
-        }
-      });
-      response.data.on('end', () => {
-        if (total > 0 && lastPct < 100) emit(100);
-        activeDownloads.delete(tracker);
-      });
-      response.data.on('error', () => {
-        activeDownloads.delete(tracker);
-      });
-      response.data.pipe(writer);
-      await new Promise((resolve, reject) => {
-        // 스트림 에러(연결 중단/취소 abort)를 reject로 연결하지 않으면
-        // renderer가 영원히 pending 상태로 남는다 (HIGH-3).
-        response.data.on('error', reject);
-        writer.on('finish', () => {
-          // content-length가 알려진 경우(전송/연결 중단 등으로) 받은 크기와 다르면
-          // 손상 파일로 취급해 부분 파일 삭제 + 실패시킨다.
-          if (total > 0 && received !== total) {
-            try {
-              fs.unlinkSync(destPath);
-            } catch (_e) {}
-            reject(new Error(`Download incomplete (${received}/${total} bytes)`));
-          } else {
-            resolve();
-          }
+          writer.on('error', reject);
+          // writer가 finish/error 없이 닫히는 예외 경로에서도 settle 보장 (HIGH-3)
+          writer.on('close', () => {
+            if (writer.writableFinished) return;
+            // 취소 시 close가 finish/error보다 먼저 settle한다 — 취소를 네트워크
+            // 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
+            if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
+            else reject(new Error('Download stream closed before finish'));
+          });
         });
-        writer.on('error', reject);
-        // writer가 finish/error 없이 닫히는 예외 경로에서도 settle 보장 (HIGH-3)
-        writer.on('close', () => {
-          if (writer.writableFinished) return;
-          // 취소 시 close가 finish/error보다 먼저 settle한다 — 취소를 네트워크
-          // 오류로 오분류하지 않도록 'cancelled'로 reject (LOW).
-          if (downloadsCancelled || isUserStopped) reject(new Error('cancelled'));
-          else reject(new Error('Download stream closed before finish'));
-        });
-      });
+      } finally {
+        activeDownloads.delete(tracker);
+      }
     };
 
     // 파일 존재하면 스킵 — 단 0바이트/손상 잔재(이전 실패)가 있으면 재다운로드
@@ -3769,6 +3840,8 @@ ipcMain.handle('local-model-download', async (event, modelId) => {
       );
       return { success: true };
     } catch (e) {
+      const cancelled = /cancell?ed|aborted/i.test(String(e?.message || '')) || e?.name === 'AbortError';
+      if (cancelled) return { success: false, error: 'cancelled', userStopped: true };
       return { success: false, error: e.message };
     } finally {
       _localDownloadAbort = null;
@@ -3789,7 +3862,7 @@ ipcMain.handle('whisper-model-cancel', async () => {
 
 ipcMain.handle('local-model-cancel', async () => {
   if (_localDownloadAbort) {
-    _localDownloadAbort.abort();
+    _localDownloadAbort.abort(new Error('cancelled'));
     _localDownloadAbort = null;
   }
   return true;

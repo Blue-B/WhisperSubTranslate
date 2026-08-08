@@ -54,6 +54,7 @@
   "errorDllCpuAvailable": "DLLエントリポイントが見つかりません (0xC0000139)。CUDA DLLがGPUドライバーと互換性がありません。CPUビルドがインストール済みです。設定でデバイスをCPUに変更してください。",
   "errorDllNotFound": "必要なDLLが見つかりません (0xC0000135)。Visual C++ Redistributable 2015-2022をインストールするか、CPU専用ビルドを使用してください。",
   "errorUnknown": "不明なエラー",
+  "errorDiskSpace": "ディスクの空き容量が不足しています。必要: {required} GB、空き: {free} GB。",
   "errorSrtPathMissing": "字幕抽出後にSRTファイルパスが見つかりません",
   "errorEmptyTranslation": "翻訳結果が空です",
   "errorApiQuotaExceeded": "API割り当て超過 - しばらく待ってから再試行するか、別の翻訳エンジンを使用してください",
@@ -305,8 +306,8 @@
   "resetPromptHint": "プロンプトを間違えて編集したとき、デフォルトに戻します。",
   "modelSelectNames": {
     "large-v3-turbo": "large-v3-turbo (1.6GB) ⭐推奨",
-    "large-v2-sync": "large-v2 同期 (同期ずれ対策, 非常に低速)",
-    "large-v2-sync-lite": "large-v2 同期 ライト (int8, 低VRAM)",
+    "large-v2-sync": "large-v2 同期 (~4.4GB共有, 同期ずれ対策, 非常に低速)",
+    "large-v2-sync-lite": "large-v2 同期 ライト (~4.4GB共有, int8, 低VRAM)",
     "large-v3": "large-v3 (3.1GB)",
     "medium": "medium (1.5GB)",
     "small": "small (466MB)",

@@ -9,6 +9,7 @@
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const { assertDownloadDiskSpace } = require('./disk-space');
 
 // 모델 카탈로그 — 새 모델 추가는 여기에만
 const MODELS = {
@@ -179,28 +180,9 @@ let _onDownloadProgress = null;
 const _downloadSubscribers = new Map(); // modelId → Set<fn>
 
 // 모델 다운로드 전 디스크 여유 공간 확인 (MED 4).
-function assertDiskSpaceFor(modelId) {
+function assertDiskSpaceFor(modelId, alreadyDownloaded = 0) {
   const m = MODELS[modelId];
-  if (!m) return;
-  try {
-    const dir = getModelsDir();
-    if (!fs.existsSync(dir)) return;
-    const { bavail, bsize } = fs.statfsSync(dir);
-    const freeBytes = bavail * bsize;
-    if (freeBytes < m.sizeBytes) {
-      throw new Error(
-        `Not enough disk space: need ${(m.sizeBytes / 1024 / 1024 / 1024).toFixed(2)} GB, free ${(
-          freeBytes /
-          1024 /
-          1024 /
-          1024
-        ).toFixed(2)} GB`
-      );
-    }
-  } catch (error) {
-    if (error?.message?.startsWith('Not enough disk space')) throw error;
-    // statfsSync 실패(예: 네트워크 드라이브)는 무시하고 다운로드 진행
-  }
+  if (m) assertDownloadDiskSpace(getModelPath(modelId), Math.max(0, m.sizeBytes - alreadyDownloaded));
 }
 
 async function withTimeout(run, timeoutMs = LOCAL_OPERATION_TIMEOUT_MS, parentSignal = null) {
@@ -366,7 +348,6 @@ async function downloadModel(onProgress, signal, modelId = DEFAULT_MODEL_ID) {
     }
     return await waitForDownload(_downloadPromises[modelId], signal);
   }
-  assertDiskSpaceFor(modelId);
   _downloadPromises[modelId] = _downloadModelImpl(signal, modelId).finally(() => {
     delete _downloadPromises[modelId];
     _downloadSubscribers.delete(modelId);
@@ -420,6 +401,11 @@ async function _downloadModelImpl(signal, modelId) {
       } catch {}
       reject(error);
     };
+    const failPreservingTmp = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
 
     const doRequest = (url, redirects = 0, resumeOffset = 0) => {
       if (settled) return;
@@ -451,7 +437,15 @@ async function _downloadModelImpl(signal, modelId) {
           return fail(new Error(`HTTP ${res.statusCode}`));
         }
         if (resumeOffset > 0 && !isPartial) {
-          // 서버가 Range를 무시했다 → 처음부터 다시 받는다 (기존 tmp 폐기).
+          // 서버가 Range를 무시했다. 전체 크기를 받을 공간을 먼저 확인하고,
+          // 충분할 때만 기존 tmp를 지워 이어받기 데이터를 보존한다.
+          try {
+            assertDiskSpaceFor(modelId);
+          } catch (error) {
+            detachAbort();
+            res.destroy();
+            return failPreservingTmp(error);
+          }
           try {
             fs.unlinkSync(tmp);
           } catch {}
@@ -516,6 +510,12 @@ async function _downloadModelImpl(signal, modelId) {
       resumeOffset = fs.statSync(tmp).size;
     } catch {
       resumeOffset = 0;
+    }
+    try {
+      assertDiskSpaceFor(modelId, resumeOffset);
+    } catch (error) {
+      // 공간만 부족한 경우 이미 받은 tmp는 보존해 다음 실행에서 이어받는다.
+      return failPreservingTmp(error);
     }
     doRequest(getModelUrl(modelId), 0, resumeOffset);
   });
