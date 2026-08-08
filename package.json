@@ -159,7 +159,7 @@
   },
   "optionalDependencies": {
     "@node-llama-cpp/linux-arm64": "^3.18.1",
-    "@node-llama-cpp/linux-armv7l": "^3.18.1",
+    "@node-llama-cpp/linux-armv7l": "^3.19.1",
     "@node-llama-cpp/linux-x64": "^3.18.1",
     "@node-llama-cpp/linux-x64-cuda": "^3.18.1",
     "@node-llama-cpp/linux-x64-cuda-ext": "^3.18.1",
