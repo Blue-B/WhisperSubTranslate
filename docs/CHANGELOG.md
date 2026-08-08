@@ -2,7 +2,7 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.4.5] - Unreleased
+## [2.4.5] - 2026-08-09
 
 Patch follow-up for reliability issues found during a post-release full-diff audit.
 
@@ -21,7 +21,7 @@ Patch follow-up for reliability issues found during a post-release full-diff aud
 
 ### Internal
 
-- Dependabot groups `node-llama-cpp` platform packages, npm development dependencies, and GitHub Actions into coordinated updates with tighter open-PR limits.
+- Dependabot now opens only grouped security updates; scheduled version-update PRs are disabled.
 - Added regression coverage for settings recovery, bounded WAV validation, complete Sync disk calculations, partial download cleanup, resumable downloads, retry cancellation, redirect races, and installer failure scopes.
 
 ## [2.4.4] - 2026-08-08
