@@ -2799,6 +2799,11 @@ function resetProgress(textKey) {
   const d = I18N[currentUiLang];
   targetText = textKey === 'prepare' ? d.progressPreparing : '';
   updateProgress(0, targetText);
+  // 'prepare'(작업 시작) 외의 리셋은 유휴 복귀다: updateProgress가 켜둔 패널을 다시 숨긴다.
+  if (textKey !== 'prepare') {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) progressContainer.style.display = 'none';
+  }
 }
 
 function localizeLog(text) {
@@ -4279,6 +4284,7 @@ function showSettingsModal(loadApiKeys = () => window.electronAPI.loadApiKeys())
 function hideSettingsModal() {
   const modal = document.getElementById('settingsModal');
   _settingsLoadToken++;
+  closeAllCombos();
   setProviderSettingsLoading(false);
   if (modal) {
     modal.classList.remove('active');
@@ -4488,6 +4494,7 @@ function closeAllCombos() {
   document.querySelectorAll('.combo-menu:not([hidden])').forEach((menu) => {
     menu.hidden = true;
   });
+  document.querySelectorAll('.modal-body.combo-open').forEach((body) => body.classList.remove('combo-open'));
 }
 
 // 드롭다운을 열 때 최신 모델 목록을 자동으로 불러온다.
@@ -4513,6 +4520,7 @@ function positionComboMenu(menu) {
     menu.style.bottom = 'auto';
     menu.style.maxHeight = Math.max(80, Math.min(220, spaceBelow - 8)) + 'px';
   }
+  menu.closest('.modal-body')?.classList.add('combo-open');
   menu.hidden = false;
 }
 
@@ -4579,9 +4587,9 @@ function initCombo(input) {
   menu.addEventListener(
     'wheel',
     (event) => {
-      if (menu.scrollHeight <= menu.clientHeight) return;
       event.preventDefault();
-      menu.scrollTop += event.deltaY;
+      event.stopPropagation();
+      if (menu.scrollHeight > menu.clientHeight) menu.scrollTop += event.deltaY;
     },
     { passive: false }
   );

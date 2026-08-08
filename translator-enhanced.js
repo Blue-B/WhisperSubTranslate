@@ -985,13 +985,20 @@ class EnhancedSubtitleTranslator {
     // OpenAI · Anthropic 은 {data:[{id}]}, Gemini 는 {models:[{name:'models/<id>'}]} 로 돌려준다.
     const raw = [response.data?.data, response.data?.models].find(Array.isArray) || [];
 
-    const ids = raw
-      .map((entry) => {
-        if (typeof entry === 'string') return entry;
-        const name = entry?.id || entry?.name || '';
-        return String(name).replace(/^models\//, '');
-      })
-      .filter(Boolean);
+    const modelId = (entry) => {
+      if (typeof entry === 'string') return entry;
+      return String(entry?.id || entry?.name || '').replace(/^models\//, '');
+    };
+    const compatible = raw.filter((entry) => {
+      if (provider.format !== 'gemini') return true;
+      const id = modelId(entry).toLowerCase();
+      return (
+        entry?.supportedGenerationMethods?.includes('generateContent') &&
+        /^gemini-(?:\d[\w.]*-)?(?:flash|pro)(?:-|$)/.test(id) &&
+        !/(?:^|-)(?:image|audio|tts|live)(?:-|$)/.test(id)
+      );
+    });
+    const ids = compatible.map(modelId).filter(Boolean);
 
     return [...new Set(ids)].sort();
   }

@@ -9,6 +9,10 @@ Patch follow-up for reliability issues found during a post-release full-diff aud
 ### Fixed
 
 - **Settings-load recovery:** provider inputs remain protected from stale values after a failed load, while a visible Retry action restores the editable settings once loading succeeds.
+- **Settings layout:** model-list scrolling no longer moves the settings behind it. Queue actions now wrap onto a second row at narrow panel widths so the queue title and count remain visible.
+- **Queue clearing:** clearing the queue while idle no longer reveals the progress panel stuck on "Preparing extraction...".
+- **Local model labels:** the translation-method entry no longer claims "1.8B Q4 ~1.1 GB" for every case; it now reads "Hy-MT2 1.8B/7B" and the description lists both model sizes, matching the model sub-selector.
+- **Gemini model list:** the picker now shows only general Flash and Pro models that support `generateContent`, excluding AQA, Robotics, image, audio, embedding, and managed-agent entries.
 - **Large WAV handling:** RIFF and RF64 files are validated from a fixed 64-byte header instead of loading the entire WAV into Electron's main process. Invalid or outdated sibling WAV files stay untouched while conversion uses temporary storage.
 - **Sync installation safety:** first-time disk checks include the extracted engine and model together, and failed Sync downloads remove partial files.
 - **Model download recovery:** the first caller receives progress updates, interrupted local-model downloads retain resumable data, and cancellation state no longer leaks between processing and download flows.

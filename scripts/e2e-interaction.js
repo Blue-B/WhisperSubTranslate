@@ -252,6 +252,82 @@ async function run() {
   }
   ok('Settings: failed load stays locked and Retry restores editable values');
 
+  const queueHeader = await w.evaluate(() => {
+    const panel = document.getElementById('queueContainer');
+    const title = document.getElementById('queueTitle');
+    const actions = document.querySelector('.queue-actions');
+    return {
+      defaultWidth: panel.getBoundingClientRect().width,
+      titleWidth: title.getBoundingClientRect().width,
+      titleScrollWidth: title.scrollWidth,
+      actionsBelowTitle: actions.getBoundingClientRect().top >= title.getBoundingClientRect().bottom,
+    };
+  });
+  if (Math.abs(queueHeader.defaultWidth - 360) > 1) {
+    fail(`Queue panel default width is not 360px: ${JSON.stringify(queueHeader)}`);
+  }
+  if (queueHeader.titleWidth + 1 < queueHeader.titleScrollWidth || !queueHeader.actionsBelowTitle) {
+    fail(`Queue header is clipped at the 360px default: ${JSON.stringify(queueHeader)}`);
+  }
+  ok('Queue panel: default width is 360px');
+  ok('Queue header: title stays visible with actions wrapped below at the default width');
+
+  const comboSetup = await w.evaluate(async () => {
+    showSettingsModal();
+    while (document.getElementById('settingsModal')?.getAttribute('aria-busy') === 'true') {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    showProviderPanel('gemini');
+    const input = document.getElementById('geminiModel');
+    input.scrollIntoView({ block: 'center' });
+    const menu = input.parentElement.querySelector('.combo-menu');
+    menu.replaceChildren();
+    for (let index = 0; index < 100; index++) {
+      addComboOption(menu, `gemini-test-${String(index).padStart(3, '0')}`, input);
+    }
+    positionComboMenu(menu);
+    const body = document.querySelector('.modal-body');
+    return {
+      modalScrollTop: body.scrollTop,
+      bodyLocked: body.classList.contains('combo-open') && getComputedStyle(body).overflowY === 'hidden',
+    };
+  });
+  if (!comboSetup.bodyLocked) fail('Model combo did not lock the settings modal body');
+  const combo = w.locator('.provider-panel[data-panel="gemini"] .combo-menu');
+  const comboBox = await combo.boundingBox();
+  if (!comboBox) fail('Model combo menu did not open');
+  await w.mouse.move(comboBox.x + comboBox.width / 2, comboBox.y + comboBox.height / 2);
+  await w.mouse.wheel(0, 240);
+  const comboWheel = await w.evaluate(() => ({
+    modalScrollTop: document.querySelector('.modal-body').scrollTop,
+    menuScrollTop: document.querySelector('.provider-panel[data-panel="gemini"] .combo-menu').scrollTop,
+  }));
+  if (comboWheel.modalScrollTop !== comboSetup.modalScrollTop || comboWheel.menuScrollTop === 0) {
+    fail(`Model combo wheel isolation failed: ${JSON.stringify({ comboSetup, comboWheel })}`);
+  }
+  await w.evaluate(() => {
+    document.querySelector('.provider-panel[data-panel="gemini"] .combo-menu').scrollTop = 0;
+  });
+  await w.mouse.move(comboBox.x + comboBox.width - 3, comboBox.y + 14);
+  await w.mouse.down();
+  await w.mouse.move(comboBox.x + comboBox.width - 3, comboBox.y + Math.min(comboBox.height - 15, 160), {
+    steps: 8,
+  });
+  await w.mouse.up();
+  const comboDrag = await w.evaluate(() => {
+    const body = document.querySelector('.modal-body');
+    const menu = document.querySelector('.provider-panel[data-panel="gemini"] .combo-menu');
+    const during = { modalScrollTop: body.scrollTop, menuScrollTop: menu.scrollTop };
+    closeAllCombos();
+    const unlocked = !body.classList.contains('combo-open') && getComputedStyle(body).overflowY === 'auto';
+    hideSettingsModal();
+    return { ...during, unlocked };
+  });
+  if (comboDrag.modalScrollTop !== comboSetup.modalScrollTop || comboDrag.menuScrollTop === 0 || !comboDrag.unlocked) {
+    fail(`Model combo drag isolation failed: ${JSON.stringify({ comboSetup, comboDrag })}`);
+  }
+  ok('Settings model combo: wheel and scrollbar drag stay isolated, modal scrolling restores on close');
+
   // -------------------------------------------------------------------------
   // 7. Empty queue
   // -------------------------------------------------------------------------
@@ -266,6 +342,20 @@ async function run() {
   });
   if (!emptyState.hasEmpty) fail('Empty queue: .queue-empty element missing');
   ok(`Empty queue: empty state rendered (hasImg=${emptyState.hasImg})`);
+
+  // Regression: idle 상태에서 대기열 삭제를 눌러도 진행 패널('자막 추출 준비 중...')이 나타나면 안 된다.
+  const idleClear = await w.evaluate(() => {
+    document.getElementById('clearQueueBtn').click();
+    const container = document.getElementById('progressContainer');
+    return {
+      display: getComputedStyle(container).display,
+      title: document.getElementById('progressTitle').textContent,
+    };
+  });
+  if (idleClear.display !== 'none') {
+    fail(`Idle clear-queue leaked the progress panel: ${JSON.stringify(idleClear)}`);
+  }
+  ok('Idle clear-queue: progress panel stays hidden');
 
   // -------------------------------------------------------------------------
   // 8. Stress: rapid translation toggle (regression for the re-entrancy bug)

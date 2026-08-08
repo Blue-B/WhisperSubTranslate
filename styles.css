@@ -2167,6 +2167,7 @@ body::after {
   width: 360px;
   min-width: 300px;
   max-width: 70vw;
+  container-type: inline-size;
   transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
 }
@@ -2276,6 +2277,27 @@ body::after {
 .queue-actions {
   display: flex;
   gap: 6px;
+}
+
+@container (max-width: 430px) {
+  .right-panel > .panel-header {
+    flex-wrap: wrap;
+  }
+
+  .right-panel > .panel-header .panel-title {
+    flex: 1 1 100%;
+  }
+
+  .right-panel > .panel-header .queue-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+
+  .right-panel > .panel-header .queue-actions .btn-sm {
+    padding-inline: 7px;
+    letter-spacing: 0.04em;
+  }
 }
 
 .btn-icon {
@@ -3126,8 +3148,13 @@ body::after {
 .modal-body {
   padding: 24px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   flex: 1;
   min-height: 0;
+}
+
+.modal-body.combo-open {
+  overflow-y: hidden;
 }
 
 .form-group {
@@ -3513,6 +3540,8 @@ body.has-update-banner .main-container {
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   min-width: 180px;
+  overscroll-behavior: contain;
+  user-select: none;
 }
 
 .combo-item {

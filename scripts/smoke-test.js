@@ -1291,6 +1291,53 @@ async function runQuotaMessagePrecision() {
   console.log('[QuotaPrecision] message-based quota detection unified (ok)');
 }
 
+async function runProviderModelFiltering() {
+  const axios = require('axios');
+  const originalGet = axios.get;
+  const translator = new EnhancedSubtitleTranslator();
+  try {
+    axios.get = async () => ({
+      data: {
+        models: [
+          {
+            name: 'models/gemini-3.6-flash',
+            supportedGenerationMethods: ['generateContent', 'countTokens'],
+          },
+          {
+            name: 'models/gemini-3.1-pro-preview',
+            supportedGenerationMethods: ['generateContent'],
+          },
+          { name: 'models/aqa', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/antigravity-preview-05-2026', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/gemini-robotics-er-1.5-preview', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/gemini-2.5-flash-image', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/gemini-2.5-flash-native-audio', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/gemini-embedding', supportedGenerationMethods: ['embedContent'] },
+        ],
+      },
+    });
+    const geminiModels = await translator.listModels({
+      format: 'gemini',
+      label: 'Gemini',
+      apiKey: 'test',
+      baseUrl: 'https://gemini.test/v1beta',
+    });
+    assert.deepStrictEqual(geminiModels, ['gemini-3.1-pro-preview', 'gemini-3.6-flash']);
+
+    axios.get = async () => ({ data: { data: [{ id: 'gpt-test' }] } });
+    const openaiModels = await translator.listModels({
+      format: 'openai',
+      label: 'OpenAI',
+      apiKey: 'test',
+      baseUrl: 'https://openai.test/v1',
+    });
+    assert.deepStrictEqual(openaiModels, ['gpt-test'], 'non-Gemini model lists must remain unchanged');
+    console.log('[ProviderModels] Gemini list keeps general Flash/Pro text models only (ok)');
+  } finally {
+    axios.get = originalGet;
+  }
+}
+
 async function run() {
   runRendererSourceLangPayload();
   runSyncPreflightOrdering();
@@ -1341,6 +1388,7 @@ async function run() {
   await runLocalTranslationGuards();
   await runMyMemoryErrorPhrase();
   await runMyMemoryNormalPhrase();
+  await runProviderModelFiltering();
   await runRetryOn429Case();
   await runThrottleSerialization();
   runCacheKeyConsistency();
