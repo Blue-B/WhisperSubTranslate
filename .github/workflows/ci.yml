@@ -48,7 +48,8 @@ jobs:
       - name: Install Electron display deps
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libgtk-3-0 libxss1 libxtst6 libatspi2.0-0 libsecret-1-0 xdg-utils
+          # Ubuntu 24.04 runners dropped the libasound2 transitional package (now libasound2t64).
+          sudo apt-get install -y -qq xvfb libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2t64 libgtk-3-0 libxss1 libxtst6 libatspi2.0-0 libsecret-1-0 xdg-utils
       - name: Run E2E smoke test (headless)
         run: xvfb-run --auto-servernum npm run test:e2e
         env:
