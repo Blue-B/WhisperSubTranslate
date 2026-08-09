@@ -2,6 +2,21 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.6] - 2026-08-09
+
+### Fixed
+
+- **Whisper launch diagnostics:** a blocked or quarantined `whisper-cli` is no longer reported as "whisper-cli not found". The app now distinguishes a genuinely missing binary from one that exists but cannot start, reports the exact folder involved, and points at antivirus quarantine — the usual cause for packaged builds, whose binaries are unsigned. Exit code 127 on Windows is no longer mistaken for the POSIX "command not found" status.
+- **Recovery guidance:** packaged installations are told to restore the shipped binary and exclude its folder from scanning instead of being sent to download whisper.cpp manually, which never applied to a build that already contains it.
+
+### Internal
+
+- A monthly `engine-update-check` workflow compares the pinned whisper.cpp version with the upstream latest and, when a new release exists, opens a pull request carrying a real transcription test result and a VirusTotal report, so engine upgrades become a reviewed one-click decision.
+- The release workflow scans the bundled `whisper-cli.exe` and `whisper.dll` on VirusTotal before building and refuses to publish when Microsoft flags them, preventing a repeat of the v2.4.4 Defender false-positive incident. The scan is skipped when no `VIRUSTOTAL_API_KEY` secret is configured.
+- The bundled whisper.cpp version is pinned to `v1.9.1` instead of following `releases/latest`. Builds were silently adopting whatever upstream had published most recently, which swapped the entire engine between 2.4.3 and 2.4.4 without review and made builds unreproducible. Upgrading is now a deliberate edit.
+- The release workflow transcribes `nya.wav` with the bundled `whisper-cli` and refuses to publish unless a valid SRT comes back. The previous gate only checked that files existed, so a broken engine could ship undetected.
+- The release workflow now requires `whisper-cpp/whisper-cli.exe` together with its `whisper.dll`, and rejects a CPU fallback shipped without its runtime DLL. Previously either binary alone satisfied the gate, even though CUDA mode only uses the top-level one.
+
 ## [2.4.5] - 2026-08-09
 
 Patch follow-up for reliability issues found during a post-release full-diff audit.

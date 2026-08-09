@@ -2692,7 +2692,13 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
                   : '') +
                 'Then copy all built files (whisper-cli + *.so) to whisper-cpp/ folder.';
             } else {
-              errorMessage = `${WHISPER_CLI_NAME} not found`;
+              // Windows에서는 spawn이 성공했으므로 바이너리는 실제로 실행됐다.
+              // 127을 POSIX의 "command not found"로 번역하면 파일이 멀쩡히 있는
+              // 사용자에게 파일을 찾으라는 잘못된 안내가 나간다.
+              errorMessage =
+                `${WHISPER_CLI_NAME} started but stopped with exit code 127. ` +
+                'A dependent library in the whisper-cpp folder is missing or blocked ' +
+                '(antivirus quarantine is the usual cause).';
             }
           }
           console.log(`[ERROR] ${path.basename(filePath)} failed: ${errorMessage}`);
@@ -2724,52 +2730,64 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           } catch (_e) {}
         }
 
-        // ENOENT/EACCES 에러 = whisper-cli 파일 없음 또는 실행 권한 없음
+        // spawn 실패의 원인은 두 갈래다: 파일이 정말 없는 경우와, 파일은 있는데
+        // 실행이 막힌 경우(백신 격리·잠금, 의존 라이브러리 차단). 둘을 모두
+        // "not found"로 뭉치면 바이너리를 동봉해 배포한 빌드에서 사용자가
+        // 있지도 않은 설치 문제를 찾게 된다.
         if (err.code === 'ENOENT' || err.code === 'EACCES') {
-          // On Windows, ENOENT from spawn() can also mean a dependent DLL
-          // failed to load (whisper.dll / ggml*.dll missing) — the binary is
-          // present but its runtime libs are not. Hint users about this case.
           const isWin = process.platform === 'win32';
-          const errDetail =
-            err.code === 'EACCES'
-              ? `[ERROR] ${WHISPER_CLI_NAME} permission denied! (EACCES)\n` +
-                (!isWin ? `Try: chmod +x "${exePath}"\n\n` : '\n')
-              : `[ERROR] ${WHISPER_CLI_NAME} could not be launched!\n` +
-                (isWin
-                  ? `(Either the file is missing, or a dependent DLL such as whisper.dll / ggml*.dll could not be loaded from the same folder.)\n\n`
-                  : `\n`);
+          const exeExists = fs.existsSync(exePath);
 
-          const missingFileError = new Error(
-            errDetail +
-              'Please download whisper.cpp:\n' +
-              '1. Visit: https://github.com/ggml-org/whisper.cpp/releases\n' +
-              '2. Download the appropriate build for your platform\n' +
-              '3. Extract to project folder under "whisper-cpp" directory\n' +
-              '4. Restart the app'
-          );
+          let reason;
+          if (err.code === 'EACCES') {
+            reason =
+              `${WHISPER_CLI_NAME} could not be launched: access denied at ${exePath}. ` +
+              (isWin
+                ? 'Another process — usually antivirus — is blocking or holding the file.'
+                : `Make it executable with: chmod +x "${exePath}"`);
+          } else if (exeExists) {
+            reason =
+              `${WHISPER_CLI_NAME} could not be launched even though the file exists at ${exePath}. ` +
+              (isWin
+                ? 'A dependent library (whisper.dll or ggml*.dll) in the same folder is missing or blocked.'
+                : 'A dependent shared library (libwhisper / libggml) could not be loaded.');
+          } else {
+            reason = `${WHISPER_CLI_NAME} is missing from ${exeCwd}.`;
+          }
+
+          const recovery = app.isPackaged
+            ? [
+                'This build ships whisper.cpp, so the files were removed or blocked after installation.',
+                'Antivirus quarantine is the usual cause — these binaries are unsigned.',
+                '',
+                'How to recover:',
+                `   - Check your antivirus quarantine / protection history for ${WHISPER_CLI_NAME}`,
+                `   - Restore it and exclude this folder from real-time scanning: ${exeCwd}`,
+                '   - Or re-extract the release archive over this installation',
+                '   - Restart the app',
+              ]
+            : [
+                'Install whisper.cpp into the whisper-cpp folder:',
+                '   - Run: npm install   (postinstall downloads a prebuilt binary)',
+                '   - Or take a build from https://github.com/ggml-org/whisper.cpp/releases',
+                `   - Place ${WHISPER_CLI_NAME} and its runtime libraries into whisper-cpp/`,
+                ...(isWin ? [] : [`   - chmod +x whisper-cpp/${WHISPER_CLI_NAME}`]),
+                '   - Restart the app',
+              ];
 
           mainWindow.webContents.send(
             'output-update',
             '\n' +
               '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              `[ERROR] ${WHISPER_CLI_NAME.toUpperCase()} NOT FOUND\n` +
+              `[ERROR] ${WHISPER_CLI_NAME.toUpperCase()} ${exeExists ? 'CANNOT RUN' : 'IS MISSING'}\n` +
               '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n' +
-              'Download Required:\n' +
-              '   https://github.com/ggml-org/whisper.cpp/releases\n\n' +
-              'Files to download:\n' +
-              (process.platform === 'win32'
-                ? '   - whisper-cublas-*.zip (CUDA/GPU)\n' + '   - OR whisper-bin-*.zip (CPU only)\n\n'
-                : '   - Build from source: cmake -B build && cmake --build build\n' +
-                  '   - OR download pre-built binary for your platform\n\n') +
-              'Installation:\n' +
-              '   1. Extract or build the binary\n' +
-              '   2. Place files into whisper-cpp folder\n' +
-              (process.platform !== 'win32' ? `   3. chmod +x whisper-cpp/${WHISPER_CLI_NAME}\n` : '') +
-              `   ${process.platform !== 'win32' ? '4' : '3'}. Restart this app\n\n` +
-              '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+              reason +
+              '\n\n' +
+              recovery.join('\n') +
+              '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
           );
 
-          reject(missingFileError);
+          reject(new Error(reason));
         } else {
           reject(err);
         }

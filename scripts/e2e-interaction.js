@@ -149,6 +149,17 @@ async function run() {
       return {
         dropHint: document.getElementById('dropHint1')?.textContent || '',
         diskError: getLocalizedError('Not enough disk space: need 2.00 GB, free 1.00 GB'),
+        // main.js가 보내는 세 가지 whisper 실행 실패 메시지 원본.
+        whisperMissing: getLocalizedError('whisper-cli.exe is missing from C:\\app\\resources\\whisper-cpp.'),
+        whisperBlocked: getLocalizedError(
+          'whisper-cli.exe could not be launched even though the file exists at ' +
+            'C:\\app\\resources\\whisper-cpp\\whisper-cli.exe. A dependent library ' +
+            '(whisper.dll or ggml*.dll) in the same folder is missing or blocked.'
+        ),
+        whisper127: getLocalizedError(
+          'whisper-cli.exe started but stopped with exit code 127. A dependent library ' +
+            'in the whisper-cpp folder is missing or blocked (antivirus quarantine is the usual cause).'
+        ),
       };
     }, lang);
     if (pageErrors.length > before) fail(`Locale '${lang}' produced page error`);
@@ -159,6 +170,24 @@ async function run() {
       !localized.diskError.includes('1.00')
     ) {
       fail(`Locale '${lang}': disk-space error was not localized: ${localized.diskError}`);
+    }
+    // 백신 격리(파일 없음)와 실행 차단(파일 있음)은 복구 방법이 달라
+    // 같은 문구로 뭉개지면 안 된다. 경로 같은 원문이 그대로 노출되지도 않아야 한다.
+    for (const [key, text] of Object.entries({
+      whisperMissing: localized.whisperMissing,
+      whisperBlocked: localized.whisperBlocked,
+      whisper127: localized.whisper127,
+    })) {
+      if (!text) fail(`Locale '${lang}': ${key} produced an empty message`);
+      if (text.includes('C:\\app') || text.includes('whisper-cpp folder')) {
+        fail(`Locale '${lang}': ${key} was not localized: ${text}`);
+      }
+    }
+    if (localized.whisperMissing === localized.whisperBlocked) {
+      fail(`Locale '${lang}': missing and blocked whisper errors collapsed into one message`);
+    }
+    if (localized.whisper127 !== localized.whisperBlocked) {
+      fail(`Locale '${lang}': exit code 127 was not classified as a blocked launch`);
     }
     ok(`Locale '${lang}': applied, hint="${localized.dropHint.slice(0, 30)}..."`);
   }

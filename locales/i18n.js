@@ -60,7 +60,8 @@ const I18N = {
     errorGpuMemory: 'GPU 메모리 부족 또는 드라이버 문제',
     errorProcessCrash: '프로세스가 비정상적으로 종료됨 (메모리 부족 가능성)',
     errorWhisperFailed: 'Whisper 처리 실패 (파일 포맷 또는 오디오 문제)',
-    errorWhisperNotFound: 'whisper-cli를 찾을 수 없음',
+    errorWhisperMissing: 'whisper-cli 파일이 없습니다. 백신 격리 목록을 확인해 복원하거나 앱을 다시 설치하세요.',
+    errorWhisperBlocked: 'whisper-cli를 실행할 수 없습니다. 필요한 파일이 차단되었거나 없습니다 (백신 확인).',
     errorDllEntryPointNotFound:
       'DLL 진입점을 찾을 수 없음 (0xC0000139). CUDA DLL이 GPU 드라이버와 호환되지 않습니다. GitHub에서 whisper-bin-x64.zip을 다운로드하여 whisper-cpp/cpu/ 폴더에 넣어주세요.',
     errorDllCpuAvailable:
@@ -461,7 +462,8 @@ const I18N = {
     errorGpuMemory: 'GPU memory shortage or driver issue',
     errorProcessCrash: 'Process terminated abnormally (possible memory shortage)',
     errorWhisperFailed: 'Whisper processing failed (file format or audio issue)',
-    errorWhisperNotFound: 'whisper-cli not found',
+    errorWhisperMissing: 'whisper-cli is missing. Restore it from antivirus quarantine or reinstall the app.',
+    errorWhisperBlocked: 'whisper-cli could not run. A required file is blocked or missing (check antivirus).',
     errorDllEntryPointNotFound:
       'DLL entry point not found (0xC0000139). CUDA DLLs are incompatible with your GPU driver. Download whisper-bin-x64.zip from GitHub and place it in the whisper-cpp/cpu/ folder.',
     errorDllCpuAvailable:
@@ -867,7 +869,10 @@ const I18N = {
     errorGpuMemory: 'GPUメモリ不足またはドライバーの問題',
     errorProcessCrash: 'プロセスが異常終了しました（メモリ不足の可能性）',
     errorWhisperFailed: 'Whisper処理に失敗しました（ファイル形式またはオーディオの問題）',
-    errorWhisperNotFound: 'whisper-cliが見つかりません',
+    errorWhisperMissing:
+      'whisper-cliファイルがありません。ウイルス対策の隔離から復元するか、アプリを再インストールしてください。',
+    errorWhisperBlocked:
+      'whisper-cliを実行できません。必要なファイルがブロックされているか存在しません(ウイルス対策を確認)。',
     errorDllEntryPointNotFound:
       'DLLエントリポイントが見つかりません (0xC0000139)。CUDA DLLがGPUドライバーと互換性がありません。GitHubからwhisper-bin-x64.zipをダウンロードし、whisper-cpp/cpu/フォルダーに配置してください。',
     errorDllCpuAvailable:
@@ -1267,7 +1272,8 @@ const I18N = {
     errorGpuMemory: 'GPU 内存不足或驱动问题',
     errorProcessCrash: '进程异常终止（可能内存不足）',
     errorWhisperFailed: 'Whisper 处理失败（文件格式或音频问题）',
-    errorWhisperNotFound: '未找到 whisper-cli',
+    errorWhisperMissing: '缺少 whisper-cli 文件。请从杀毒软件隔离区恢复，或重新安装应用。',
+    errorWhisperBlocked: '无法运行 whisper-cli。所需文件被拦截或缺失(请检查杀毒软件)。',
     errorDllEntryPointNotFound:
       '未找到DLL入口点 (0xC0000139)。CUDA DLL与GPU驱动不兼容。请从GitHub下载whisper-bin-x64.zip，放入whisper-cpp/cpu/文件夹。',
     errorDllCpuAvailable:
@@ -1664,7 +1670,10 @@ const I18N = {
     errorGpuMemory: 'Brak pamięci GPU lub problem ze sterownikiem',
     errorProcessCrash: 'Proces zakończony nieprawidłowo (możliwy brak pamięci)',
     errorWhisperFailed: 'Przetwarzanie Whisper nie powiodło się (format pliku lub problem z dźwiękiem)',
-    errorWhisperNotFound: 'Nie znaleziono whisper-cli',
+    errorWhisperMissing:
+      'Brak pliku whisper-cli. Przywróć go z kwarantanny antywirusa lub zainstaluj aplikację ponownie.',
+    errorWhisperBlocked:
+      'Nie można uruchomić whisper-cli. Wymagany plik jest zablokowany lub go brakuje (sprawdź antywirusa).',
     errorDllEntryPointNotFound:
       'Nie znaleziono punktu wejścia DLL (0xC0000139). Biblioteki CUDA DLL są niezgodne ze sterownikiem GPU. Pobierz whisper-bin-x64.zip z GitHub i umieść w folderze whisper-cpp/cpu/.',
     errorDllCpuAvailable:

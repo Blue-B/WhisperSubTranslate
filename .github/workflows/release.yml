@@ -61,14 +61,23 @@ jobs:
       - name: Sanity-check whisper-cpp download
         shell: pwsh
         run: |
-          $cands = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/cpu/whisper-cli.exe")
-          $found = $cands | Where-Object { Test-Path $_ }
-          if ($found) {
-            Write-Host "whisper-cli.exe present: $found"
-          } else {
-            Write-Error "whisper-cli.exe not found - postinstall download failed; aborting release"
+          # main.js always falls back to whisper-cpp/whisper-cli.exe, so the
+          # top-level binary is mandatory; cpu/ is an optional CUDA fallback.
+          # Each binary needs whisper.dll beside it or spawn() fails as ENOENT.
+          $required = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll")
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) {
+            Write-Error "Missing required whisper.cpp files ($($missing -join ', ')) - postinstall download failed; aborting release"
             Get-ChildItem -Recurse whisper-cpp -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
+          }
+          Write-Host "whisper-cli.exe present with runtime DLL: $($required -join ', ')"
+          if (Test-Path "whisper-cpp/cpu/whisper-cli.exe") {
+            if (-not (Test-Path "whisper-cpp/cpu/whisper.dll")) {
+              Write-Error "whisper-cpp/cpu/whisper-cli.exe ships without cpu/whisper.dll; aborting release"
+              exit 1
+            }
+            Write-Host "CPU fallback build present"
           }
           # postinstall이 실패 흔적(install-failed.txt)을 남겼으면 abort.
           if (Test-Path "whisper-cpp/install-failed.txt") {
@@ -76,6 +85,51 @@ jobs:
             Get-Content "whisper-cpp/install-failed.txt"
             exit 1
           }
+
+      # 파일 존재 검사만으로는 엔진이 실제로 동작하는지 알 수 없다. v2.4.4가
+      # 검증되지 않은 whisper.cpp 빌드를 실어 나간 이유가 이 구멍이다.
+      # tiny 모델로 저장소의 nya.wav를 실제 전사해 SRT가 나오는지 확인한다.
+      - name: Transcribe a real sample with the bundled whisper-cli
+        shell: pwsh
+        run: |
+          $model = "whisper-cpp/ggml-tiny.bin"
+          Invoke-WebRequest -UseBasicParsing -OutFile $model `
+            -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+          $out = "$env:RUNNER_TEMP/release-transcribe-check"
+          # whisper-cli는 진행 상황을 stderr로 쓴다. pwsh 스텝은 ErrorActionPreference가
+          # Stop이라 그대로 두면 정상 실행도 NativeCommandError로 죽는다.
+          $ErrorActionPreference = 'Continue'
+          & "whisper-cpp/whisper-cli.exe" -m $model -f "nya.wav" -osrt -of $out -l en 2>&1 | Out-Null
+          $transcribeExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($transcribeExit -ne 0) {
+            Write-Error "Bundled whisper-cli.exe exited with $transcribeExit on a known-good sample; aborting release"
+            exit 1
+          }
+          if (-not (Test-Path "$out.srt")) {
+            Write-Error "whisper-cli.exe exited 0 but produced no SRT; aborting release"
+            exit 1
+          }
+          $srt = (Get-Content "$out.srt" -Raw).Trim()
+          if (-not ($srt -match '\d+:\d{2}:\d{2},\d{3} --> ')) {
+            Write-Error "SRT has no usable cue timings; aborting release`n$srt"
+            exit 1
+          }
+          Write-Host "Bundled engine transcribed the sample:`n$srt"
+          Remove-Item $model -Force
+
+      # 새 바이너리가 백신(특히 Defender)에 오탐되는지 출시 전에 확인한다.
+      # v2.4.4가 새 whisper.cpp 빌드를 실은 직후 Defender ML 오탐으로 사용자
+      # 추출이 막힌 사례(upstream #3974 동일 계열)의 재발 방지.
+      # VIRUSTOTAL_API_KEY 시크릿이 없으면 검사는 SKIP으로 통과한다.
+      - name: VirusTotal pre-scan of bundled binaries
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        shell: pwsh
+        run: |
+          $targets = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll") + `
+            (Get-ChildItem "whisper-cpp/cpu" -Filter *.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+          node scripts/virustotal-check.js @targets
 
       - name: Lint + smoke test + e2e
         run: npm run check:full

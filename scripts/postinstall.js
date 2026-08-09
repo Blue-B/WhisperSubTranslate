@@ -16,7 +16,13 @@ const CLI_NAME = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli
 const WHISPER_CLI = path.join(WHISPER_CPP_DIR, CLI_NAME);
 const CPU_DIR = path.join(WHISPER_CPP_DIR, 'cpu');
 const CPU_CLI = path.join(CPU_DIR, CLI_NAME);
-const GITHUB_API = 'https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest';
+// whisper.cpp는 버전을 고정해 받는다. releases/latest를 따라가면 업스트림이
+// 새 빌드를 낼 때마다 검증하지 않은 엔진이 그대로 실려 나가고(v2.4.4가
+// 1.9.1 -> 1.9.2로 조용히 갈아끼운 사례), 같은 소스를 빌드해도 결과가
+// 달라져 문제 추적이 불가능해진다. 올릴 때는 이 태그를 바꾸고 릴리스
+// 워크플로우의 실제 자막 추출 검증을 통과시킨 뒤에 올린다.
+const WHISPER_CPP_VERSION = 'v1.9.1';
+const GITHUB_API = `https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/${WHISPER_CPP_VERSION}`;
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit for API response
 const MAX_REDIRECTS = 5;
 
@@ -50,7 +56,7 @@ function hasWhisperRuntimeLibraries(cliPath = WHISPER_CLI, runtimeDir = WHISPER_
  * Fetch latest release info from GitHub API
  * @returns {Promise<Object>} Release data
  */
-async function getLatestRelease() {
+async function fetchPinnedWhisperRelease() {
   return new Promise((resolve, reject) => {
     const options = {
       headers: { 'User-Agent': 'WhisperSubTranslate-Installer' },
@@ -565,9 +571,12 @@ async function main() {
   console.log('  whisper-cpp not found. Downloading...\n');
 
   try {
-    // 1. Fetch latest release info
-    console.log('  Fetching latest release info...');
-    const release = await getLatestRelease();
+    // 1. Fetch the pinned release info
+    console.log(`  Fetching whisper.cpp ${WHISPER_CPP_VERSION} release info...`);
+    const release = await fetchPinnedWhisperRelease();
+    if (release.tag_name !== WHISPER_CPP_VERSION) {
+      throw new Error(`Expected whisper.cpp ${WHISPER_CPP_VERSION} but the API returned ${release.tag_name}`);
+    }
 
     // 2. Find suitable asset based on platform
     let isCudaBuild = false;

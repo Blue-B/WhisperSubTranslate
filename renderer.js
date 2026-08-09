@@ -1952,13 +1952,15 @@ function getLocalizedError(errorMessage) {
   if (errorMessage.includes('Whisper processing failed') || errorMessage.includes('Whisper 처리 실패')) {
     return lang.errorWhisperFailed;
   }
-  if (
-    errorMessage.includes('whisper-cli') &&
-    (errorMessage.includes('not found') ||
-      errorMessage.includes('찾을 수 없음') ||
-      errorMessage.includes('permission denied'))
-  ) {
-    return lang.errorWhisperNotFound;
+  // main.js는 "파일이 없음"과 "있는데 실행이 막힘"을 구분해서 보낸다.
+  // 복구 방법이 서로 다르므로 하나의 문구로 합치지 않는다.
+  if (errorMessage.includes('whisper-cli')) {
+    if (errorMessage.includes('is missing from')) {
+      return lang.errorWhisperMissing;
+    }
+    if (errorMessage.includes('could not be launched') || errorMessage.includes('code 127')) {
+      return lang.errorWhisperBlocked;
+    }
   }
   if (errorMessage.includes('CPU build is available') || errorMessage.includes('CPU 빌드가 설치')) {
     return lang.errorDllCpuAvailable || lang.errorDllEntryPointNotFound;
