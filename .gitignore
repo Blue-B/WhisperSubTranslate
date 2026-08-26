@@ -3,3 +3,8 @@ translation-errors.log
 errors.log
 whisper-cpp/
 log-preview.png
+dist2/
+artifacts/
+temp/
+ffprobe.exe
+RELEASE_BODY.md

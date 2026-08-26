@@ -38,6 +38,7 @@
     },
     "files": [
       "main.js",
+      "verified-downloader.js",
       "disk-space.js",
       "file-safety.js",
       "preload.js",
@@ -69,6 +70,14 @@
       {
         "from": "nya.wav",
         "to": "nya.wav"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
       }
     ],
     "asarUnpack": [

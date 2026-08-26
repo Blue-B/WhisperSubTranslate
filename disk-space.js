@@ -5,8 +5,9 @@ const path = require('path');
 
 const DEFAULT_RESERVE_BYTES = 256 * 1024 * 1024;
 const GIB = 1024 ** 3;
-// Upstream sizes verified for the pinned Sync engine/model URLs. Per-response checks still
-// validate the actual Content-Length so an upstream replacement cannot bypass the guard.
+// Upstream sizes verified for the pinned Sync engine/model URLs. verified-downloader.js never
+// trusts Content-Length: it counts received bytes against the pinned size and verifies the pinned
+// SHA-256, so an upstream replacement is rejected no matter what the server reports.
 const SYNC_ENGINE_ARCHIVE_BYTES = 1_424_256_246;
 const SYNC_MODEL_BYTES = 3_086_912_962;
 const SYNC_SHARED_INSTALL_BYTES = Math.ceil(4.4 * GIB);

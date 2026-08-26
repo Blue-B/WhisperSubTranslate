@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const https = require('https');
 const os = require('os');
@@ -9,7 +10,14 @@ const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
 const EnhancedSubtitleTranslator = require('../translator-enhanced');
 const localTranslator = require('../local-translator');
-const { hasWhisperRuntimeLibraries, downloadFile, updateInstallFailureMarker } = require('./postinstall');
+const {
+  hasWhisperRuntimeLibraries,
+  downloadFile,
+  updateInstallFailureMarker,
+  verifyPinnedDownload,
+  verifyWhisperAsset,
+  WHISPER_ASSET_MANIFEST,
+} = require('./postinstall');
 const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
 const {
   assertDownloadDiskSpace,
@@ -20,6 +28,7 @@ const {
   SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
 } = require('../disk-space');
 const { isCompleteWavFile, writeDownloadStream } = require('../file-safety');
+const { downloadVerifiedFile } = require('../verified-downloader');
 
 async function runPostinstallRedirectDrain() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-postinstall-redirect-'));
@@ -92,8 +101,378 @@ async function runPostinstallRedirectDrain() {
   }
 }
 
+async function runPostinstallDigestGuards() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-digest-guard-'));
+  const file = path.join(dir, 'asset.zip');
+  const content = 'pinned-bytes';
+  const validPin = { size: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') };
+  try {
+    for (const [name, pin] of Object.entries(WHISPER_ASSET_MANIFEST)) {
+      assert.match(name, /\.zip$/, 'pinned manifest keys must be archive asset names');
+      assert.match(pin.sha256, /^[0-9a-f]{64}$/, 'pinned sha256 must be lowercase hex');
+      assert.ok(pin.size > 0, 'pinned size must be positive');
+    }
+
+    fs.writeFileSync(file, content);
+    await verifyPinnedDownload('asset.zip', file, validPin);
+    assert.strictEqual(fs.existsSync(file), true, 'bytes matching the pin must survive verification');
+
+    fs.writeFileSync(file, content);
+    await assert.rejects(
+      verifyPinnedDownload('asset.zip', file, { size: content.length, sha256: 'f'.repeat(64) }),
+      /SHA-256 mismatch/
+    );
+    assert.strictEqual(fs.existsSync(file), false, 'hash-rejected download must delete the partial file');
+
+    fs.writeFileSync(file, content);
+    await assert.rejects(
+      verifyPinnedDownload('asset.zip', file, { ...validPin, size: content.length + 1 }),
+      /size mismatch/
+    );
+    assert.strictEqual(fs.existsSync(file), false, 'size-rejected download must delete the partial file');
+
+    fs.writeFileSync(file, content);
+    await assert.rejects(
+      verifyWhisperAsset({ name: 'not-in-manifest.zip', digest: '' }, file),
+      /no locally pinned whisper.cpp manifest/,
+      'unpinned Windows assets must fail closed'
+    );
+    assert.strictEqual(fs.existsSync(file), false, 'unpinned rejection must delete the downloaded archive');
+
+    fs.writeFileSync(file, content);
+    await assert.rejects(
+      verifyWhisperAsset({ name: 'whisper-bin-x64.zip', digest: `sha256:${'0'.repeat(64)}` }, file),
+      /does not match the pinned SHA-256/,
+      'API digest disagreeing with the local pin must fail closed'
+    );
+    assert.strictEqual(fs.existsSync(file), false, 'digest mismatch must delete the downloaded archive');
+    console.log('[PostinstallDigest] pinned size/sha256 gates reject and delete bad downloads (ok)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function runVulkanBundleManifest() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'postinstall.js'), 'utf8');
+  assert.match(source, /WHISPER_VULKAN_ARCHIVE/);
+  assert.match(source, /VULKAN_ARCHIVE_SHA256/);
+  assert.match(source, /hasVulkanRuntimeLibraries/);
+  console.log('[VulkanBundle] pinned archive hash and local override seam are wired (ok)');
+}
+
+async function runVerifiedDownloader() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-verified-downloader-'));
+  const noopDiskCheck = () => {};
+  const makeResponse = (status, body, headers = {}) => {
+    const data = new PassThrough();
+    process.nextTick(() => data.end(body));
+    return { status, headers, data };
+  };
+  const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  const runDownload = (options) =>
+    downloadVerifiedFile({
+      assertDownloadDiskSpace: noopDiskCheck,
+      activeDownloads: options.activeDownloads,
+      axios: options.axios,
+      ...options,
+    });
+
+  try {
+    const exact = Buffer.from('exact-without-content-length');
+    const exactPath = path.join(dir, 'exact.bin');
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async () => makeResponse(200, exact),
+      url: 'https://example.test/exact',
+      partialPath: exactPath,
+      label: 'exact',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.deepStrictEqual(fs.readFileSync(exactPath), exact, 'missing Content-Length must still verify exact bytes');
+
+    const resumed = Buffer.from('resume-ok');
+    const resumedPath = path.join(dir, 'resumed.bin');
+    fs.writeFileSync(resumedPath, resumed.subarray(0, 3));
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async (config) => {
+        assert.strictEqual(config.headers.Range, 'bytes=3-', 'resume must send the current offset');
+        return makeResponse(206, resumed.subarray(3), {
+          'content-range': `bytes 3-${resumed.length - 1}/${resumed.length}`,
+        });
+      },
+      url: 'https://example.test/resume',
+      partialPath: resumedPath,
+      label: 'resume',
+      expectedSize: resumed.length,
+      sha256: sha256(resumed),
+    });
+    assert.deepStrictEqual(fs.readFileSync(resumedPath), resumed, '206 response must append to the partial');
+
+    const restart = Buffer.from('restart-once');
+    const restartPath = path.join(dir, 'restart.bin');
+    fs.writeFileSync(restartPath, restart.subarray(0, 4));
+    let restartRequests = 0;
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async (config) => {
+        restartRequests++;
+        if (restartRequests === 1) assert.strictEqual(config.headers.Range, 'bytes=4-');
+        else assert.strictEqual(config.headers, undefined, 'full restart must drop Range');
+        return makeResponse(200, restart);
+      },
+      url: 'https://example.test/range-ignored',
+      partialPath: restartPath,
+      label: 'range-ignored',
+      expectedSize: restart.length,
+      sha256: sha256(restart),
+    });
+    assert.strictEqual(restartRequests, 2, 'Range-ignoring endpoint gets one full restart, not an infinite loop');
+
+    const hashPath = path.join(dir, 'hash-fail.bin');
+    await assert.rejects(
+      runDownload({
+        activeDownloads: new Set(),
+        axios: async () => makeResponse(200, exact),
+        url: 'https://example.test/hash-fail',
+        partialPath: hashPath,
+        label: 'hash-fail',
+        expectedSize: exact.length,
+        sha256: '0'.repeat(64),
+      }),
+      /SHA-256 verification failed/
+    );
+    assert.strictEqual(fs.existsSync(hashPath), false, 'hash failure must not install the failed file');
+
+    const mirror = Buffer.from('mirror-success');
+    const mirrorPath = path.join(dir, 'mirror.bin');
+    const mirrorUrls = [];
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async (config) => {
+        mirrorUrls.push(config.url);
+        return config.url.includes('hf-mirror.com')
+          ? makeResponse(200, mirror)
+          : makeResponse(503, Buffer.from('busy'));
+      },
+      url: 'https://huggingface.co/example/model.bin',
+      partialPath: mirrorPath,
+      label: 'mirror',
+      expectedSize: mirror.length,
+      sha256: sha256(mirror),
+    });
+    // 공식 endpoint에 먼저 재시도 기회를 주고, 그래도 안 되면 미러로 넘어간다.
+    assert.ok(mirrorUrls.length >= 2, 'mirror fallback must be attempted');
+    assert.ok(
+      mirrorUrls.slice(0, -1).every((u) => u.startsWith('https://huggingface.co/')),
+      'the official endpoint must be retried before falling back'
+    );
+    assert.strictEqual(
+      mirrorUrls[mirrorUrls.length - 1],
+      'https://hf-mirror.com/example/model.bin',
+      'the mirror is only used after the official endpoint keeps failing'
+    );
+
+    // 이미 다 받아둔 partial이 남은 경우: 재요청 없이 그대로 성공해야 한다.
+    // 전에는 Range가 파일 끝을 가리켜 416으로 영영 막혔다.
+    const donePath = path.join(dir, 'already-complete.bin');
+    fs.writeFileSync(donePath, exact);
+    let doneRequests = 0;
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async () => {
+        doneRequests++;
+        return makeResponse(200, exact);
+      },
+      url: 'https://example.test/already-complete',
+      partialPath: donePath,
+      label: 'already-complete',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.strictEqual(doneRequests, 0, 'a verified complete partial must not be re-downloaded');
+
+    // 크기만 같고 내용이 다른 partial은 버리고 다시 받아야 한다.
+    const staleDone = path.join(dir, 'stale-complete.bin');
+    fs.writeFileSync(staleDone, Buffer.alloc(exact.length, 0x41));
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async () => makeResponse(200, exact),
+      url: 'https://example.test/stale-complete',
+      partialPath: staleDone,
+      label: 'stale-complete',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.deepStrictEqual(fs.readFileSync(staleDone), exact, 'a complete but wrong partial must be refetched');
+
+    // 416은 partial을 버리고 처음부터 받으라는 신호다(전에는 즉시 실패).
+    const poisoned = path.join(dir, 'poisoned.bin');
+    fs.writeFileSync(poisoned, Buffer.from('xx'));
+    let poisonCalls = 0;
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async () => (++poisonCalls === 1 ? makeResponse(416, Buffer.alloc(0)) : makeResponse(200, exact)),
+      url: 'https://example.test/poisoned',
+      partialPath: poisoned,
+      label: 'poisoned',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.deepStrictEqual(fs.readFileSync(poisoned), exact, '416 must reset the partial and restart');
+
+    // 완성된 partial 재사용 중에 취소하면 성공으로 묵지 말아야 한다.
+    const cancelDuringHash = path.join(dir, 'cancel-during-hash.bin');
+    fs.writeFileSync(cancelDuringHash, exact);
+    let hashCancelled = false;
+    await assert.rejects(
+      runDownload({
+        activeDownloads: new Set(),
+        axios: async () => makeResponse(200, exact),
+        isCancelled: () => {
+          // 첫 호출(진입 가드)은 false, 해시 직후 호출부터 true.
+          const was = hashCancelled;
+          hashCancelled = true;
+          return was;
+        },
+        url: 'https://example.test/cancel-during-hash',
+        partialPath: cancelDuringHash,
+        label: 'cancel-during-hash',
+        expectedSize: exact.length,
+        sha256: sha256(exact),
+      }),
+      /cancelled/
+    );
+
+    // 미지 길이 Content-Range(bytes a-b/*)는 정상 응답이다. 하드 실패시키면 안 된다.
+    const starRange = path.join(dir, 'star-range.bin');
+    fs.writeFileSync(starRange, resumed.subarray(0, 3));
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async () => makeResponse(206, resumed.subarray(3), { 'content-range': 'bytes 3-8/*' }),
+      url: 'https://example.test/star-range',
+      partialPath: starRange,
+      label: 'star-range',
+      expectedSize: resumed.length,
+      sha256: sha256(resumed),
+    });
+    assert.deepStrictEqual(fs.readFileSync(starRange), resumed, 'unknown-length Content-Range must still resume');
+
+    // 전체 길이가 다른 206은 끝까지 받기 전에 멈춰야 한다.
+    const revPath = path.join(dir, 'revision.bin');
+    fs.writeFileSync(revPath, exact.subarray(0, 4));
+    await assert.rejects(
+      runDownload({
+        activeDownloads: new Set(),
+        axios: async () =>
+          makeResponse(206, exact.subarray(4), { 'content-range': `bytes 4-${exact.length - 1}/999999` }),
+        url: 'https://example.test/revision',
+        partialPath: revPath,
+        label: 'revision',
+        expectedSize: exact.length,
+        sha256: sha256(exact),
+      }),
+      /different total size/
+    );
+
+    // expectedSize가 없으면 조용히 진행하지 말고 거부해야 한다.
+    await assert.rejects(
+      runDownload({
+        activeDownloads: new Set(),
+        axios: async () => makeResponse(200, exact),
+        url: 'https://example.test/no-size',
+        partialPath: path.join(dir, 'no-size.bin'),
+        label: 'no-size',
+      }),
+      /expectedSize is required/
+    );
+
+    // 중국난 사내망에서 흔한 DNS 차단은 재시도 대상이 아니다. 그래도 미러는 가야 한다.
+    const blockedPath = path.join(dir, 'blocked.bin');
+    const blockedUrls = [];
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async (config) => {
+        blockedUrls.push(config.url);
+        if (config.url.includes('hf-mirror.com')) return makeResponse(200, exact);
+        const err = new Error('getaddrinfo ENOTFOUND huggingface.co');
+        err.code = 'ENOTFOUND';
+        throw err;
+      },
+      url: 'https://huggingface.co/example/blocked.bin',
+      partialPath: blockedPath,
+      label: 'blocked',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.deepStrictEqual(
+      blockedUrls,
+      ['https://huggingface.co/example/blocked.bin', 'https://hf-mirror.com/example/blocked.bin'],
+      'a blocked endpoint must switch to the mirror instead of failing outright'
+    );
+
+    // 지역 차단 프록시가 403을 돌려줘도 마찬가지다.
+    const forbiddenPath = path.join(dir, 'forbidden.bin');
+    const forbiddenUrls = [];
+    await runDownload({
+      activeDownloads: new Set(),
+      axios: async (config) => {
+        forbiddenUrls.push(config.url);
+        return config.url.includes('hf-mirror.com')
+          ? makeResponse(200, exact)
+          : makeResponse(403, Buffer.from('blocked'));
+      },
+      url: 'https://huggingface.co/example/forbidden.bin',
+      partialPath: forbiddenPath,
+      label: 'forbidden',
+      expectedSize: exact.length,
+      sha256: sha256(exact),
+    });
+    assert.strictEqual(forbiddenUrls.length, 2, 'HTTP 403 must jump straight to the mirror');
+
+    const cancelPath = path.join(dir, 'cancel.bin');
+    const cancelSet = new Set();
+    const stalled = new PassThrough();
+    const cancelPromise = runDownload({
+      activeDownloads: cancelSet,
+      axios: async () => {
+        process.nextTick(() => stalled.write(Buffer.from('partial')));
+        return { status: 200, headers: {}, data: stalled };
+      },
+      url: 'https://example.test/cancel',
+      partialPath: cancelPath,
+      label: 'cancel',
+      expectedSize: 20,
+      sha256: sha256(Buffer.from('never-completes')),
+    });
+    await new Promise((resolve, reject) => {
+      const deadline = Date.now() + 2000;
+      const wait = () => {
+        const tracker = [...cancelSet][0];
+        if (tracker?.writer && fs.existsSync(cancelPath) && fs.statSync(cancelPath).size >= 7) return resolve();
+        if (Date.now() > deadline) return reject(new Error('cancel test did not produce a partial file'));
+        setTimeout(wait, 5);
+      };
+      wait();
+    });
+    for (const tracker of cancelSet) {
+      tracker.cancelled = true;
+      tracker.controller?.abort();
+      tracker.writer?.destroy();
+    }
+    await assert.rejects(cancelPromise, /cancelled/);
+    assert.strictEqual(fs.readFileSync(cancelPath, 'utf8'), 'partial', 'cancel must preserve the partial');
+    assert.strictEqual(cancelSet.size, 0, 'cancelled tracker must be removed only after pipeline settles');
+    console.log('[VerifiedDownloader] exact, resume, restart, hash, mirror, and cancellation flows pass (ok)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function runSyncPreflightOrdering() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const downloader = fs.readFileSync(path.join(__dirname, '..', 'verified-downloader.js'), 'utf8');
   const preflight = source.indexOf('assertSyncInstallDiskSpace(');
   const firstDownload = source.indexOf('await ensureFasterWhisperEngine((pct)');
   assert.ok(
@@ -105,14 +484,88 @@ function runSyncPreflightOrdering() {
     /engineInstalled = !!\(existingExePath && fs\.existsSync\(existingExePath\)\)/,
     'Sync preflight must verify that the resolved engine executable actually exists'
   );
-  assert.match(
-    source,
-    /catch \(error\) \{\s+try \{\s+fs\.rmSync\(destPath, \{ force: true \}\)/,
-    'failed Sync downloads must remove partial files'
-  );
+  assert.match(downloader, /fs\.statSync\(partialPath\)/, 'Sync downloads must resume from preserved partial files');
+  assert.match(downloader, /Range: `bytes=\$\{offset\}-`/, 'Sync downloads must request HTTP Range when resuming');
   assert.match(source, /Preserving stale sibling WAV/, 'stale sibling WAVs must stay in place');
   assert.doesNotMatch(source, /backupStaleWav/, 'conversion must not create accumulating stale WAV backups');
   console.log('[SyncDiskPreflight] install peak, partial cleanup, and stale WAV preservation are wired (ok)');
+}
+
+function runWhisperDeviceRouting() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const start = source.indexOf('function resolveDevice(');
+  const end = source.indexOf('// Enhanced memory/GPU cleanup', start);
+  assert.ok(start >= 0 && end > start, 'resolveDevice source must be present');
+  const makeResolver = (cuda, vulkan) =>
+    // pi-lens-ignore: ast-grep:no-global-eval-js
+    new Function('isCudaAvailable', 'isVulkanAvailable', `${source.slice(start, end)}\nreturn resolveDevice;`)(
+      () => cuda,
+      () => vulkan
+    );
+
+  assert.strictEqual(makeResolver(true, true)('auto', '/app'), 'cuda');
+  assert.strictEqual(makeResolver(false, true)('auto', '/app'), 'vulkan');
+  assert.strictEqual(makeResolver(false, true)('cuda', '/app'), 'vulkan');
+  assert.strictEqual(makeResolver(false, false)('auto', '/app'), 'cpu');
+  assert.strictEqual(makeResolver(true, true)('cpu', '/app'), 'cpu');
+  assert.strictEqual(makeResolver(true, true)('unknown', '/app'), 'cpu');
+  assert.match(source, /useVulkanBuild = chosenDevice === 'vulkan'/, 'Vulkan must select its bundled CLI directory');
+  assert.match(
+    source,
+    /function extractSingleFileOnce\(/,
+    'GPU fallback must preserve a single-attempt extraction seam'
+  );
+  assert.match(source, /candidate === 'cpu' \|\| !isWhisperFallbackEligible/, 'CPU and input failures must not retry');
+  assert.match(source, /isSyncEngineModel\(model\)/, 'Sync extraction must remain outside the Vulkan fallback wrapper');
+  console.log('[WhisperDevice] CUDA → Vulkan → CPU routing and fallback seams are wired (ok)');
+}
+
+function runWhisperFallbackEligibility() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const start = source.indexOf('function isWhisperFallbackEligible(');
+  const end = source.indexOf('\n}', start);
+  assert.ok(start >= 0 && end > start, 'isWhisperFallbackEligible source must be present');
+  const makeEligible = (isUserStopped) =>
+    // pi-lens-ignore: ast-grep:no-global-eval-js
+    new Function('isUserStopped', `${source.slice(start, end)}\n}\nreturn isWhisperFallbackEligible;`)(isUserStopped);
+
+  assert.strictEqual(
+    makeEligible(false)({ message: 'spawn failed' }),
+    true,
+    'ordinary spawn errors must stay eligible for device fallback'
+  );
+  assert.strictEqual(makeEligible(false)({ inputError: true }), false, 'input errors must not retry other devices');
+  assert.strictEqual(
+    makeEligible(false)({ timedOut: true }),
+    false,
+    'timeouts must not re-run the whole video on every device'
+  );
+  assert.strictEqual(
+    makeEligible(true)({ message: 'spawn failed' }),
+    false,
+    'user stop must win over fallback eligibility'
+  );
+  for (const message of [
+    'stopped by user',
+    'operation cancelled',
+    'model not found: ggml-tiny.bin',
+    'not enough disk space',
+  ]) {
+    assert.strictEqual(makeEligible(false)({ message }), false, `fallback must stop on: ${message}`);
+  }
+  console.log('[WhisperFallback] timeout/input/user-stop/disk guards keep device fallback from looping (ok)');
+}
+
+function runPackageNoticesConfig() {
+  const root = path.join(__dirname, '..');
+  // pi-lens-ignore: unchecked-throwing-call-js
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const shipped = JSON.stringify(pkg.build.extraResources || []);
+  for (const notice of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
+    assert.ok(fs.existsSync(path.join(root, notice)), `${notice} must exist at the repo root`);
+    assert.ok(shipped.includes(notice), `electron-builder build.extraResources must ship ${notice} into resources/`);
+  }
+  console.log('[PackageNotices] LICENSE and THIRD_PARTY_NOTICES.md ship into resources/ (ok)');
 }
 
 function runRendererSourceLangPayload() {
@@ -1340,6 +1793,9 @@ async function runProviderModelFiltering() {
 
 async function run() {
   runRendererSourceLangPayload();
+  runWhisperDeviceRouting();
+  runVulkanBundleManifest();
+  await runVerifiedDownloader();
   runSyncPreflightOrdering();
   await runPostinstallRedirectDrain();
   const translator = new EnhancedSubtitleTranslator();
@@ -1413,6 +1869,9 @@ async function run() {
   await runParallelRetryDedupe();
   await runThrottleTiers();
   await runQuotaMessagePrecision();
+  runPackageNoticesConfig();
+  runWhisperFallbackEligibility();
+  await runPostinstallDigestGuards();
 
   console.log('Smoke tests passed.');
 }

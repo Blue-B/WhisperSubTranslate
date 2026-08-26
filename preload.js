@@ -55,6 +55,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('open-folder', folderPath);
   },
 
+  // 모델 저장 폴더 열기 (경로는 main이 결정한다)
+  openModelsFolder: () => {
+    return ipcRenderer.invoke('open-models-folder');
+  },
+
   // 히스토리 포렌식-안전 삭제 (localStorage 키 + LevelDB 디스크 공간 회수)
   secureClearHistory: () => {
     return ipcRenderer.invoke('secure-clear-history');

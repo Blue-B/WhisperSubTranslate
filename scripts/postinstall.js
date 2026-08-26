@@ -7,6 +7,7 @@
 
 const https = require('https');
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { execFileSync, execSync, spawnSync } = require('child_process');
 
@@ -25,13 +26,125 @@ const WHISPER_CPP_VERSION = 'v1.9.1';
 const GITHUB_API = `https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/${WHISPER_CPP_VERSION}`;
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit for API response
 const MAX_REDIRECTS = 5;
+const VULKAN_ARCHIVE_URL =
+  'https://github.com/Blue-B/WhisperSubTranslate/releases/download/whisper-vulkan-v1.9.1/whisper-vulkan-v1.9.1-win-x64.zip';
+const VULKAN_ARCHIVE_SHA256 = '9524205a8f74c69a327c2a4316d1cae2857c507b344a563bf55f0e45c7093f20';
+const VULKAN_ARCHIVE_NAME = 'whisper-vulkan-v1.9.1-win-x64.zip';
 
 // Silero VAD model (ggml) — lets whisper process only speech segments, which
 // removes the repeated/hallucinated lines whisper emits on silent/music parts
 // (the #1 quality complaint). ~0.9 MB. Optional: extraction still works without it.
 const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 const VAD_MODEL_PATH = path.join(WHISPER_CPP_DIR, VAD_MODEL_NAME);
-const VAD_MODEL_URL = 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin';
+// HF main 브랜치 대신 고정 revision을 받는다(main.js GGML_MODEL_REVISION과 같은 이유).
+// 크기와 SHA-256도 함께 고정해 네트워크 절단·변조를 걸러낸다(verifyPinnedDownload).
+const VAD_MODEL_REVISION = '9ffd54a1e1ee413ddf265af9913beaf518d1639b';
+const VAD_MODEL_URL = `https://huggingface.co/ggml-org/whisper-vad/resolve/${VAD_MODEL_REVISION}/${VAD_MODEL_NAME}`;
+const VAD_MODEL_SIZE = 885098;
+const VAD_MODEL_SHA256 = '29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf';
+
+// whisper.cpp v1.9.1 Windows 아카이브는 자산 이름별로 크기와 SHA-256을 로컬 고정한다.
+// GitHub API 응답의 asset.digest는 응답 자체가 변조되면 함께 믿게 되므로,
+// API digest ↔ 로컬 고정값 ↔ 받은 바이트를 3중으로 대조한다(verifyWhisperAsset).
+// 값 출처: https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/v1.9.1
+const WHISPER_ASSET_MANIFEST = Object.freeze({
+  'whisper-cublas-12.4.0-bin-x64.zip': Object.freeze({
+    size: 677887125,
+    sha256: '106a2030eff8998e4ef320fe72e263a78449e9040386ee27c41ea80b001b601b',
+  }),
+  'whisper-cublas-11.8.0-bin-x64.zip': Object.freeze({
+    size: 278557654,
+    sha256: 'aecdce0e4d4bb758a7c72a31f3f9f19a7b6d861405fd2da743cd86398633c963',
+  }),
+  'whisper-bin-x64.zip': Object.freeze({
+    size: 7982101,
+    sha256: '7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539',
+  }),
+});
+
+// 스트리밍 해시. cublas 12.4 아카이브(~677MB)도 통째로 readFileSync하지 않는다.
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    fs.createReadStream(filePath)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')))
+      .on('error', reject);
+  });
+}
+
+/**
+ * Compare a downloaded file against a locally pinned {size, sha256} entry and
+ * delete the file on any mismatch so rejected bytes are never left behind to
+ * look like an installed payload.
+ */
+async function verifyPinnedDownload(label, filePath, expected) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`${label}: downloaded file is missing`);
+  }
+  const size = fs.statSync(filePath).size;
+  if (size !== expected.size) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (_e) {
+      /* ignore */
+    }
+    throw new Error(`${label}: size mismatch (expected ${expected.size}, got ${size})`);
+  }
+  const actualSha256 = await sha256File(filePath);
+  if (actualSha256 !== expected.sha256) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (_e) {
+      /* ignore */
+    }
+    throw new Error(`${label}: SHA-256 mismatch (expected ${expected.sha256}, got ${actualSha256})`);
+  }
+}
+
+/**
+ * Windows whisper.cpp archives are pinned by asset name in WHISPER_ASSET_MANIFEST.
+ * The API-reported asset.digest must agree with the local pin before the bytes
+ * are even looked at; then the bytes themselves must match size + SHA-256.
+ */
+async function verifyWhisperAsset(asset, filePath) {
+  // 조기 실패(manifest 누락·API digest 불일치)에도 이미 받은 아카이브를 지운다.
+  const discard = () => {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (_e) {
+      /* ignore */
+    }
+  };
+  const expected = WHISPER_ASSET_MANIFEST[asset.name];
+  if (!expected) {
+    discard();
+    throw new Error(`${asset.name}: no locally pinned whisper.cpp manifest entry for this asset`);
+  }
+  if ((asset.digest || '') !== `sha256:${expected.sha256}`) {
+    discard();
+    throw new Error(`${asset.name}: GitHub API digest (${asset.digest || 'none'}) does not match the pinned SHA-256`);
+  }
+  await verifyPinnedDownload(asset.name, filePath, expected);
+}
+
+function findFileRecursive(dir, filename) {
+  if (!fs.existsSync(dir)) return null;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isFile() && entry.name.toLowerCase() === filename.toLowerCase()) return full;
+    if (entry.isDirectory()) {
+      const found = findFileRecursive(full, filename);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function hasVulkanRuntimeLibraries() {
+  const dir = path.join(WHISPER_CPP_DIR, 'vulkan');
+  return hasWhisperRuntimeLibraries(path.join(dir, CLI_NAME), dir) && fs.existsSync(path.join(dir, 'ggml-vulkan.dll'));
+}
 
 function hasWhisperRuntimeLibraries(cliPath = WHISPER_CLI, runtimeDir = WHISPER_CPP_DIR) {
   if (!fs.existsSync(cliPath)) return false;
@@ -231,6 +344,90 @@ async function downloadFile(url, destPath) {
  * @param {string} archivePath - Path to archive file
  * @param {string} destDir - Destination directory
  */
+async function ensureVulkanBundle() {
+  if (process.platform !== 'win32') return true;
+  if (!process.env.WHISPER_VULKAN_ARCHIVE && hasVulkanRuntimeLibraries()) {
+    clearInstallFailure('vulkan');
+    return true;
+  }
+
+  const root = path.join(__dirname, '..');
+  const archivePath = path.join(root, `whisper-vulkan-temp-${process.pid}.zip`);
+  const extractDir = path.join(root, `whisper-vulkan-extract-${process.pid}`);
+  const stagingDir = path.join(root, `whisper-vulkan-staging-${process.pid}`);
+  const vulkanDir = path.join(WHISPER_CPP_DIR, 'vulkan');
+  const backupDir = `${vulkanDir}.previous`;
+  let hadBackup = false;
+  let installedNewBundle = false;
+  try {
+    const override = process.env.WHISPER_VULKAN_ARCHIVE;
+    if (override) {
+      const filePath = override.startsWith('file://') ? decodeURIComponent(new URL(override).pathname) : override;
+      const localPath = filePath.startsWith('/') && /^[A-Za-z]:/.test(filePath.slice(1)) ? filePath.slice(1) : filePath;
+      if (!path.isAbsolute(localPath) || !fs.existsSync(localPath)) {
+        throw new Error(`Vulkan archive override does not exist: ${localPath}`);
+      }
+      fs.copyFileSync(localPath, archivePath);
+      console.log(`  [vulkan] Using local archive override: ${localPath}`);
+    } else {
+      console.log(`  [vulkan] Downloading ${VULKAN_ARCHIVE_NAME}...`);
+      await downloadFile(VULKAN_ARCHIVE_URL, archivePath);
+    }
+    // 23MB 아카이브도 스트리밍 해시(await sha256File)로 검증한다.
+    if ((await sha256File(archivePath)) !== VULKAN_ARCHIVE_SHA256) {
+      throw new Error('Vulkan archive SHA-256 verification failed');
+    }
+
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+    fs.mkdirSync(extractDir, { recursive: true });
+    fs.mkdirSync(stagingDir, { recursive: true });
+    await extractZip(archivePath, extractDir);
+
+    const cli = findFileRecursive(extractDir, CLI_NAME);
+    const vulkanDll = findFileRecursive(extractDir, 'ggml-vulkan.dll');
+    if (!cli || !vulkanDll) throw new Error('Vulkan archive is missing whisper-cli.exe or ggml-vulkan.dll');
+    const sourceDir = path.dirname(cli);
+    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      fs.copyFileSync(path.join(sourceDir, entry.name), path.join(stagingDir, entry.name));
+    }
+    if (!fs.existsSync(path.join(stagingDir, CLI_NAME)) || !fs.existsSync(path.join(stagingDir, 'ggml-vulkan.dll'))) {
+      throw new Error('Vulkan staging directory is incomplete');
+    }
+
+    fs.rmSync(backupDir, { recursive: true, force: true });
+    if (fs.existsSync(vulkanDir)) {
+      fs.renameSync(vulkanDir, backupDir);
+      hadBackup = true;
+    }
+    fs.renameSync(stagingDir, vulkanDir);
+    installedNewBundle = true;
+    if (!hasVulkanRuntimeLibraries()) throw new Error('Vulkan runtime probe failed after installation');
+    fs.rmSync(backupDir, { recursive: true, force: true });
+    hadBackup = false;
+    clearInstallFailure('vulkan');
+    console.log('  [vulkan] Vulkan whisper.cpp bundle installed.');
+    return true;
+  } catch (error) {
+    if (installedNewBundle) fs.rmSync(vulkanDir, { recursive: true, force: true });
+    if (hadBackup && fs.existsSync(backupDir)) {
+      try {
+        fs.renameSync(backupDir, vulkanDir);
+      } catch (restoreError) {
+        console.warn(`  [WARN] Failed to restore previous Vulkan bundle: ${restoreError.message}`);
+      }
+    }
+    markInstallFailure('vulkan', error.message);
+    console.log(`  [WARN] Vulkan bundle unavailable: ${error.message}`);
+    return false;
+  } finally {
+    fs.rmSync(archivePath, { force: true });
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    fs.rmSync(stagingDir, { recursive: true, force: true });
+  }
+}
+
 function extractZip(archivePath, destDir) {
   try {
     if (archivePath.endsWith('.tar.gz') || archivePath.endsWith('.tgz')) {
@@ -322,10 +519,15 @@ async function buildWhisperFromSource(withCuda) {
     }
 
     console.log('\n  [Build] Cloning whisper.cpp from GitHub...');
-    execSync(`git clone --depth 1 https://github.com/ggml-org/whisper.cpp "${buildTempDir}"`, {
-      stdio: 'inherit',
-      timeout: 120000,
-    });
+    // 기본 브랜치 HEAD를 빌드하면 검증 없이 엔진이 조용히 바뀐다. 고정 태그는
+    // 파일 상단 WHISPER_CPP_VERSION 하나로 관리한다.
+    execSync(
+      `git clone --depth 1 --branch ${WHISPER_CPP_VERSION} https://github.com/ggml-org/whisper.cpp "${buildTempDir}"`,
+      {
+        stdio: 'inherit',
+        timeout: 120000,
+      }
+    );
 
     let cmakeArgs = withCuda ? '-DGGML_CUDA=ON' : '';
 
@@ -558,9 +760,9 @@ async function main() {
   if (hasWhisperRuntimeLibraries()) {
     console.log('  whisper-cpp already installed. Skipping.\n');
     clearInstallFailure('whisper');
-    // VAD 모델은 이전 실패로 누락됐을 수 있으니 조기 반환 전에도 항상
-    // 다운로드를 시도한다 (MED-7).
+    // VAD 모델과 Vulkan 번들은 이전 실패로 누락됐을 수 있으니 조기 반환 전에도 확인한다.
     await downloadVadModel();
+    await ensureVulkanBundle();
     return;
   }
 
@@ -674,6 +876,12 @@ async function main() {
     console.log('  Downloading from GitHub...');
     await downloadFile(asset.browser_download_url, zipPath);
 
+    // 실행 파일이 될 Windows 아카이브만 로컬 핀으로 3중 검증한다. 다른 플랫폼
+    // 자산은 아직 핀이 없어 기존 HTTPS+content-length 검사에 맡긴다.
+    if (process.platform === 'win32') {
+      await verifyWhisperAsset(asset, zipPath);
+    }
+
     // 4. Create destination directory
     if (!fs.existsSync(WHISPER_CPP_DIR)) {
       fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
@@ -738,6 +946,7 @@ async function main() {
 
         try {
           await downloadFile(cpuAsset.browser_download_url, cpuZipPath);
+          await verifyWhisperAsset(cpuAsset, cpuZipPath);
 
           if (!fs.existsSync(cpuTempDir)) {
             fs.mkdirSync(cpuTempDir, { recursive: true });
@@ -848,6 +1057,7 @@ async function main() {
   // Silero VAD model (separate from the whisper-cli release). Optional — a
   // failure here must NOT break the install; extraction degrades gracefully.
   await downloadVadModel();
+  await ensureVulkanBundle();
 }
 
 // llama와 whisper 상태를 독립 저장해 한쪽 성공이 다른 쪽 실패를 지우지 않게 한다.
@@ -890,19 +1100,26 @@ function clearInstallFailure(scope) {
  */
 async function downloadVadModel() {
   try {
-    if (fs.existsSync(VAD_MODEL_PATH) && fs.statSync(VAD_MODEL_PATH).size > 100 * 1024) {
-      return; // already present
+    const pinned = { size: VAD_MODEL_SIZE, sha256: VAD_MODEL_SHA256 };
+    // 기존 파일도 고정값으로 검증한다. 유효하면 종료하고, 손상·변조면
+    // verifyPinnedDownload가 이미 지웠으므로 같은 호출에서 바로 재다운로드한다.
+    if (fs.existsSync(VAD_MODEL_PATH)) {
+      try {
+        await verifyPinnedDownload(VAD_MODEL_NAME, VAD_MODEL_PATH, pinned);
+        return; // already present and valid
+      } catch (_e) {
+        console.log(`  [INFO] Existing ${VAD_MODEL_NAME} failed its pinned size/sha256 check; re-downloading...`);
+      }
     }
     if (!fs.existsSync(WHISPER_CPP_DIR)) {
       fs.mkdirSync(WHISPER_CPP_DIR, { recursive: true });
     }
     console.log(`\n  Downloading Silero VAD model (${VAD_MODEL_NAME}, ~0.9 MB)...`);
     await downloadFile(VAD_MODEL_URL, VAD_MODEL_PATH);
-    if (fs.existsSync(VAD_MODEL_PATH) && fs.statSync(VAD_MODEL_PATH).size > 100 * 1024) {
-      console.log('  VAD model installed (speech-only processing enabled).\n');
-    } else {
-      console.log('  [WARN] VAD model download looked incomplete; VAD will be skipped at runtime.\n');
-    }
+    // 고정 크기·해시와 대조. 불일치면 파일이 지워지고 아래 catch에서 우아히
+    // 건너뛴다(VAD 부재는 런타임에서 정상 처리된다).
+    await verifyPinnedDownload(VAD_MODEL_NAME, VAD_MODEL_PATH, pinned);
+    console.log('  VAD model installed (speech-only processing enabled).\n');
   } catch (err) {
     console.log(`  [WARN] Could not download VAD model: ${err.message}`);
     console.log('  Subtitle extraction still works; repetition suppression will be reduced.\n');
@@ -915,4 +1132,14 @@ if (require.main === module) {
   });
 }
 
-module.exports = { hasWhisperRuntimeLibraries, downloadFile, updateInstallFailureMarker };
+module.exports = {
+  hasWhisperRuntimeLibraries,
+  hasVulkanRuntimeLibraries,
+  ensureVulkanBundle,
+  downloadFile,
+  sha256File,
+  verifyPinnedDownload,
+  verifyWhisperAsset,
+  WHISPER_ASSET_MANIFEST,
+  updateInstallFailureMarker,
+};

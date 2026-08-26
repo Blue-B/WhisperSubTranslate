@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
 const { assertDownloadDiskSpace, assertSyncInstallDiskSpace } = require('./disk-space');
-const { isCompleteWavFile, writeDownloadStream } = require('./file-safety');
+const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
+const { isCompleteWavFile } = require('./file-safety');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
 try {
   app.setName('WhisperSubTranslate');
@@ -40,7 +41,7 @@ try {
 } catch (error) {
   console.log('[Auto-Updater] electron-updater not available:', error.message);
 }
-const { spawn, execFile, execSync, execFileSync } = require('child_process');
+const { spawn, spawnSync, execFile, execSync, execFileSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator-enhanced');
@@ -125,13 +126,80 @@ let translator = new EnhancedSubtitleTranslator();
 let childProcessIds = new Set();
 
 // ===== Download cancellation state (모델 다운로드 취소 관리) =====
-let activeDownloads = new Set(); // { controller, writer, destPath }
+let activeDownloads = new Set(); // { controller, writer, destPath, cancelled }
 let downloadsCancelled = false;
+
+// Hugging Face LFS metadata is pinned so chunked/proxy responses can be checked
+// without trusting Content-Length. `large` is the upstream large-v1 filename.
+//
+// 리비전은 `main`이 아니라 커밋으로 고정한다. `main`은 움직이는 포인터라
+// 업스트림이 파일을 한 글자만 고쳐도 아래 SHA-256이 전부 틀려져, 앱을 업데이트하지
+// 않은 사용자에게 어느 날 갑자기 다운로드가 전부 실패한다.
+const GGML_MODEL_REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1';
+const SYNC_MODEL_REVISION = 'f0fe81560cb8b68660e564f55dd99207059c092e';
+const GGML_MODEL_MANIFEST = Object.freeze({
+  tiny: {
+    file: 'ggml-tiny.bin',
+    size: 77691713,
+    sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21',
+  },
+  base: {
+    file: 'ggml-base.bin',
+    size: 147951465,
+    sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
+  },
+  small: {
+    file: 'ggml-small.bin',
+    size: 487601967,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b',
+  },
+  medium: {
+    file: 'ggml-medium.bin',
+    size: 1533763059,
+    sha256: '6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208',
+  },
+  large: {
+    file: 'ggml-large-v1.bin',
+    size: 3094623691,
+    sha256: '7d99f41a10525d0206bddadd86760181fa920438b6b33237e3118ff6c83bb53d',
+  },
+  'large-v2': {
+    file: 'ggml-large-v2.bin',
+    size: 3094623691,
+    sha256: '9a423fe4d40c82774b6af34115b8b935f34152246eb19e80e376071d3f999487',
+  },
+  'large-v3': {
+    file: 'ggml-large-v3.bin',
+    size: 3095033483,
+    sha256: '64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2',
+  },
+  'large-v3-turbo': {
+    file: 'ggml-large-v3-turbo.bin',
+    size: 1624555275,
+    sha256: '1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69',
+  },
+});
+
+const SYNC_FILE_MANIFEST = Object.freeze({
+  'config.json': { size: 2796, sha256: 'd86b7a7664a12559d644aa210a32ce9a7e03913e794b7ea4fb7182de69e273a7' },
+  'tokenizer.json': { size: 2203239, sha256: 'fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab' },
+  'vocabulary.txt': { size: 459861, sha256: '34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913' },
+  'model.bin': { size: 3086912962, sha256: 'bf2a9746382e1aa7ffff6b3a0d137ed9edbd9670c3b87e5d35f5e85e70d0333a' },
+});
+
+function hasExpectedSize(filePath, manifest) {
+  try {
+    return fs.statSync(filePath).size === manifest.size;
+  } catch (_e) {
+    return false;
+  }
+}
 
 function cancelActiveDownloads() {
   const hadActive = activeDownloads.size > 0;
   downloadsCancelled = true;
   for (const d of activeDownloads) {
+    d.cancelled = true;
     try {
       d.controller?.abort();
     } catch (error) {
@@ -143,7 +211,8 @@ function cancelActiveDownloads() {
       console.log('[Download] Writer destroy failed:', error.message);
     }
   }
-  activeDownloads.clear();
+  // Trackers remove themselves after their pipeline settles. Do not clear the Set here:
+  // an old tracker must retain cancelled=true even if a new job resets the global flag.
   // Only surface the cancellation message when there was actually an active download.
   if (hadActive) {
     try {
@@ -165,6 +234,7 @@ const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 // CUDA 12 requires compute capability >= 5.0 (Maxwell+)
 const CUDA12_MIN_COMPUTE = 5.0;
 let _gpuInfoCache = null;
+let _vulkanAvailableCache = null;
 let _gpuWarningShown = false;
 // 반복/환각 억제(-mc 0) 적용 여부. extract-subtitles IPC에서 매 추출 전 설정됨.
 // 기본 true: 반복 도배(JAV/음악/무음 구간) 피해가 큰 쪽을 기본값으로. 일반 연속발화 일관성이
@@ -218,6 +288,35 @@ function getGpuInfo() {
 function isCudaAvailable() {
   const info = getGpuInfo();
   return info.available && info.cudaCompatible;
+}
+
+function isVulkanAvailable(basePath) {
+  if (_vulkanAvailableCache !== null) return _vulkanAvailableCache;
+  const vulkanDir = path.join(basePath, 'whisper-cpp', 'vulkan');
+  const cliPath = path.join(vulkanDir, WHISPER_CLI_NAME);
+  if (!fs.existsSync(cliPath)) return (_vulkanAvailableCache = false);
+
+  try {
+    // 포터블 ZIP 첫 실행에서 백신이 미서명 exe를 실시간 스캔하면 probe가 쉽게 느려진다.
+    // 한 번의 타임아웃을 "Vulkan 없음"으로 캐시해 버리면 재시작 전까지 GPU 가속이
+    // 영영 꺼진다. 그래서 여유를 두고, 확답을 못 받았을 때는 캐시하지 않는다.
+    const probe = spawnSync(cliPath, ['--version'], {
+      cwd: vulkanDir,
+      encoding: 'utf8',
+      timeout: 20000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (probe.status === null || probe.error) {
+      console.warn(`[Vulkan] probe inconclusive (${probe.error?.code || 'timeout'}); will retry later`);
+      return false;
+    }
+    const output = `${probe.stdout || ''}\n${probe.stderr || ''}`;
+    _vulkanAvailableCache = probe.status === 0 && /ggml_vulkan: Found [1-9]\d* Vulkan devices/.test(output);
+  } catch {
+    return false;
+  }
+  return _vulkanAvailableCache;
 }
 
 // ===== CUDA Library Path Helper (Linux LD_LIBRARY_PATH) =====
@@ -295,18 +394,13 @@ function getWhisperSpawnEnv(device, whisperDir) {
   return { ...process.env, [envVar]: newPath };
 }
 
-function resolveDevice(requestedDevice) {
+function resolveDevice(requestedDevice, basePath) {
   const req = (requestedDevice || 'auto').toLowerCase();
-  if (req === 'auto') {
-    return isCudaAvailable() ? 'cuda' : 'cpu';
-  }
-  if (req === 'cuda' && !isCudaAvailable()) {
-    return 'cpu';
-  }
-  if (req !== 'cuda' && req !== 'cpu') {
-    return 'cpu';
-  }
-  return req;
+  if (req === 'cpu') return 'cpu';
+  if (req === 'vulkan') return isVulkanAvailable(basePath) ? 'vulkan' : 'cpu';
+  if (req !== 'auto' && req !== 'cuda' && req !== 'gpu') return 'cpu';
+  if (isCudaAvailable()) return 'cuda';
+  return isVulkanAvailable(basePath) ? 'vulkan' : 'cpu';
 }
 
 // Enhanced memory/GPU cleanup across files (파일 간 메모리/GPU 정리)
@@ -765,7 +859,7 @@ function srtOutputPathFor(filePath) {
 // 수정. 실제 미디어 길이 × 실시간 계수(GPU 4x, CPU 12x)로 스케일링하고
 // 하한 30분 / 상한 6시간으로 클램프한다. 길이를 모르면(0) 하한만 적용.
 function extractionTimeoutMs(durationSec, device) {
-  const factor = device === 'cuda' ? 4 : 12;
+  const factor = device === 'cpu' ? 12 : 4;
   const scaled = durationSec > 0 ? durationSec * factor * 1000 : 0;
   return Math.min(6 * 60 * 60 * 1000, Math.max(30 * 60 * 1000, scaled));
 }
@@ -1611,8 +1705,8 @@ function getWhisperCppSettings(device) {
     baseSettings.push('-mc', '0');
   }
 
-  if (device === 'cuda') {
-    console.log('[Performance] GPU settings applied');
+  if (device === 'cuda' || device === 'vulkan') {
+    console.log(`[Performance] ${device.toUpperCase()} GPU settings applied`);
     return [
       ...baseSettings,
       '-t',
@@ -1666,6 +1760,13 @@ function stripProgressLines(text) {
 // (일반 88MB 빌드는 CUDA 라이브러리가 없어 CPU 전용이었음.) 압축은 .7z(약 1.42GB).
 const FASTER_WHISPER_ZIP_URL =
   'https://github.com/Purfview/whisper-standalone-win/releases/download/Faster-Whisper-XXL/Faster-Whisper-XXL_r245.4_windows.7z';
+// 이 아카이브는 풀려서 그대로 spawn되는 실행 파일이다. 데이터 모델과 달리 업스트림
+// tag가 버전 고정이 아니라 같은 URL의 asset이 교체될 수 있으므로 해시를 고정한다.
+// 업스트림이 digest를 게시하지 않아 아래 값은 직접 받아 측정했다 (2026-08-24):
+//   curl -sL "$FASTER_WHISPER_ZIP_URL" -o xxl.7z && sha256sum xxl.7z && stat -c %s xxl.7z
+// asset이 교체되면 검증이 실패하므로 그때는 이 두 상수를 다시 측정해 갱신해야 한다.
+const FASTER_WHISPER_ZIP_SIZE = 1424256246;
+const FASTER_WHISPER_ZIP_SHA256 = '237dee23939cdabfc96ef859fc5e584b842c3a5557e0d2ca744e1f87c14c5844';
 const FASTER_WHISPER_EXE_NAME = 'faster-whisper-xxl.exe';
 const FASTER_WHISPER_MODEL = 'large-v2';
 // 모델 드롭다운에서 이 id를 고르면 whisper.cpp 대신 Faster-Whisper-XXL 싱크 엔진을 쓴다.
@@ -1820,67 +1921,26 @@ function execFileAsync(file, args, options = {}) {
   });
 }
 
-async function downloadFileWithProgress(url, destPath, label, onPercent) {
-  if (downloadsCancelled) throw new Error('cancelled');
-  const controller = new AbortController();
-  const tracker = { controller, writer: null, destPath };
-  activeDownloads.add(tracker);
-  try {
-    const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
-    const total = Number(response.headers['content-length'] || 0);
-    // 무결성 검증: content-length가 없거나 받은 양과 다르면 실패 처리한다.
-    // 잘린 1.42GB 7z가 '설치됨'으로 남으면 sync 엔진이 조용히 깨진다 (P1).
-    if (!total || total <= 0) {
-      response.data.destroy();
-      throw new Error(`${label}: server did not provide content-length, refusing partial download`);
-    }
-    try {
-      assertDownloadDiskSpace(destPath, total);
-    } catch (error) {
-      response.data.destroy();
-      throw error;
-    }
-    let received = 0;
-    let lastPct = -1;
-    let lastSentAt = 0;
-    response.data.on('data', (chunk) => {
-      received += chunk.length;
-      if (total > 0) {
-        const pct = Math.floor((received / total) * 100);
-        const now = Date.now();
-        if (pct !== lastPct && (pct === 100 || pct - lastPct >= 5 || now - lastSentAt >= 1500)) {
-          lastPct = pct;
-          lastSentAt = now;
-          try {
-            mainWindow?.webContents?.send('output-update', `${label} ${pct}%\n`);
-          } catch (_e) {}
-          if (typeof onPercent === 'function') {
-            try {
-              onPercent(pct, received, total);
-            } catch (_e) {}
-          }
-        }
-      }
-    });
-    try {
-      await writeDownloadStream(response.data, destPath, (writer) => {
-        tracker.writer = writer;
-      });
-    } catch (error) {
-      if (downloadsCancelled) throw new Error('cancelled');
-      throw error;
-    }
-    if (received !== total) {
-      throw new Error(`${label}: download incomplete (got ${received} of ${total} bytes)`);
-    }
-  } catch (error) {
-    try {
-      fs.rmSync(destPath, { force: true });
-    } catch (_e) {}
-    throw error;
-  } finally {
-    activeDownloads.delete(tracker);
-  }
+async function downloadFileWithProgress(url, destPath, label, onPercent, manifest) {
+  const expectedSize = manifest?.size;
+  const sha256 = manifest?.sha256;
+  return downloadVerifiedFile({
+    axios,
+    assertDownloadDiskSpace,
+    activeDownloads,
+    isCancelled: () => downloadsCancelled,
+    url,
+    partialPath: destPath,
+    label,
+    expectedSize,
+    sha256,
+    onProgress: (percent, received, total) => {
+      try {
+        mainWindow?.webContents?.send('output-update', `${label} ${percent}%\n`);
+      } catch (_e) {}
+      onPercent?.(percent, received, total);
+    },
+  });
 }
 
 async function ensureFasterWhisperEngine(onPercent) {
@@ -1899,17 +1959,33 @@ async function ensureFasterWhisperEngine(onPercent) {
   downloadsCancelled = false;
   const archivePath = path.join(rootDir, 'Faster-Whisper-XXL_windows.7z');
   const partialPath = archivePath + '.partial';
+  // 지난번 압축 해제가 실패해 검증된 아카이브가 남아 있으면 다시 받지 않는다.
+  // 예전에는 무조건 지워서 디스크가 빠들한 사용자가 시도할 때마다 1.4GB를 재다운로드했다.
+  let archiveReady = false;
   try {
-    if (fs.existsSync(partialPath)) fs.unlinkSync(partialPath);
-    if (fs.existsSync(archivePath)) fs.unlinkSync(archivePath);
-  } catch (_e) {}
+    if (fs.existsSync(archivePath)) {
+      archiveReady =
+        fs.statSync(archivePath).size === FASTER_WHISPER_ZIP_SIZE &&
+        (await sha256File(archivePath)) === FASTER_WHISPER_ZIP_SHA256;
+      if (!archiveReady) fs.unlinkSync(archivePath);
+    }
+  } catch (_e) {
+    archiveReady = false;
+  }
 
-  mainWindow?.webContents?.send(
-    'output-update',
-    'Preparing GPU sync engine (Faster-Whisper-XXL, ~1.4GB). This first-time download can take a while...\n'
-  );
-  await downloadFileWithProgress(FASTER_WHISPER_ZIP_URL, partialPath, 'Sync engine (XXL)', onPercent);
-  fs.renameSync(partialPath, archivePath);
+  if (archiveReady) {
+    mainWindow?.webContents?.send('output-update', 'Reusing the verified sync engine archive already downloaded.\n');
+  } else {
+    mainWindow?.webContents?.send(
+      'output-update',
+      'Preparing GPU sync engine (Faster-Whisper-XXL, ~1.4GB). This first-time download can take a while...\n'
+    );
+    await downloadFileWithProgress(FASTER_WHISPER_ZIP_URL, partialPath, 'Sync engine (XXL)', onPercent, {
+      size: FASTER_WHISPER_ZIP_SIZE,
+      sha256: FASTER_WHISPER_ZIP_SHA256,
+    });
+    fs.renameSync(partialPath, archivePath);
+  }
 
   mainWindow?.webContents?.send('output-update', 'Extracting GPU sync engine (this can take a minute)...\n');
   // 압축 파일과 추출 결과가 동시에 존재한다. 실제 압축률을 알 수 없으므로
@@ -1932,23 +2008,31 @@ async function ensureFasterWhisperEngine(onPercent) {
 async function ensureFasterWhisperModel(emit = () => {}) {
   const modelDir = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`);
   fs.mkdirSync(modelDir, { recursive: true });
-  const baseUrl = `https://huggingface.co/Systran/faster-whisper-${FASTER_WHISPER_MODEL}/resolve/main`;
+  const baseUrl = `https://huggingface.co/Systran/faster-whisper-${FASTER_WHISPER_MODEL}/resolve/${SYNC_MODEL_REVISION}`;
   const smallFiles = ['config.json', 'tokenizer.json', 'vocabulary.txt'];
 
   for (let i = 0; i < smallFiles.length; i++) {
-    const dest = path.join(modelDir, smallFiles[i]);
-    if (!fs.existsSync(dest)) {
+    const name = smallFiles[i];
+    const manifest = SYNC_FILE_MANIFEST[name];
+    const dest = path.join(modelDir, name);
+    if (!hasExpectedSize(dest, manifest)) {
       const partial = dest + '.partial';
-      await downloadFileWithProgress(`${baseUrl}/${smallFiles[i]}`, partial, smallFiles[i]);
+      await downloadFileWithProgress(`${baseUrl}/${name}`, partial, name, null, manifest);
       fs.renameSync(partial, dest);
     }
     emit(35 + i);
   }
 
   const binDest = path.join(modelDir, 'model.bin');
-  if (!fs.existsSync(binDest)) {
+  if (!hasExpectedSize(binDest, SYNC_FILE_MANIFEST['model.bin'])) {
     const partial = binDest + '.partial';
-    await downloadFileWithProgress(`${baseUrl}/model.bin`, partial, 'model.bin', (pct) => emit(38 + pct * 0.62));
+    await downloadFileWithProgress(
+      `${baseUrl}/model.bin`,
+      partial,
+      'model.bin',
+      (pct) => emit(38 + pct * 0.62),
+      SYNC_FILE_MANIFEST['model.bin']
+    );
     fs.renameSync(partial, binDest);
   }
   emit(100);
@@ -2060,25 +2144,30 @@ async function runFasterWhisperExtraction(
   const outputSrt = path.join(outputDir, `${path.basename(wavPath, path.extname(wavPath))}.srt`);
   const finalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
 
-  // 장치 선택은 일반 모델과 일관되게 따른다.
-  // CPU = CPU만, GPU = GPU만, 자동 = GPU 먼저 시도 후 CPU 폴백.
+  // Sync는 CUDA/CPU 전용이다. CPU 요청은 CPU만 사용하고, CUDA가 없으면
+  // 자동/GPU 요청도 CPU로 전환한다. CUDA가 있으면 GPU 실패 시 CPU로 폴백한다.
   // Compute Capability < 7.0(Volta 이하) GPU는 float16을 지원하지 않으므로(이슈 #45),
   // GPU 시도가 실패하면 float32로 한 번 더 시도한 뒤 CPU로 폴백한다.
   const requestedDevice = String(device || 'auto').toLowerCase();
   const gpuCompute = lite ? 'int8_float16' : 'float16';
+  const cudaAvailable = isCudaAvailable();
+  // GPU 명시는 GPU만, 자동은 GPU 뒤에 CPU까지. CUDA가 아예 없으면 둘 다 CPU로 간다.
+  const gpuAttempts = [
+    { useGpu: true, computeType: gpuCompute },
+    { useGpu: true, computeType: 'float32' }, // CC<7.0 재시도
+  ];
   const attempts =
-    requestedDevice === 'cpu'
+    requestedDevice === 'cpu' || !cudaAvailable
       ? [{ useGpu: false, computeType: 'int8' }]
       : requestedDevice === 'cuda' || requestedDevice === 'gpu'
-        ? [
-            { useGpu: true, computeType: gpuCompute },
-            { useGpu: true, computeType: 'float32' }, // CC<7.0 재시도
-          ]
-        : [
-            { useGpu: true, computeType: gpuCompute },
-            { useGpu: true, computeType: 'float32' }, // CC<7.0 재시도
-            { useGpu: false, computeType: 'int8' },
-          ];
+        ? gpuAttempts
+        : [...gpuAttempts, { useGpu: false, computeType: 'int8' }];
+  if (requestedDevice !== 'cpu' && !cudaAvailable) {
+    mainWindow?.webContents?.send(
+      'output-update',
+      'Sync engine supports CUDA or CPU only. CUDA is unavailable, so this run will use CPU. Vulkan is not used by Sync.\n'
+    );
+  }
 
   const runOnce = (attempt) =>
     new Promise((resolve, reject) => {
@@ -2089,6 +2178,7 @@ async function runFasterWhisperExtraction(
         `Starting sync repair extraction (${modeLabel}, ${useGpu ? 'GPU ' + attempt.computeType : 'CPU'}). This mode is for subtitles that do not sync with normal models; English is usually faster with large-v3-turbo. First run may download the model (~3GB).\n`
       );
       console.log(`[FasterWhisper] (${useGpu ? 'GPU' : 'CPU'}) ${exePath} ${args.join(' ')}`);
+      if (isUserStopped) return reject(new Error('Stopped by user'));
 
       const proc = spawn(exePath, args, {
         windowsHide: true,
@@ -2146,14 +2236,20 @@ async function runFasterWhisperExtraction(
 
       proc.on('close', (code) => {
         clearTimeout(timeout);
-        currentProcess = null;
+        if (currentProcess === proc) currentProcess = null;
         if (isUserStopped) return reject(new Error('Stopped by user'));
-        if (fs.existsSync(outputSrt)) return resolve();
+        // 파일이 아예 없는 건 무음이 아니라 실패다. 아래 copyFileSync가 ENOENT로 죽고
+        // 남은 재시도(float32, CPU)도 소모되지 않으므로 존재할 때만 빈 출력을 허용한다.
+        const outputExists = fs.existsSync(outputSrt);
+        const outputEmpty = outputExists && !fs.readFileSync(outputSrt, 'utf8').trim();
+        const outputComplete = outputExists && isCompleteSrt(outputSrt);
+        if (code === 0 && (outputEmpty || outputComplete)) return resolve();
+        if (outputComplete) return resolve();
         reject(new Error(`Faster-Whisper failed (exit ${code})`));
       });
       proc.on('error', (err) => {
         clearTimeout(timeout);
-        currentProcess = null;
+        if (currentProcess === proc) currentProcess = null;
         reject(err);
       });
     });
@@ -2218,7 +2314,7 @@ function getWhisperVadArgs() {
 
 // Single File Subtitle Extraction (Promise-based) - whisper.cpp 버전
 // srtOutputOverride: 배치 basename 충돌 시 강제할 출력 SRT 경로 (null이면 기본 규칙)
-function extractSingleFile(filePath, model, language, device, srtOutputOverride = null) {
+function extractSingleFileOnce(filePath, model, language, device, srtOutputOverride = null) {
   return new Promise((resolve, reject) => {
     const start = async () => {
       console.log(`[START] Processing: ${path.basename(filePath)}`);
@@ -2229,39 +2325,34 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
       // Force cleanup before each file
       await forceMemoryCleanup(device, true);
 
-      // 실제 사용할 장치 결정
-      const chosenDevice = resolveDevice(device);
+      const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+
+      // 실제 사용할 장치 결정: CUDA 우선, 없으면 동봉 Vulkan, 마지막으로 CPU.
+      const chosenDevice = resolveDevice(device, basePath);
       const gpuInfo = getGpuInfo();
 
-      if (device === 'auto') {
-        const line = `Auto device: using ${chosenDevice.toUpperCase()}`;
-        console.log(line);
-        mainWindow.webContents.send('output-update', `${line}\n`);
-      } else if (device === 'cuda' && chosenDevice !== 'cuda') {
-        const line = 'GPU not available, falling back to CPU';
-        console.log(line);
-        mainWindow.webContents.send('output-update', `${line}\n`);
-      }
+      // 사용자에게 보이는 장치 안내는 extractSingleFile 래퍼가 담당한다.
+      // 여기에는 이미 해석된 구체 장치만 들어온다.
+      console.log(`[Whisper] device=${chosenDevice}`);
 
-      // GPU가 있지만 CUDA 12 미지원인 경우 안내 (배치에서 1회만)
-      if (gpuInfo.available && !gpuInfo.cudaCompatible && !_gpuWarningShown) {
+      // CUDA와 Vulkan 모두 쓸 수 없을 때만 구형 NVIDIA 경고를 표시한다.
+      if (gpuInfo.available && !gpuInfo.cudaCompatible && chosenDevice === 'cpu' && !_gpuWarningShown) {
         _gpuWarningShown = true;
         const warn = `[GPU] ${gpuInfo.name} (Compute ${gpuInfo.computeCap}) - CUDA 12 requires Compute 5.0+. Auto CPU mode.`;
         console.log(warn);
         mainWindow.webContents.send('output-update', warn + '\n');
       }
 
-      const basePath = app.isPackaged ? process.resourcesPath : __dirname;
-
       // whisper.cpp 실행 파일 경로
       const whisperDir = path.join(basePath, 'whisper-cpp');
       const cpuDir = path.join(whisperDir, 'cpu');
+      const vulkanDir = path.join(whisperDir, 'vulkan');
       const cpuExePath = path.join(cpuDir, WHISPER_CLI_NAME);
       // CPU 모드일 때 CPU 전용 바이너리 우선 사용 (CUDA DLL 의존성 없음).
       // 단, whisper-cli.exe만 있고 의존 DLL(whisper.dll, ggml*.dll)이 빠진
       // 깨진 설치(issue #26)에서는 spawn이 ENOENT로 실패하므로, Windows에서는
       // 의존 DLL 존재 여부도 확인해 폴백 처리한다.
-      let cpuBuildUsable = chosenDevice !== 'cuda' && fs.existsSync(cpuExePath);
+      let cpuBuildUsable = chosenDevice === 'cpu' && fs.existsSync(cpuExePath);
       if (cpuBuildUsable && process.platform === 'win32') {
         const cpuRuntimeProbe = path.join(cpuDir, 'whisper.dll');
         if (!fs.existsSync(cpuRuntimeProbe)) {
@@ -2273,11 +2364,19 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
         }
       }
       const useCpuBuild = cpuBuildUsable;
-      const exePath = useCpuBuild ? cpuExePath : path.join(whisperDir, WHISPER_CLI_NAME);
-      const exeCwd = useCpuBuild ? cpuDir : whisperDir;
-      console.log(
-        `[Whisper] Using: ${useCpuBuild ? 'cpu/' + WHISPER_CLI_NAME + ' (CPU build)' : WHISPER_CLI_NAME + ' (CUDA build)'} (${chosenDevice})`
-      );
+      const useVulkanBuild = chosenDevice === 'vulkan';
+      const exePath = useVulkanBuild
+        ? path.join(vulkanDir, WHISPER_CLI_NAME)
+        : useCpuBuild
+          ? cpuExePath
+          : path.join(whisperDir, WHISPER_CLI_NAME);
+      const exeCwd = useVulkanBuild ? vulkanDir : useCpuBuild ? cpuDir : whisperDir;
+      const buildLabel = useVulkanBuild
+        ? `vulkan/${WHISPER_CLI_NAME} (Vulkan build)`
+        : useCpuBuild
+          ? `cpu/${WHISPER_CLI_NAME} (CPU build)`
+          : `${WHISPER_CLI_NAME} (CUDA build)`;
+      console.log(`[Whisper] Using: ${buildLabel} (${chosenDevice})`);
 
       // WAV 변환 (whisper.cpp는 WAV만 지원)
       let wavPath,
@@ -2526,6 +2625,9 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
       if (chosenDevice === 'cuda') {
         mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CUDA, flash-attn)...\n');
         console.log('[GPU Config] whisper.cpp with CUDA acceleration');
+      } else if (chosenDevice === 'vulkan') {
+        mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (Vulkan)...\n');
+        console.log('[GPU Config] whisper.cpp with Vulkan acceleration');
       } else {
         mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CPU mode)...\n');
       }
@@ -2545,9 +2647,11 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
       // Process timeout handling — 실제 미디어 길이 × 실시간 계수로 스케일링
       // (기존 30분 고정은 CPU+large 모델이 걸린 작업을 무조건 죽이던 문제가 있었다)
       const processTimeoutMs = extractionTimeoutMs(mediaDurationSec, chosenDevice);
+      let timedOut = false;
       const processTimeout = setTimeout(() => {
         if (currentProcess && !currentProcess.killed) {
           console.log(`[TIMEOUT] ${path.basename(filePath)} - exceeded ${Math.round(processTimeoutMs / 60000)} min`);
+          timedOut = true;
           currentProcess.kill('SIGKILL');
         }
       }, processTimeoutMs);
@@ -2581,7 +2685,7 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
         await forceMemoryCleanup(chosenDevice, true);
 
         // SRT 존재 확인 (wav 정리 전에 해야 끝시각 정리에 wav를 쓸 수 있다)
-        const srtExists = fs.existsSync(srtPath);
+        let srtExists = fs.existsSync(srtPath);
 
         // 토큰 끝시각 기반 끝 트림(VAD 늘어짐). 텍스트 위치는 안 바꿈. wav 삭제 전.
         if (srtExists) {
@@ -2603,19 +2707,29 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
           return reject(new Error('Stopped by user'));
         }
 
-        // 부분/손상 출력을 성공으로 오인하지 않게: code 0 이거나,
-        // SRT가 존재하면서 파싱 가능한 큐 1개 이상 + 끝 개행으로 온전할 때만 성공.
+        // code 0 + 비어 있지 않은 불완전 SRT는 손상 출력이다. SRT가 없거나
+        // 완전히 비어 있는 경우만 무음 정상 종료로 허용한다.
         const srtComplete = srtExists && isCompleteSrt(srtPath);
-        if (code === 0 || srtComplete) {
-          // F1: code 0 + 빈/미생성 SRT는 무음 영상의 정상 케이스일 수 있으므로
-          // 성공은 유지하되, 조용히 넘어가지 않게 명시적으로 경고를 남긴다.
-          // (code !== 0 이면서 SRT가 온전하지 않으면 아래 else에서 실패 처리)
-          if (code === 0 && srtExists && !srtComplete) {
-            console.warn(`[WARN] ${path.basename(filePath)} exited 0 but SRT is empty/incomplete (silent video?)`);
+        const srtEmpty = !srtExists || !fs.readFileSync(srtPath, 'utf8').trim();
+        if ((code === 0 && (srtEmpty || srtComplete)) || srtComplete) {
+          if (code === 0 && srtEmpty) {
+            console.warn(`[WARN] ${path.basename(filePath)} exited 0 with empty SRT (silent video?)`);
             mainWindow.webContents.send(
               'output-update',
               `[Warning] Subtitle file is empty (no speech detected in this video/audio).\n`
             );
+            if (!srtExists) {
+              // exit 0 성공 계약상 반환 경로에는 실제 빈 SRT 파일이 존재해야 한다
+              // (분할 경로와 동일 거동). 없으면 번역 단계가 그 경로로 ENOENT 낸다.
+              try {
+                fs.writeFileSync(srtPath, '', 'utf8');
+                srtExists = true;
+              } catch (srtErr) {
+                // 빈 SRT조차 못 만들 자리의 경로를 성공으로 돌려보내지 않는다.
+                // WAV 정리는 이 핸들러 앞쪽에서 이미 끝난 상태다.
+                return reject(new Error(`Could not create empty SRT placeholder: ${srtErr.message}`));
+              }
+            }
           }
           let finalSrtPath = srtPath;
 
@@ -2709,7 +2823,12 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
               new Error(errorMessage)
             );
           } catch (_) {}
-          reject(new Error(errorMessage));
+          const failure = new Error(errorMessage);
+          if (code === 1) failure.inputError = true;
+          // 문구를 바꾸면 renderer의 현지화 매핑을 빗나가 영어 원문이 노출된다.
+          // 플래그로 실어 장치 폴백 판정에만 쓴다.
+          if (timedOut) failure.timedOut = true;
+          reject(failure);
         }
       });
 
@@ -2795,6 +2914,61 @@ function extractSingleFile(filePath, model, language, device, srtOutputOverride 
     };
     start().catch(reject);
   });
+}
+
+function isWhisperFallbackEligible(error) {
+  if (isUserStopped) return false;
+  const message = String(error?.message || error).toLowerCase();
+  // 타임아웃까지 폴백하면 긴 영상이 장치마다 타임아웃을 다시 돌아 몇 시간이 더 든다.
+  return (
+    !error?.inputError &&
+    !error?.timedOut &&
+    !/stopped|cancelled|canceled|model not found|unknown model|download|not enough disk/.test(message)
+  );
+}
+
+async function extractSingleFile(filePath, model, language, device, srtOutputOverride = null) {
+  const requested = String(device || 'auto').toLowerCase();
+  if (requested === 'cpu' || isSyncEngineModel(model)) {
+    return extractSingleFileOnce(filePath, model, language, device, srtOutputOverride);
+  }
+
+  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  const selected = resolveDevice(device, basePath);
+  // 사용할 수 없는 Vulkan은 후보에서 미리 빼둔다. 그래야 폴백 안내 문구가
+  // 실제로 다음에 실행될 장치와 일치한다.
+  const candidates = (
+    selected === 'cuda' ? ['cuda', 'vulkan', 'cpu'] : selected === 'vulkan' ? ['vulkan', 'cpu'] : ['cpu']
+  ).filter((candidate) => candidate !== 'vulkan' || isVulkanAvailable(basePath));
+
+  // 장치 안내는 여기서 한 번 보낸다. extractSingleFileOnce에는 이미 해석된 구체
+  // 장치가 넘어가므로 그쪽의 auto/cuda 비교 분기는 절대 참이 되지 않는다.
+  const first = candidates[0];
+  if (requested === 'auto') {
+    mainWindow?.webContents?.send('output-update', `Auto device: using ${first.toUpperCase()}\n`);
+  } else if (first === 'vulkan') {
+    mainWindow?.webContents?.send('output-update', 'CUDA unavailable, using Vulkan GPU\n');
+  } else if (first === 'cpu') {
+    mainWindow?.webContents?.send('output-update', 'GPU not available, falling back to CPU\n');
+  }
+
+  let lastError = null;
+  for (let index = 0; index < candidates.length; index++) {
+    const candidate = candidates[index];
+    try {
+      return await extractSingleFileOnce(filePath, model, language, candidate, srtOutputOverride);
+    } catch (error) {
+      lastError = error;
+      if (candidate === 'cpu' || !isWhisperFallbackEligible(error)) throw error;
+      const next = candidates[index + 1];
+      if (!next) throw error;
+      const message = `${candidate.toUpperCase()} run failed, falling back to ${next.toUpperCase()}...\n`;
+      console.warn(`[Whisper] ${message.trim()} ${error.message}`);
+      mainWindow?.webContents?.send('output-update', message);
+      await forceMemoryCleanup(candidate, true);
+    }
+  }
+  throw lastError || new Error('Whisper extraction failed');
 }
 
 // IPC Handler for processing one or more files sequentially
@@ -2980,13 +3154,25 @@ function isSafeLocalPath(candidate) {
 
 function openWithXdg(targetPath) {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    // 데스크톱 핸들러가 없는 환경(헤드리스, 최소 설치 WM)에서는 xdg-open이
+    // 종료도 오류도 없이 매달릴 수 있다. 그러면 이 Promise가 영영 안 끝나서
+    // 호출한 IPC가 "reply was never sent"로 멈췄다. 상한을 둔다.
+    const timer = setTimeout(() => done(false), 5000);
+    timer.unref?.();
     try {
       const proc = spawn('xdg-open', [targetPath], { stdio: 'ignore', detached: true });
-      proc.on('error', () => resolve(false));
-      proc.on('exit', (code) => resolve(code === 0));
+      proc.on('error', () => done(false));
+      proc.on('exit', (code) => done(code === 0));
       proc.unref();
     } catch (_err) {
-      resolve(false);
+      done(false);
     }
   });
 }
@@ -3084,25 +3270,56 @@ ipcMain.handle('open-file-location', async (_event, filePath) => {
   }
 });
 
+// shell.openPath는 데스크톱 포털이 없는 리눅스에서 resolve되지 않고 매달릴 수 있다.
+// 그대로 두면 호출한 IPC가 응답을 못 보내 버튼이 먹힌다(reply was never sent).
+// 상한을 두고 리눅스에서는 xdg-open으로 폴백한다.
+async function openPathSafely(targetPath) {
+  const { shell } = require('electron');
+  const TIMED_OUT = Symbol('timeout');
+  let timer = null;
+  let result;
+  try {
+    result = await Promise.race([
+      shell.openPath(targetPath),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), 3000);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  // openPath는 성공 시 빈 문자열, 실패 시 오류 문자열을 돌려준다.
+  if (result !== TIMED_OUT && !result) return true;
+  if (process.platform === 'linux') return openWithXdg(targetPath);
+  return false;
+}
+
 // 폴더 열기
 ipcMain.handle('open-folder', async (_event, folderPath) => {
-  const { shell } = require('electron');
   if (!isSafeLocalPath(folderPath)) {
     return { success: false, error: 'invalid path' };
   }
   try {
-    const result = await shell.openPath(folderPath);
-    if (result && process.platform === 'linux') {
-      await openWithXdg(folderPath);
-    }
-    return { success: true };
+    const opened = await openPathSafely(folderPath);
+    return opened ? { success: true } : { success: false, error: 'no handler available' };
   } catch (error) {
     console.error('Failed to open folder:', error);
-    if (process.platform === 'linux') {
-      const ok = await openWithXdg(folderPath);
-      if (ok) return { success: true };
-    }
     return { success: false, error: error.message };
+  }
+});
+
+// 모델 폴더 열기: 렌더러가 경로를 몰라도 되게 main에서 직접 해석한다.
+// getGgmlModelsDir()를 그대로 쓰므로 비ASCII 계정 폴백 경로까지 자동으로 따른다.
+ipcMain.handle('open-models-folder', async () => {
+  const dir = getGgmlModelsDir();
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const opened = await openPathSafely(dir);
+    return opened ? { success: true, path: dir } : { success: false, error: 'no handler available', path: dir };
+  } catch (error) {
+    console.error('Failed to open models folder:', error);
+    return { success: false, error: error.message, path: dir };
   }
 });
 
@@ -3216,9 +3433,13 @@ ipcMain.handle('check-model-status', async () => {
     if (fs.existsSync(modelsPath)) {
       for (const modelName of modelNames) {
         const modelFile = path.join(modelsPath, `ggml-${modelName}.bin`);
-        // 0바이트/손상 잔재는 설치된 모델로 인정하지 않는다
-        if (fs.existsSync(modelFile) && fs.statSync(modelFile).size > 0) {
-          availableModels[modelName] = true;
+        // 비어 있지 않은 파일은 설치된 것으로 인정한다. 사용자가 직접 넣었거나 미러에서
+        // 받은 모델도 그대로 쓰게 하기 위함이다(이슈 #72). 잘린 다운로드는 이제 .partial이
+        // 검증을 통과해야만 최종 이름이 되므로 여기서 엄격할 필요가 없다.
+        try {
+          if (fs.existsSync(modelFile) && fs.statSync(modelFile).size > 0) availableModels[modelName] = true;
+        } catch (_e) {
+          /* ignore */
         }
       }
     }
@@ -3231,7 +3452,7 @@ ipcMain.handle('check-model-status', async () => {
   try {
     const fwExe = getFasterWhisperExePath();
     const fwModel = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin');
-    if (fwExe && fs.existsSync(fwExe) && fs.existsSync(fwModel)) {
+    if (fwExe && fs.existsSync(fwModel) && hasExpectedSize(fwModel, SYNC_FILE_MANIFEST['model.bin'])) {
       availableModels[SYNC_ENGINE_MODEL_ID] = true;
       availableModels[SYNC_ENGINE_LITE_MODEL_ID] = true;
     }
@@ -3246,18 +3467,15 @@ ipcMain.handle('check-model-status', async () => {
 ipcMain.handle('download-model', async (_event, modelName) => {
   try {
     // GGML 모델 파일 URL 매핑
-    const modelUrlMap = {
-      tiny: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
-      base: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-      small: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-      medium: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
-      large: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large.bin',
-      'large-v2': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin',
-      'large-v3': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin',
-      'large-v3-turbo': 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
-    };
+    const manifest = GGML_MODEL_MANIFEST[modelName];
+    const modelUrlMap = Object.fromEntries(
+      Object.entries(GGML_MODEL_MANIFEST).map(([name, entry]) => [
+        name,
+        `https://huggingface.co/ggerganov/whisper.cpp/resolve/${GGML_MODEL_REVISION}/${entry.file}`,
+      ])
+    );
     const modelUrl = modelUrlMap[modelName];
-    if (!modelUrl) {
+    if (!modelUrl || !manifest) {
       throw new Error(`Unknown model: ${modelName}`);
     }
 
@@ -3270,86 +3488,21 @@ ipcMain.handle('download-model', async (_event, modelName) => {
 
     downloadsCancelled = false;
 
-    const downloadFile = async (url, destPath) => {
-      if (downloadsCancelled) throw new Error('cancelled');
-      const controller = new AbortController();
-      const tracker = { controller, writer: null, destPath };
-      activeDownloads.add(tracker);
+    const emitProgress = (percent, received, total) => {
       try {
-        const response = await axios({ url, method: 'GET', responseType: 'stream', signal: controller.signal });
-        const total = Number(response.headers['content-length'] || 0);
-        if (!total || total <= 0) {
-          response.data.destroy();
-          throw new Error('Server did not provide model size');
-        }
-        try {
-          assertDownloadDiskSpace(destPath, total);
-        } catch (error) {
-          response.data.destroy();
-          throw error;
-        }
-        let received = 0;
-        let lastPct = -1;
-        let lastSentAt = 0;
-        const emit = (pct) => {
-          try {
-            mainWindow.webContents.send('output-update', `${path.basename(destPath)} ${pct}%\n`);
-            mainWindow.webContents.send('whisper-model-progress', {
-              modelName,
-              percent: pct,
-              received,
-              total,
-            });
-          } catch (_e) {
-            console.log('[Download] Failed to send progress update:', _e.message);
-          }
-        };
-        response.data.on('data', (chunk) => {
-          received += chunk.length;
-          if (total > 0) {
-            const pct = Math.floor((received / total) * 100);
-            const now = Date.now();
-            if (pct !== lastPct && (pct === 100 || pct - lastPct >= 5 || now - lastSentAt >= 1000)) {
-              emit(pct);
-              lastPct = pct;
-              lastSentAt = now;
-            }
-          }
+        mainWindow?.webContents?.send('output-update', `${path.basename(partialPath)} ${percent}%\n`);
+        mainWindow?.webContents?.send('whisper-model-progress', {
+          modelName,
+          percent,
+          received,
+          total,
         });
-        response.data.on('end', () => {
-          if (total > 0 && lastPct < 100) emit(100);
-          activeDownloads.delete(tracker);
-        });
-        response.data.on('error', () => {
-          activeDownloads.delete(tracker);
-        });
-        try {
-          await writeDownloadStream(response.data, destPath, (writer) => {
-            tracker.writer = writer;
-          });
-        } catch (error) {
-          if (downloadsCancelled) throw new Error('cancelled');
-          throw error;
-        }
-        if (total > 0 && received !== total) {
-          try {
-            fs.rmSync(destPath, { force: true });
-          } catch (_e) {}
-          throw new Error(`Download incomplete (${received}/${total} bytes)`);
-        }
-      } finally {
-        activeDownloads.delete(tracker);
-      }
+      } catch (_e) {}
     };
 
     // 파일 존재하면 스킵 — 단 0바이트/손상 잔재(이전 실패)가 있으면 재다운로드
     if (fs.existsSync(targetPath)) {
-      let existingOk = false;
-      try {
-        existingOk = fs.statSync(targetPath).size > 0;
-      } catch (e) {
-        console.log('[Download] Failed to check existing model:', e.message);
-      }
+      const existingOk = hasExpectedSize(targetPath, manifest);
       if (existingOk) {
         try {
           mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
@@ -3358,10 +3511,10 @@ ipcMain.handle('download-model', async (_event, modelName) => {
         }
         return { success: true };
       }
-      // 0바이트 잔재 제거 후 아래에서 재다운로드
+      // 크기가 다르면 받긴 받되, 기존 파일을 먼저 지우지는 않는다. 다운로드가 실패하면
+      // 잘 쓰던 모델까지 잃기 때문이다. 검증을 통과한 새 파일이 아래 rename으로 덮어쓴다.
       try {
-        fs.unlinkSync(targetPath);
-        mainWindow.webContents.send('output-update', `Model file was empty, re-downloading: ${modelName}\n`);
+        mainWindow?.webContents?.send('output-update', `Model file size differs, re-downloading: ${modelName}\n`);
       } catch (_e) {}
     }
 
@@ -3371,25 +3524,21 @@ ipcMain.handle('download-model', async (_event, modelName) => {
       console.log('[Download] Failed to send download start message:', _e.message);
     }
 
-    // 이전 부분 파일 정리
-    try {
-      if (fs.existsSync(partialPath)) fs.unlinkSync(partialPath);
-    } catch (_e) {
-      console.log('[Download] Failed to delete partial file:', _e.message);
-    }
-
     if (downloadsCancelled) throw new Error('cancelled');
-    try {
-      await downloadFile(modelUrl, partialPath);
-      // 완료되어야만 최종 경로로 rename — 부분 파일이 'installed' 로 보이지 않도록
-      fs.renameSync(partialPath, targetPath);
-    } catch (err) {
-      // 취소/실패 시 부분 파일 제거
-      try {
-        if (fs.existsSync(partialPath)) fs.unlinkSync(partialPath);
-      } catch (_e) {}
-      throw err;
-    }
+    await downloadVerifiedFile({
+      axios,
+      assertDownloadDiskSpace,
+      activeDownloads,
+      isCancelled: () => downloadsCancelled,
+      url: modelUrl,
+      partialPath,
+      label: `GGML ${modelName}`,
+      expectedSize: manifest.size,
+      sha256: manifest.sha256,
+      onProgress: emitProgress,
+    });
+    // 완료되어야만 최종 경로로 rename — 부분 파일이 'installed'로 보이지 않도록
+    fs.renameSync(partialPath, targetPath);
 
     try {
       mainWindow.webContents.send('output-update', `GGML Model download completed: ${modelName}\n`);
@@ -3714,7 +3863,8 @@ ipcMain.handle('get-current-version', async () => {
 });
 
 ipcMain.handle('get-gpu-info', async () => {
-  return getGpuInfo();
+  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  return { ...getGpuInfo(), vulkanAvailable: isVulkanAvailable(basePath) };
 });
 
 // nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)

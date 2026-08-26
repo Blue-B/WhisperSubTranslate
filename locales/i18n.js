@@ -115,9 +115,9 @@ const I18N = {
       'whisper-large-v3-turbo': 'Large 정확도 + 8배 빠른 속도. 고성능 권장.',
       'whisper-large-v3': '가장 정확한 받아쓰기. 단, 긴 영상에서 싱크가 밀리고 느림 (F16 약 3.1GB).',
       'whisper-large-v2-sync':
-        '싱크가 안 맞는 영상 교정용 별도 엔진(Faster-Whisper). 비영어(일/한/중)에 가장 정확, 영어는 large-v3-turbo로 충분. 장치 선택 따름. GPU 약 4.5GB, 느림.',
+        '싱크가 안 맞는 영상 교정용 별도 엔진(Faster-Whisper). 첫 사용 시 엔진과 모델 약 4.5GB를 받습니다. NVIDIA CUDA를 사용하고 AMD/Intel에서는 CPU로 실행합니다. 일반 작업은 Vulkan 지원 large-v3-turbo를 권장합니다.',
       'whisper-large-v2-sync-lite':
-        '정밀과 같은 파일을 int8로 가볍게 실행. VRAM 약 3GB로 저사양 GPU에 적합, 추가 다운로드 없음. 싱크 품질은 거의 동일.',
+        '정밀과 같은 파일을 int8로 가볍게 실행합니다. 첫 사용 시 별도 추가 다운로드는 없지만 공용 엔진과 모델 약 4.5GB가 필요합니다. NVIDIA CUDA를 사용하고 AMD/Intel에서는 CPU로 실행합니다.',
     },
     modelTagTranslation: '번역',
     modelTagAsr: '음성',
@@ -171,12 +171,14 @@ const I18N = {
     modelsTitleText: '모델 관리',
     modelsSubtitleText: '다운로드된 음성 인식 · 번역 모델',
     refreshBtnText: '새로고침',
+    modelsFolderBtnText: '모델 폴더',
+    modelsFolderBtnTitle: '모델이 저장된 폴더를 엽니다. 직접 받은 모델 파일도 이 폴더에 넣으면 인식됩니다.',
     railWorkspaceTitle: '워크스페이스',
     railHistoryTitle: '히스토리',
     railModelsTitle: '모델 관리',
     railSettingsTitle: '설정',
     deviceStatusHtml:
-      '<strong>GPU 권장:</strong> NVIDIA GPU가 있으면 훨씬 빠른 처리 가능<br><strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적',
+      '<strong>GPU 권장:</strong> NVIDIA는 CUDA, Vulkan 지원 GPU는 Vulkan으로 가속<br><strong>CPU:</strong> GPU가 없거나 메모리 부족 시 안정적',
     translationEnabledHtml:
       '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
     translationDisabledHtml: '번역을 사용하지 않습니다.',
@@ -184,7 +186,7 @@ const I18N = {
     translationChatgptHtml: '<strong>OpenAI:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
     langAutoOption: '자동 감지 (각 파일별로 자동 판별)',
     deviceAuto: '자동 (GPU 있으면 GPU, 없으면 CPU)',
-    deviceCuda: 'GPU (CUDA) - 빠른 처리',
+    deviceCuda: 'GPU (CUDA/Vulkan) - 빠른 처리',
     deviceCpu: 'CPU - 안정적 처리',
     trNone: '번역 안함',
     trMyMemory: 'MyMemory (일 5만글자 무료, 추천)',
@@ -283,7 +285,7 @@ const I18N = {
     updateLater: '나중에',
     updateChecking: '업데이트 확인 중...',
     deviceSyncLockNote:
-      '장치 선택을 따릅니다. 자동은 GPU를 먼저 시도하고 실패하면 CPU로 전환합니다. CPU를 선택하면 CPU만 사용하므로 느립니다.',
+      'Sync는 CUDA 또는 CPU 전용입니다. NVIDIA CUDA가 없으면 GPU를 선택해도 CPU로 실행합니다. AMD/Intel에서는 CPU를 사용하며, 일반 작업에는 Vulkan 지원 large-v3-turbo를 권장합니다. 첫 사용 시 약 4.5GB를 다운로드합니다.',
     errorTranslationPassthrough:
       '번역 엔진이 거의 모든 줄을 번역하지 못했습니다(로컬 모델 충돌/실패 가능). 자막이 번역되지 않았습니다. 다시 시도하거나, 처리 장치를 CPU로 바꾸거나, 다른 번역 방식을 선택하세요.',
     allFailedLocal: '⚠️ 모든 번역 실패 — 로컬 모델이 실패했어요. 다시 시도하거나 처리 장치를 CPU로 바꿔보세요',
@@ -398,6 +400,10 @@ const I18N = {
     modelStatusText: (count) => `${count}개 모델 사용 가능 | 부족한 모델은 자동 다운로드됩니다`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12는 Compute 5.0 이상 필요합니다. GPU 모드를 사용할 수 없어 CPU 모드로 자동 전환됩니다.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>현재 장치: GPU 가속을 쓸 수 없어 CPU로 실행</strong><br>CPU: GPU가 없거나 메모리 부족 시 안정적'
+        : `<strong>현재 장치: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 가속</strong><br>CPU: GPU가 없거나 메모리 부족 시 안정적`,
     fileCompleteRemaining: (n) => `파일 완료! 대기 중인 파일 ${n}개가 있습니다. 처리 시작 버튼을 눌러주세요.`,
     processingNext: (n) => `다음 파일 처리 중... (남은 파일: ${n}개)`,
     autoRetryingFailed: (n) => `실패한 ${n}개 파일을 자동으로 재시도합니다...`,
@@ -517,9 +523,9 @@ const I18N = {
       'whisper-large-v3-turbo': 'Large accuracy + 8x speed. Recommended for high-end GPUs.',
       'whisper-large-v3': 'Most accurate transcription. Sync drifts and slow on long videos (F16 ~3.1GB).',
       'whisper-large-v2-sync':
-        'Separate engine (Faster-Whisper) that fixes subtitles which will not sync. Best for non-English (JA/KO/ZH); English is fine with large-v3-turbo. Follows device choice. ~4.5GB GPU, slow.',
+        'Separate engine (Faster-Whisper) for subtitles that will not sync. The first use downloads about 4.5GB of engine and model files. Uses NVIDIA CUDA and runs on CPU on AMD/Intel. For normal work, large-v3-turbo with Vulkan support is recommended.',
       'whisper-large-v2-sync-lite':
-        'Runs the same file in int8, lighter. ~3GB VRAM for low-end GPUs, no extra download. Sync quality nearly identical.',
+        'Runs the same shared files in int8. The first use still needs about 4.5GB for the engine and model, with no additional download. Uses NVIDIA CUDA and runs on CPU on AMD/Intel.',
     },
     modelTagTranslation: 'MT',
     modelTagAsr: 'ASR',
@@ -573,12 +579,15 @@ const I18N = {
     modelsTitleText: 'Model Manager',
     modelsSubtitleText: 'Downloaded speech recognition · translation models',
     refreshBtnText: 'Refresh',
+    modelsFolderBtnText: 'Model folder',
+    modelsFolderBtnTitle:
+      'Open the folder where models are stored. Manually downloaded model files placed here are detected too.',
     railWorkspaceTitle: 'Workspace',
     railHistoryTitle: 'History',
     railModelsTitle: 'Model Manager',
     railSettingsTitle: 'Settings',
     deviceStatusHtml:
-      '<strong>GPU recommended:</strong> Much faster if NVIDIA GPU is available<br><strong>CPU:</strong> Use when no GPU or memory is limited',
+      '<strong>GPU recommended:</strong> CUDA for NVIDIA, Vulkan for compatible GPUs<br><strong>CPU:</strong> Use when no GPU or memory is limited',
     translationEnabledHtml:
       '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
     translationDisabledHtml: 'Translation is disabled.',
@@ -588,7 +597,7 @@ const I18N = {
       '<strong>OpenAI:</strong> User API key required<br><strong>Natural</strong> translation possible',
     langAutoOption: 'Auto-detect (per file)',
     deviceAuto: 'Auto (Use GPU if available, otherwise CPU)',
-    deviceCuda: 'GPU (CUDA) - Fast',
+    deviceCuda: 'GPU (CUDA/Vulkan) - Fast',
     deviceCpu: 'CPU - Stable',
     trNone: 'No translation',
     trMyMemory: 'MyMemory (Free ~50K/day)',
@@ -688,7 +697,7 @@ const I18N = {
     updateLater: 'Later',
     updateChecking: 'Checking for updates...',
     deviceSyncLockNote:
-      'Follows the device setting. Auto tries GPU first and falls back to CPU. CPU means CPU-only, so it is slow.',
+      'Sync supports CUDA or CPU only. If NVIDIA CUDA is unavailable, GPU selection also runs on CPU. AMD/Intel use CPU. For normal work, large-v3-turbo with Vulkan support is recommended. The first use downloads about 4.5GB.',
     errorTranslationPassthrough:
       'The translation engine failed on almost all lines (the local model may have crashed). Subtitles were not translated. Try again, switch the device to CPU, or pick another translation method.',
     allFailedLocal: '⚠️ All translations failed — the local model failed. Try again or switch the device to CPU',
@@ -806,6 +815,10 @@ const I18N = {
     modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>Detected: no usable GPU acceleration, running on CPU</strong><br>CPU: stable when there is no GPU or memory is limited'
+        : `<strong>Detected: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} acceleration</strong><br>CPU: stable when there is no GPU or memory is limited`,
     fileCompleteRemaining: (n) => `File completed! ${n} file(s) remaining in queue. Please click Start button.`,
     processingNext: (n) => `Processing next file... (${n} remaining)`,
     autoRetryingFailed: (n) => `Auto-retrying ${n} failed file(s)...`,
@@ -926,9 +939,9 @@ const I18N = {
       'whisper-large-v3-turbo': 'Largeの精度 + 8倍高速。高性能GPUに推奨。',
       'whisper-large-v3': '最も正確な文字起こし。長い動画で同期がずれ、低速 (F16 約3.1GB)。',
       'whisper-large-v2-sync':
-        '同期が合わない字幕を補正する別エンジン(Faster-Whisper)。非英語(日/韓/中)に最も正確、英語はlarge-v3-turboで十分。デバイス選択に従う。GPU約4.5GB、低速。',
+        '同期が合わない字幕を補正する別エンジン(Faster-Whisper)。初回はエンジンとモデル約4.5GBをダウンロードします。NVIDIAではCUDAを使い、AMD/IntelではCPUで実行します。通常の作業にはVulkan対応のlarge-v3-turboを推奨します。',
       'whisper-large-v2-sync-lite':
-        '精密と同じファイルをint8で軽量実行。VRAM約3GBで低スペックGPU向け、追加DLなし。同期品質はほぼ同じ。',
+        '精密版と同じファイルをint8で実行します。初回は共通エンジンとモデル約4.5GBが必要で、追加ダウンロードはありません。NVIDIAではCUDAを使い、AMD/IntelではCPUで実行します。',
     },
     modelTagTranslation: '翻訳',
     modelTagAsr: '音声',
@@ -982,12 +995,14 @@ const I18N = {
     modelsTitleText: 'モデル管理',
     modelsSubtitleText: 'ダウンロード済みの音声認識・翻訳モデル',
     refreshBtnText: '更新',
+    modelsFolderBtnText: 'モデルフォルダ',
+    modelsFolderBtnTitle: 'モデルの保存フォルダを開きます。手動でダウンロードしたモデルもここに置けば認識されます。',
     railWorkspaceTitle: 'ワークスペース',
     railHistoryTitle: '履歴',
     railModelsTitle: 'モデル管理',
     railSettingsTitle: '設定',
     deviceStatusHtml:
-      '<strong>GPU 推奨:</strong> NVIDIA GPU があれば高速処理<br><strong>CPU:</strong> GPU がない場合やメモリ不足時に安定',
+      '<strong>GPU 推奨:</strong> NVIDIA は CUDA、対応 GPU は Vulkan で高速化<br><strong>CPU:</strong> GPU がない場合やメモリ不足時に安定',
     translationEnabledHtml:
       '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳<br><strong>1日約5万文字</strong>（目安）',
     translationDisabledHtml: '翻訳は使用しません。',
@@ -995,7 +1010,7 @@ const I18N = {
     translationChatgptHtml: '<strong>OpenAI:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
     langAutoOption: '自動検出（ファイルごと）',
     deviceAuto: '自動（GPUがあればGPU、なければCPU）',
-    deviceCuda: 'GPU (CUDA) - 高速',
+    deviceCuda: 'GPU (CUDA/Vulkan) - 高速',
     deviceCpu: 'CPU - 安定',
     trNone: '翻訳しない',
     trMyMemory: 'MyMemory（無料 約5万/日）',
@@ -1094,7 +1109,7 @@ const I18N = {
     updateLater: '後で',
     updateChecking: 'アップデートを確認中...',
     deviceSyncLockNote:
-      'デバイス設定に従います。自動はGPUを先に試し、失敗したらCPUに切り替えます。CPUを選ぶとCPUのみなので低速です。',
+      'SyncはCUDAまたはCPU専用です。NVIDIA CUDAが使えない場合、GPUを選んでもCPUで実行します。AMD/IntelではCPUを使います。通常の作業にはVulkan対応のlarge-v3-turboを推奨します。初回は約4.5GBをダウンロードします。',
     errorTranslationPassthrough:
       '翻訳エンジンがほぼ全ての行を翻訳できませんでした（ローカルモデルがクラッシュした可能性）。字幕は翻訳されていません。再試行するか、処理デバイスをCPUに変更するか、別の翻訳方式を選んでください。',
     allFailedLocal:
@@ -1212,6 +1227,10 @@ const I18N = {
     modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12にはCompute 5.0以上が必要です。GPUモードは使用できません。CPUモードに自動切替されます。`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>現在のデバイス: GPU 高速化が使えないため CPU で実行</strong><br>CPU: GPU がない場合やメモリ不足時に安定'
+        : `<strong>現在のデバイス: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 高速化</strong><br>CPU: GPU がない場合やメモリ不足時に安定`,
     fileCompleteRemaining: (n) => `ファイル完了！待機中のファイル${n}件があります。処理開始ボタンを押してください。`,
     processingNext: (n) => `次のファイルを処理中... (残り${n}件)`,
     autoRetryingFailed: (n) => `失敗した${n}件のファイルを自動再試行します...`,
@@ -1326,9 +1345,9 @@ const I18N = {
       'whisper-large-v3-turbo': 'Large精度+8倍速度。高性能GPU推荐。',
       'whisper-large-v3': '最准确的转写。长视频同步偏移、较慢 (F16 约3.1GB)。',
       'whisper-large-v2-sync':
-        '修复对不上字幕的独立引擎(Faster-Whisper)。对非英语(日/韩/中)最准确，英语用 large-v3-turbo 即可。遵循设备选择。GPU约4.5GB，较慢。',
+        '修复字幕不同步的独立引擎(Faster-Whisper)。首次使用需下载约4.5GB的引擎和模型。NVIDIA使用CUDA，AMD/Intel使用CPU。日常任务推荐支持Vulkan的large-v3-turbo。',
       'whisper-large-v2-sync-lite':
-        '用 int8 轻量运行精密的同一文件。显存约3GB，适合低端 GPU，无需额外下载。同步质量几乎相同。',
+        '使用相同共享文件以int8轻量运行。首次使用仍需约4.5GB的引擎和模型，不需要额外下载。NVIDIA使用CUDA，AMD/Intel使用CPU。',
     },
     modelTagTranslation: '翻译',
     modelTagAsr: '语音',
@@ -1382,19 +1401,21 @@ const I18N = {
     modelsTitleText: '模型管理',
     modelsSubtitleText: '已下载的语音识别·翻译模型',
     refreshBtnText: '刷新',
+    modelsFolderBtnText: '模型文件夹',
+    modelsFolderBtnTitle: '打开模型保存文件夹。手动下载的模型文件放在这里也会被识别。',
     railWorkspaceTitle: '工作区',
     railHistoryTitle: '历史',
     railModelsTitle: '模型管理',
     railSettingsTitle: '设置',
     deviceStatusHtml:
-      '<strong>推荐 GPU:</strong> 若有 NVIDIA GPU 速度更快<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
+      '<strong>推荐 GPU:</strong> NVIDIA 使用 CUDA，兼容 GPU 使用 Vulkan 加速<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
     translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定<br><strong>约5万字/天</strong>（参考）',
     translationDisabledHtml: '不使用翻译。',
     translationDeeplHtml: '<strong>DeepL:</strong> 每月50万字免费，需API密钥<br><strong>高质量</strong>翻译服务',
     translationChatgptHtml: '<strong>OpenAI:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
     langAutoOption: '自动检测（每个文件）',
     deviceAuto: '自动（有 GPU 用 GPU，否则 CPU）',
-    deviceCuda: 'GPU (CUDA) - 快速',
+    deviceCuda: 'GPU (CUDA/Vulkan) - 快速',
     deviceCpu: 'CPU - 稳定',
     trNone: '不翻译',
     trMyMemory: 'MyMemory（免费 约5万/天）',
@@ -1491,7 +1512,8 @@ const I18N = {
     updateDownload: '下载',
     updateLater: '稍后',
     updateChecking: '正在检查更新...',
-    deviceSyncLockNote: '遵循设备设置。自动会先试 GPU，失败后切换到 CPU。选择 CPU 时只使用 CPU，因此较慢。',
+    deviceSyncLockNote:
+      'Sync仅支持CUDA或CPU。没有NVIDIA CUDA时，即使选择GPU也会使用CPU。AMD/Intel使用CPU。日常任务推荐支持Vulkan的large-v3-turbo。首次使用需下载约4.5GB。',
     errorTranslationPassthrough:
       '翻译引擎几乎所有行都未能翻译（本地模型可能崩溃）。字幕未被翻译。请重试，或将处理设备改为 CPU，或选择其他翻译方式。',
     allFailedLocal: '⚠️ 翻译全部失败 — 本地模型失败。请重试或将处理设备改为 CPU',
@@ -1605,6 +1627,10 @@ const I18N = {
     modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 需要 Compute 5.0 以上。GPU 模式不可用，将自动使用 CPU 模式。`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>当前设备: 无可用 GPU 加速，使用 CPU 运行</strong><br>CPU: 没有 GPU 或显存不足时更稳定'
+        : `<strong>当前设备: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 加速</strong><br>CPU: 没有 GPU 或显存不足时更稳定`,
     fileCompleteRemaining: (n) => `文件完成！队列中还有 ${n} 个文件。请点击开始按钮。`,
     processingNext: (n) => `正在处理下一个文件... (剩余${n}个)`,
     autoRetryingFailed: (n) => `正在自动重试 ${n} 个失败的文件...`,
@@ -1728,9 +1754,9 @@ const I18N = {
       'whisper-large-v3':
         'Najdokładniejsza transkrypcja. Synchronizacja dryfuje i wolniejszy w długich filmach (F16 ~3.1GB).',
       'whisper-large-v2-sync':
-        'Osobny silnik (Faster-Whisper) naprawiający napisy bez synchronizacji. Najlepszy dla nieangielskich (JA/KO/ZH); angielski OK z large-v3-turbo. Wg wyboru urządzenia. ~4,5GB GPU, wolny.',
+        'Osobny silnik (Faster-Whisper) naprawiający napisy bez synchronizacji. Pierwsze użycie pobiera około 4,5 GB silnika i modelu. Używa CUDA na kartach NVIDIA, a na AMD/Intel działa na CPU. Do zwykłych zadań polecany jest large-v3-turbo z Vulkanem.',
       'whisper-large-v2-sync-lite':
-        'Uruchamia ten sam plik w int8, lżej. ~3GB VRAM dla słabszych GPU, bez dodatkowego pobierania. Synchronizacja prawie identyczna.',
+        'Uruchamia te same współdzielone pliki w int8. Pierwsze użycie nadal wymaga około 4,5 GB silnika i modelu, bez dodatkowego pobierania. Używa CUDA na kartach NVIDIA, a na AMD/Intel działa na CPU.',
     },
     modelTagTranslation: 'MT',
     modelTagAsr: 'ASR',
@@ -1784,12 +1810,15 @@ const I18N = {
     modelsTitleText: 'Menedżer modeli',
     modelsSubtitleText: 'Pobrane modele rozpoznawania mowy i tłumaczenia',
     refreshBtnText: 'Odśwież',
+    modelsFolderBtnText: 'Folder modeli',
+    modelsFolderBtnTitle:
+      'Otwórz folder z modelami. Ręcznie pobrane pliki modeli umieszczone tutaj też zostaną wykryte.',
     railWorkspaceTitle: 'Stanowisko pracy',
     railHistoryTitle: 'Historia',
     railModelsTitle: 'Menedżer modeli',
     railSettingsTitle: 'Ustawienia',
     deviceStatusHtml:
-      '<strong>Zalecany GPU:</strong> Znacznie szybsze przetwarzanie z GPU NVIDIA<br><strong>CPU:</strong> Użyj gdy brak GPU lub ograniczona pamięć',
+      '<strong>Zalecany GPU:</strong> CUDA dla NVIDIA, Vulkan dla zgodnych GPU<br><strong>CPU:</strong> Użyj gdy brak GPU lub ograniczona pamięć',
     translationEnabledHtml:
       '<strong>Zalecane:</strong> MyMemory jest darmowy i stabilny<br><strong>~50K znaków/dzień</strong> za darmo (w przybliżeniu)',
     translationDisabledHtml: 'Tłumaczenie wyłączone.',
@@ -1799,7 +1828,7 @@ const I18N = {
       '<strong>OpenAI:</strong> Wymagany klucz API użytkownika<br><strong>Naturalne</strong> tłumaczenie',
     langAutoOption: 'Automatyczne wykrywanie (dla każdego pliku)',
     deviceAuto: 'Auto (GPU jeśli dostępny, w przeciwnym razie CPU)',
-    deviceCuda: 'GPU (CUDA) - Szybki',
+    deviceCuda: 'GPU (CUDA/Vulkan) - Szybki',
     deviceCpu: 'CPU - Stabilny',
     trNone: 'Bez tłumaczenia',
     trMyMemory: 'MyMemory (Darmowy ~50K/dzień)',
@@ -1899,7 +1928,7 @@ const I18N = {
     updateLater: 'Później',
     updateChecking: 'Sprawdzanie aktualizacji...',
     deviceSyncLockNote:
-      'Respektuje ustawienie urządzenia. Auto próbuje najpierw GPU i wraca do CPU po błędzie. CPU oznacza tylko CPU, więc jest wolne.',
+      'Sync obsługuje tylko CUDA lub CPU. Gdy CUDA NVIDIA jest niedostępna, wybór GPU również uruchamia CPU. AMD/Intel używają CPU. Do zwykłych zadań polecany jest large-v3-turbo z Vulkanem. Pierwsze użycie pobiera około 4,5 GB.',
     errorTranslationPassthrough:
       'Silnik tłumaczenia zawiódł na prawie wszystkich liniach (model lokalny mógł ulec awarii). Napisy nie zostały przetłumaczone. Spróbuj ponownie, zmień urządzenie na CPU lub wybierz inną metodę tłumaczenia.',
     allFailedLocal:
@@ -2017,6 +2046,10 @@ const I18N = {
     modelStatusText: (count) => `${count} modeli dostępnych | Brakujące modele zostaną pobrane automatycznie`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 wymaga Compute 5.0+. Tryb GPU niedostępny. Automatyczne przełączenie na CPU.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>Wykryto: brak dostępnej akceleracji GPU, praca na CPU</strong><br>CPU: stabilny gdy brak GPU lub mało pamięci'
+        : `<strong>Wykryto: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} akceleracja</strong><br>CPU: stabilny gdy brak GPU lub mało pamięci`,
     fileCompleteRemaining: (n) => `Plik zakończony! ${n} plików pozostało w kolejce. Kliknij przycisk Start.`,
     processingNext: (n) => `Przetwarzanie następnego pliku... (pozostało ${n})`,
     autoRetryingFailed: (n) => `Automatyczne ponawianie ${n} nieudanych plików...`,

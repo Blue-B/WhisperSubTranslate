@@ -34,7 +34,7 @@ npm start
 ```
 
 - Node.js >= 22.12.0 (see `engines` in package.json; Electron 43 toolchain)
-- whisper.cpp is downloaded during `npm install` (CUDA build on Windows, ~700MB)
+- whisper.cpp is downloaded during `npm install` (Windows gets the CUDA build ~700MB plus a Vulkan build ~23MB)
 - FFmpeg is included via npm; the selected GGML model downloads on first use
 
 ### Linux
@@ -59,16 +59,16 @@ npm run build-win   # artifacts are emitted to dist2/
 
 Translate subtitles fully offline with the bundled Tencent Hy-MT2 model, or route to free/paid online engines using your own API keys.
 
-| Engine | Offline | API key | Cost | Notes |
-| --- | :---: | :---: | --- | --- |
-| Hy-MT2 1.8B (local, default) | Yes | No | Free | ~1.13GB, VRAM 2GB / RAM 4GB, on-device |
-| Hy-MT2 7B (local) | Yes | No | Free | ~6.16GB, VRAM 8GB / RAM 12GB, larger model |
-| MyMemory | No | No | Free | ~50K chars/day per IP |
-| DeepL | No | Yes | Free 500K/month | Deterministic output |
-| OpenAI GPT-5.x (configurable, e.g. gpt-5.6-sol) | No | Yes | Paid | Default model; context-aware |
-| Gemini 3.x (configurable, e.g. gemini-3.6-flash) | No | Yes | Free / low-cost | Recommended low-cost route ([get key](https://aistudio.google.com/app/apikey)) |
-| Claude (configurable, e.g. claude-opus-5) | No | Yes | Paid | Strong at context understanding ([get key](https://console.anthropic.com/settings/keys)) |
-| Custom OpenAI-compatible providers | No | Yes | Varies | Bring your own endpoint (OpenRouter, Ollama, vLLM, …) |
+| Engine                                           | Offline | API key | Cost            | Notes                                                                                    |
+| ------------------------------------------------ | :-----: | :-----: | --------------- | ---------------------------------------------------------------------------------------- |
+| Hy-MT2 1.8B (local, default)                     |   Yes   |   No    | Free            | ~1.13GB, VRAM 2GB / RAM 4GB, on-device                                                   |
+| Hy-MT2 7B (local)                                |   Yes   |   No    | Free            | ~6.16GB, VRAM 8GB / RAM 12GB, larger model                                               |
+| MyMemory                                         |   No    |   No    | Free            | ~50K chars/day per IP                                                                    |
+| DeepL                                            |   No    |   Yes   | Free 500K/month | Deterministic output                                                                     |
+| OpenAI GPT-5.x (configurable, e.g. gpt-5.6-sol)  |   No    |   Yes   | Paid            | Default model; context-aware                                                             |
+| Gemini 3.x (configurable, e.g. gemini-3.6-flash) |   No    |   Yes   | Free / low-cost | Recommended low-cost route ([get key](https://aistudio.google.com/app/apikey))           |
+| Claude (configurable, e.g. claude-opus-5)        |   No    |   Yes   | Paid            | Strong at context understanding ([get key](https://console.anthropic.com/settings/keys)) |
+| Custom OpenAI-compatible providers               |   No    |   Yes   | Varies          | Bring your own endpoint (OpenRouter, Ollama, vLLM, …)                                    |
 
 The local Hy-MT2 engine is the only option that needs no API key, no network, and no per-use cost, so your dialogue never leaves your machine.
 
@@ -84,18 +84,18 @@ For long videos (1hr+), MyMemory's daily limit can cause slowdowns. Use Gemini, 
 
 ## Speech recognition models
 
-Models download on demand into `_models/`. CUDA is used when available, otherwise CPU runs by default. Pick a size that fits your GPU.
+Models download on demand into `_models/`. NVIDIA GPUs use CUDA, other Vulkan-capable GPUs (AMD, Intel) use Vulkan, and CPU is the fallback. Pick a size that fits your GPU.
 
-| Model | Size | VRAM | Speed | Notes |
-| --- | --- | --- | --- | --- |
-| tiny | ~75MB | ~1GB | Fastest | Basic |
-| base | ~142MB | ~1GB | Fast | Good |
-| small | ~466MB | ~1GB | Medium | Better |
-| medium | ~1.5GB | ~2GB | Medium | Great |
-| large-v3 | ~3GB | ~4GB | Slow | Best transcription |
-| large-v3-turbo (default) | ~809MB | ~2GB | Fast | Best all-round |
-| large-v2 Sync | ~4.4GB | ~4.5GB | Slow | Separate engine; fixes subtitle sync |
-| large-v2 Sync Lite | shared | ~3GB | Slow | Same file as Sync, int8, lower VRAM |
+| Model                    | Size   | VRAM   | Speed   | Notes                                |
+| ------------------------ | ------ | ------ | ------- | ------------------------------------ |
+| tiny                     | ~75MB  | ~1GB   | Fastest | Basic                                |
+| base                     | ~142MB | ~1GB   | Fast    | Good                                 |
+| small                    | ~466MB | ~1GB   | Medium  | Better                               |
+| medium                   | ~1.5GB | ~2GB   | Medium  | Great                                |
+| large-v3                 | ~3GB   | ~4GB   | Slow    | Best transcription                   |
+| large-v3-turbo (default) | ~809MB | ~2GB   | Fast    | Best all-round                       |
+| large-v2 Sync            | ~4.4GB | ~4.5GB | Slow    | Separate engine; fixes subtitle sync |
+| large-v2 Sync Lite       | shared | ~3GB   | Slow    | Same file as Sync, int8, lower VRAM  |
 
 Sync and Sync Lite use a separate Faster-Whisper engine (auto-downloaded once; engine archive ~1.4GB, model file ~3GB, ~4.4GB combined) and share the same model file, so one download covers both. Use them only when normal models drift out of sync; they are most accurate on non-English video (Japanese, Korean, Chinese). English is usually fine with large-v3-turbo.
 
@@ -111,12 +111,12 @@ VRAM figures for whisper.cpp models are with GGML optimization, much lower than 
 
 Everything stays local under your user data folder. Nothing is uploaded.
 
-| Data | Location |
-| --- | --- |
-| Settings & API keys | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
-| Job history | `%APPDATA%\whispersubtranslate\history.json` (up to 200 entries) |
-| Error logs | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| Models | `%APPDATA%\whispersubtranslate\_models` (user data folder; non-ASCII Windows accounts fall back to `C:\Users\Public\WhisperSubTranslate\_models`) |
+| Data                | Location                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Settings & API keys | `%APPDATA%\whispersubtranslate\translation-config-safe.json`                                                                                      |
+| Job history         | `%APPDATA%\whispersubtranslate\history.json` (up to 200 entries)                                                                                  |
+| Error logs          | `%APPDATA%\whispersubtranslate\logs\errors.log`                                                                                                   |
+| Models              | `%APPDATA%\whispersubtranslate\_models` (user data folder; non-ASCII Windows accounts fall back to `C:\Users\Public\WhisperSubTranslate\_models`) |
 
 API keys are stored locally with OS-level safe storage, and the config is never committed or bundled. Job history is optional (toggle in Settings) and capped at 200 entries.
 

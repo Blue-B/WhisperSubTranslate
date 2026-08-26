@@ -2038,18 +2038,20 @@ function rebuildLanguageSelectOptions(lang) {
   if (codes.includes(originalValue)) sel.value = originalValue;
 }
 
-// GPU 비호환 경고 정보를 언어와 분리해 캐시한다. HTML을 캐시하면 언어 변경 시
+// GPU 감지 결과를 언어와 분리해 캐시한다. HTML을 캐시하면 언어 변경 시
 // 이전 언어 텍스트가 그대로 복원되는 문제가 있다(F1). 언어별 문구는 표시 시점에
 // 현재 UI 언어로 생성한다.
-let _gpuWarningData = null; // { name, computeCap } | null
+let _gpuStatusData = null; // { name, computeCap, backend: 'cuda'|'vulkan'|'cpu', legacyNvidia } | null
 
-// 현재 언어로 GPU 경고 마크업을 만든다. 경고가 없으면 null.
-function getGpuWarningMarkup(lang) {
-  if (!_gpuWarningData) return null;
+// 현재 언어로 장치 상태 문구를 만든다. 감지 전이면 기본 안내를 그대로 쓴다.
+function getDeviceStatusMarkup(lang) {
   const l = I18N[lang] || I18N[currentUiLang];
-  return l.gpuIncompatibleHtml
-    ? l.gpuIncompatibleHtml(_gpuWarningData.name, _gpuWarningData.computeCap)
-    : `<strong style="color:#e74c3c;">⚠ ${_gpuWarningData.name} (Compute ${_gpuWarningData.computeCap})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`;
+  if (!_gpuStatusData) return l.deviceStatusHtml;
+  // 구형 NVIDIA이면서 Vulkan도 못 쓰는 경우만 기존 경고를 유지한다.
+  if (_gpuStatusData.legacyNvidia && _gpuStatusData.backend === 'cpu' && l.gpuIncompatibleHtml) {
+    return l.gpuIncompatibleHtml(_gpuStatusData.name, _gpuStatusData.computeCap);
+  }
+  return l.gpuDetectedHtml ? l.gpuDetectedHtml(_gpuStatusData.name, _gpuStatusData.backend) : l.deviceStatusHtml;
 }
 
 function rebuildDeviceSelectOptions(lang) {
@@ -2064,9 +2066,9 @@ function rebuildDeviceSelectOptions(lang) {
   sel.value = original;
   const deviceStatus = document.getElementById('deviceStatus');
   if (deviceStatus) {
-    // 비호환 GPU 경고가 있으면 기본 상태 문구 대신 경고를 유지한다.
-    // (경고는 데이터로 캐시되고 여기서 현재 언어로 생성된다 — 언어 변경 반영)
-    setStatusMarkup(deviceStatus, getGpuWarningMarkup(lang) || I18N[lang].deviceStatusHtml);
+    // 감지된 장치와 실제 가속 방식을 보여준다.
+    // (감지 결과는 데이터로 캐시되고 여기서 현재 언어로 생성된다 — 언어 변경 반영)
+    setStatusMarkup(deviceStatus, getDeviceStatusMarkup(lang));
   }
 }
 
@@ -2108,16 +2110,19 @@ function rebuildTranslationSelectOptions(lang) {
 async function checkGpuCompatibility() {
   if (!window.electronAPI?.getGpuInfo) return;
   const info = await window.electronAPI.getGpuInfo();
-  if (!info || !info.available) return;
+  if (!info) return;
+  // 사용자는 자기 그래픽카드가 CUDA인지 Vulkan인지 모른다. 감지 결과를
+  // 그대로 보여줘서 어떤 가속이 실제로 쓰이는지 한 줄로 알려준다.
+  // nvidia-smi가 없는 AMD/Intel 머신은 info.name이 비어 있다. 그대로 보간하면
+  // "현재 장치: null · Vulkan 가속"이 된다. Vulkan의 주 대상이 바로 이 경우다.
+  _gpuStatusData = {
+    name: info.name || 'GPU',
+    computeCap: info.computeCap,
+    backend: info.cudaCompatible ? 'cuda' : info.vulkanAvailable ? 'vulkan' : 'cpu',
+    legacyNvidia: !!(info.available && !info.cudaCompatible),
+  };
   const deviceStatus = document.getElementById('deviceStatus');
-  if (!info.cudaCompatible && deviceStatus) {
-    // 언어 독립 데이터로 저장해 언어 변경 시 재생성할 수 있게 한다.
-    _gpuWarningData = { name: info.name, computeCap: info.computeCap };
-    setStatusMarkup(deviceStatus, getGpuWarningMarkup(currentUiLang));
-  } else {
-    // 호환 GPU면 경고 캐시를 비워 이후 언어 변경 시 기본 상태 문구를 보여준다.
-    _gpuWarningData = null;
-  }
+  if (deviceStatus) setStatusMarkup(deviceStatus, getDeviceStatusMarkup(currentUiLang));
 }
 
 function getModelDisplayName(lang, id) {
@@ -3941,6 +3946,19 @@ function initSettingsModal() {
   const refreshModelsBtn = document.getElementById('refreshModelsBtn');
   if (refreshModelsBtn) {
     refreshModelsBtn.addEventListener('click', () => renderModels());
+  }
+  // 모델 저장 폴더 열기 — 수동으로 받은 모델을 어디에 넣어야 하는지 바로 보여준다.
+  const openModelsFolderBtn = document.getElementById('openModelsFolderBtn');
+  if (openModelsFolderBtn && window.electronAPI?.openModelsFolder) {
+    openModelsFolderBtn.addEventListener('click', async () => {
+      try {
+        const res = await window.electronAPI.openModelsFolder();
+        // 파일 관리자가 없는 환경에서는 버튼이 먹힌 것처럼 보이므로 경로라도 알린다.
+        if (!res?.success && res?.path) showToast(res.path);
+      } catch (e) {
+        console.log('[Models] Failed to open models folder:', e.message);
+      }
+    });
   }
 
   // API/provider 입력만 저장 버튼 대상이다. 사운드·정리 토글은 즉시 저장되므로

@@ -28,6 +28,10 @@ module.exports = {
     modelStatusText: (count) => `${count}개 모델 사용 가능 | 부족한 모델은 자동 다운로드됩니다`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12는 Compute 5.0 이상 필요합니다. GPU 모드를 사용할 수 없어 CPU 모드로 자동 전환됩니다.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>현재 장치: GPU 가속을 쓸 수 없어 CPU로 실행</strong><br>CPU: GPU가 없거나 메모리 부족 시 안정적'
+        : `<strong>현재 장치: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 가속</strong><br>CPU: GPU가 없거나 메모리 부족 시 안정적`,
     fileCompleteRemaining: (n) => `파일 완료! 대기 중인 파일 ${n}개가 있습니다. 처리 시작 버튼을 눌러주세요.`,
     processingNext: (n) => `다음 파일 처리 중... (남은 파일: ${n}개)`,
     autoRetryingFailed: (n) => `실패한 ${n}개 파일을 자동으로 재시도합니다...`,
@@ -61,6 +65,10 @@ module.exports = {
     modelStatusText: (count) => `${count} models available | Missing models will be downloaded automatically`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 requires Compute 5.0+. GPU mode unavailable. CPU mode will be used automatically.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>Detected: no usable GPU acceleration, running on CPU</strong><br>CPU: stable when there is no GPU or memory is limited'
+        : `<strong>Detected: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} acceleration</strong><br>CPU: stable when there is no GPU or memory is limited`,
     fileCompleteRemaining: (n) => `File completed! ${n} file(s) remaining in queue. Please click Start button.`,
     processingNext: (n) => `Processing next file... (${n} remaining)`,
     autoRetryingFailed: (n) => `Auto-retrying ${n} failed file(s)...`,
@@ -94,6 +102,10 @@ module.exports = {
     modelStatusText: (count) => `${count}件のモデルが利用可能 | 不足分は自動でダウンロードされます`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12にはCompute 5.0以上が必要です。GPUモードは使用できません。CPUモードに自動切替されます。`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>現在のデバイス: GPU 高速化が使えないため CPU で実行</strong><br>CPU: GPU がない場合やメモリ不足時に安定'
+        : `<strong>現在のデバイス: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 高速化</strong><br>CPU: GPU がない場合やメモリ不足時に安定`,
     fileCompleteRemaining: (n) => `ファイル完了！待機中のファイル${n}件があります。処理開始ボタンを押してください。`,
     processingNext: (n) => `次のファイルを処理中... (残り${n}件)`,
     autoRetryingFailed: (n) => `失敗した${n}件のファイルを自動再試行します...`,
@@ -127,6 +139,10 @@ module.exports = {
     modelStatusText: (count) => `可用模型 ${count} 个 | 缺失模型将自动下载`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 需要 Compute 5.0 以上。GPU 模式不可用，将自动使用 CPU 模式。`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>当前设备: 无可用 GPU 加速，使用 CPU 运行</strong><br>CPU: 没有 GPU 或显存不足时更稳定'
+        : `<strong>当前设备: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} 加速</strong><br>CPU: 没有 GPU 或显存不足时更稳定`,
     fileCompleteRemaining: (n) => `文件完成！队列中还有 ${n} 个文件。请点击开始按钮。`,
     processingNext: (n) => `正在处理下一个文件... (剩余${n}个)`,
     autoRetryingFailed: (n) => `正在自动重试 ${n} 个失败的文件...`,
@@ -160,6 +176,10 @@ module.exports = {
     modelStatusText: (count) => `${count} modeli dostępnych | Brakujące modele zostaną pobrane automatycznie`,
     gpuIncompatibleHtml: (name, cc) =>
       `<strong style="color:#e74c3c;">⚠ ${name} (Compute ${cc})</strong><br>CUDA 12 wymaga Compute 5.0+. Tryb GPU niedostępny. Automatyczne przełączenie na CPU.`,
+    gpuDetectedHtml: (name, backend) =>
+      backend === 'cpu'
+        ? '<strong>Wykryto: brak dostępnej akceleracji GPU, praca na CPU</strong><br>CPU: stabilny gdy brak GPU lub mało pamięci'
+        : `<strong>Wykryto: ${name} · ${backend === 'cuda' ? 'CUDA' : 'Vulkan'} akceleracja</strong><br>CPU: stabilny gdy brak GPU lub mało pamięci`,
     fileCompleteRemaining: (n) => `Plik zakończony! ${n} plików pozostało w kolejce. Kliknij przycisk Start.`,
     processingNext: (n) => `Przetwarzanie następnego pliku... (pozostało ${n})`,
     autoRetryingFailed: (n) => `Automatyczne ponawianie ${n} nieudanych plików...`,

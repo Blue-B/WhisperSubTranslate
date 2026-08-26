@@ -34,7 +34,7 @@ npm start
 ```
 
 - Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 43)
-- whisper.cpp jest pobierany podczas `npm install` (wersja CUDA na Windows, ~700MB)
+- whisper.cpp jest pobierany podczas `npm install` (Windows otrzymuje wersję CUDA ~700MB oraz wersję Vulkan ~23MB)
 - FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
 
 ### Linux
@@ -57,16 +57,16 @@ npm run build-win   # wynik trafia do dist2/
 
 Tłumacz napisy w pełni offline dołączonym modelem Tencent Hy-MT2 albo kieruj do darmowych/płatnych silników online przy użyciu własnych kluczy API.
 
-| Silnik | Offline | Klucz API | Koszt | Uwagi |
-| --- | :---: | :---: | --- | --- |
-| Hy-MT2 1.8B (lokalny, domyślny) | Tak | Nie | Darmowy | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu |
-| Hy-MT2 7B (lokalny) | Tak | Nie | Darmowy | ~6,16GB, VRAM 8GB / RAM 12GB, większy model |
-| MyMemory | Nie | Nie | Darmowy | ~50K znaków/dzień na IP |
-| DeepL | Nie | Tak | 500K/mies. darmowo | Stabilny wynik |
-| OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol) | Nie | Tak | Płatny | Domyślny model, świadomy kontekstu |
-| Gemini 3.x (konfigurowalny, domyślnie gemini-3.6-flash) | Nie | Tak | Darmowy / tani | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey)) |
-| Claude (konfigurowalny, domyślnie claude-opus-5) | Nie | Tak | Płatny | Świetny w rozumieniu kontekstu ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
-| Niestandardowy dostawca zgodny z OpenAI | Nie | Tak | Różny | Własny endpoint (OpenRouter, Ollama, vLLM, …) |
+| Silnik                                                  | Offline | Klucz API | Koszt              | Uwagi                                                                                         |
+| ------------------------------------------------------- | :-----: | :-------: | ------------------ | --------------------------------------------------------------------------------------------- |
+| Hy-MT2 1.8B (lokalny, domyślny)                         |   Tak   |    Nie    | Darmowy            | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu                                                    |
+| Hy-MT2 7B (lokalny)                                     |   Tak   |    Nie    | Darmowy            | ~6,16GB, VRAM 8GB / RAM 12GB, większy model                                                   |
+| MyMemory                                                |   Nie   |    Nie    | Darmowy            | ~50K znaków/dzień na IP                                                                       |
+| DeepL                                                   |   Nie   |    Tak    | 500K/mies. darmowo | Stabilny wynik                                                                                |
+| OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol)  |   Nie   |    Tak    | Płatny             | Domyślny model, świadomy kontekstu                                                            |
+| Gemini 3.x (konfigurowalny, domyślnie gemini-3.6-flash) |   Nie   |    Tak    | Darmowy / tani     | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey))              |
+| Claude (konfigurowalny, domyślnie claude-opus-5)        |   Nie   |    Tak    | Płatny             | Świetny w rozumieniu kontekstu ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
+| Niestandardowy dostawca zgodny z OpenAI                 |   Nie   |    Tak    | Różny              | Własny endpoint (OpenRouter, Ollama, vLLM, …)                                                 |
 
 Tylko lokalny silnik Hy-MT2 nie wymaga klucza API, sieci ani opłat za użycie, więc dialogi nie opuszczają komputera.
 
@@ -82,18 +82,18 @@ Przy długich filmach (1h+) dzienny limit MyMemory może powodować spowolnienia
 
 ## Modele rozpoznawania mowy
 
-Modele pobierają się na żądanie do `_models/`. CUDA jest używana, gdy dostępna, w przeciwnym razie CPU. Wybierz rozmiar pasujący do GPU.
+Modele pobierają się na żądanie do `_models/`. Karty NVIDIA używają CUDA, inne karty ze wsparciem Vulkan (AMD, Intel) używają Vulkan, a CPU jest opcją zapasową. Wybierz rozmiar pasujący do GPU.
 
-| Model | Rozmiar | VRAM | Szybkość | Uwagi |
-| --- | --- | --- | --- | --- |
-| tiny | ~75MB | ~1GB | Najszybszy | Podstawowy |
-| base | ~142MB | ~1GB | Szybki | Dobry |
-| small | ~466MB | ~1GB | Średni | Lepszy |
-| medium | ~1,5GB | ~2GB | Średni | Bardzo dobry |
-| large-v3 | ~3GB | ~4GB | Wolny | Najlepsza transkrypcja |
-| large-v3-turbo (domyślny) | ~809MB | ~2GB | Szybki | Najlepszy ogólnie |
-| large-v2 Sync | ~4,4GB | ~4,5GB | Wolny | Osobny silnik, naprawa synchronizacji |
-| large-v2 Sync Lite | wspólny | ~3GB | Wolny | Ten sam plik co Sync, int8, niższy VRAM |
+| Model                     | Rozmiar | VRAM   | Szybkość   | Uwagi                                   |
+| ------------------------- | ------- | ------ | ---------- | --------------------------------------- |
+| tiny                      | ~75MB   | ~1GB   | Najszybszy | Podstawowy                              |
+| base                      | ~142MB  | ~1GB   | Szybki     | Dobry                                   |
+| small                     | ~466MB  | ~1GB   | Średni     | Lepszy                                  |
+| medium                    | ~1,5GB  | ~2GB   | Średni     | Bardzo dobry                            |
+| large-v3                  | ~3GB    | ~4GB   | Wolny      | Najlepsza transkrypcja                  |
+| large-v3-turbo (domyślny) | ~809MB  | ~2GB   | Szybki     | Najlepszy ogólnie                       |
+| large-v2 Sync             | ~4,4GB  | ~4,5GB | Wolny      | Osobny silnik, naprawa synchronizacji   |
+| large-v2 Sync Lite        | wspólny | ~3GB   | Wolny      | Ten sam plik co Sync, int8, niższy VRAM |
 
 Sync i Sync Lite używają osobnego silnika Faster-Whisper (pobieranego raz automatycznie; archiwum silnika ~1,4GB + plik modelu ~3GB, łącznie ~4,4GB) i współdzielą ten sam plik modelu, więc jedno pobranie obejmuje oba. Używaj ich tylko, gdy zwykłe modele tracą synchronizację. Są najdokładniejsze przy wideo nieangielskim (japoński, koreański, chiński). Angielski zwykle wystarczy z large-v3-turbo.
 
@@ -109,12 +109,12 @@ VRAM modeli whisper.cpp podano dla optymalizacji GGML, znacznie niżej niż PyTo
 
 Wszystko zostaje lokalnie w folderze użytkownika. Nic nie jest wysyłane.
 
-| Dane | Lokalizacja |
-| --- | --- |
-| Ustawienia i klucze API | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
-| Historia zadań | `%APPDATA%\whispersubtranslate\history.json` (do 200 wpisów) |
-| Logi błędów | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| Modele | `%APPDATA%\whispersubtranslate\_models` (folder danych użytkownika; konta Windows z nie-ASCII znakami używają `C:\Users\Public\WhisperSubTranslate\_models`) |
+| Dane                    | Lokalizacja                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ustawienia i klucze API | `%APPDATA%\whispersubtranslate\translation-config-safe.json`                                                                                                 |
+| Historia zadań          | `%APPDATA%\whispersubtranslate\history.json` (do 200 wpisów)                                                                                                 |
+| Logi błędów             | `%APPDATA%\whispersubtranslate\logs\errors.log`                                                                                                              |
+| Modele                  | `%APPDATA%\whispersubtranslate\_models` (folder danych użytkownika; konta Windows z nie-ASCII znakami używają `C:\Users\Public\WhisperSubTranslate\_models`) |
 
 Klucze API są przechowywane lokalnie w bezpiecznym magazynie systemu, a plik konfiguracji nigdy nie trafia do Git ani do builda. Historia zadań jest opcjonalna (przełącznik w Ustawieniach) i ograniczona do 200 wpisów.
 

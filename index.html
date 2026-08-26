@@ -235,7 +235,7 @@
             </label>
             <select id="deviceSelect" class="setting-select">
               <option value="auto" selected>자동 (GPU/CPU)</option>
-              <option value="cuda">GPU (CUDA)</option>
+              <option value="cuda">GPU (CUDA/Vulkan)</option>
               <option value="cpu">CPU</option>
             </select>
             <div id="deviceStatus" class="setting-hint"></div>
@@ -495,6 +495,15 @@
               <p class="view-subtitle" id="modelsSubtitle">다운로드된 음성 인식 · 번역 모델</p>
             </div>
             <div class="view-actions">
+              <button
+                id="openModelsFolderBtn"
+                class="btn-sm"
+                data-i18n="modelsFolderBtnText"
+                data-i18n-title="modelsFolderBtnTitle"
+                title="모델이 저장된 폴더를 엽니다"
+              >
+                모델 폴더
+              </button>
               <button
                 id="refreshModelsBtn"
                 class="btn-sm"

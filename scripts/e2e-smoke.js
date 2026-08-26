@@ -80,7 +80,7 @@ async function run() {
 
   // 3. Drop zone / main UI is present (any of these selectors).
   const uiPresent = await window.evaluate(() => {
-    const sel = ['.drop-zone', '.drop-stack', '#dropZone', '[data-testid="main"]', 'body'];
+    const sel = ['.drop-zone', '.drop-stack', '#dropZone', '[data-testid="main"]'];
     return sel.some((s) => document.querySelector(s));
   });
   if (!uiPresent) throw new Error('No main UI element found in DOM');

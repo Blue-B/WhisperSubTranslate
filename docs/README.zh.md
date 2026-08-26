@@ -34,7 +34,7 @@ npm start
 ```
 
 - Node.js 20.19 以上或 22.12 以上 (Electron 43 构建工具链)
-- whisper.cpp 在 `npm install` 时自动下载 (Windows 为 CUDA 版本，约700MB)
+- whisper.cpp 在 `npm install` 时自动下载 (Windows 包含约700MB 的 CUDA 版本和约23MB 的 Vulkan 版本)
 - FFmpeg 通过 npm 自带；所选 GGML 模型在首次使用时下载
 
 ### Linux
@@ -57,16 +57,16 @@ npm run build-win   # 产物输出到 dist2/
 
 用内置的 Tencent Hy-MT2 模型完全离线翻译，或用自己的 API 密钥使用免费/付费在线引擎。
 
-| 引擎 | 离线 | API 密钥 | 费用 | 备注 |
-| --- | :---: | :---: | --- | --- |
-| Hy-MT2 1.8B (本地，默认) | 是 | 不需要 | 免费 | 约1.13GB，显存 2GB / 内存 4GB，端侧 |
-| Hy-MT2 7B (本地) | 是 | 不需要 | 免费 | 约6.16GB，显存 8GB / 内存 12GB，更大模型 |
-| MyMemory | 否 | 不需要 | 免费 | 每 IP 每天约5万字符 |
-| DeepL | 否 | 需要 | 每月50万字符免费 | 输出稳定 |
-| OpenAI GPT-5.x (可配置，默认 gpt-5.6-sol) | 否 | 需要 | 付费 | 默认模型，上下文感知 |
-| Gemini 3.x (可配置，默认 gemini-3.6-flash) | 否 | 需要 | 免费 / 低成本 | 推荐的低成本路线 ([获取密钥](https://aistudio.google.com/app/apikey)) |
-| Claude (可配置，默认 claude-opus-5) | 否 | 需要 | 付费 | 上下文理解出色 ([获取密钥](https://console.anthropic.com/settings/keys)) |
-| 自定义 OpenAI 兼容提供商 | 否 | 需要 | 各异 | 自带端点 (OpenRouter、Ollama、vLLM 等) |
+| 引擎                                       | 离线 | API 密钥 | 费用             | 备注                                                                     |
+| ------------------------------------------ | :--: | :------: | ---------------- | ------------------------------------------------------------------------ |
+| Hy-MT2 1.8B (本地，默认)                   |  是  |  不需要  | 免费             | 约1.13GB，显存 2GB / 内存 4GB，端侧                                      |
+| Hy-MT2 7B (本地)                           |  是  |  不需要  | 免费             | 约6.16GB，显存 8GB / 内存 12GB，更大模型                                 |
+| MyMemory                                   |  否  |  不需要  | 免费             | 每 IP 每天约5万字符                                                      |
+| DeepL                                      |  否  |   需要   | 每月50万字符免费 | 输出稳定                                                                 |
+| OpenAI GPT-5.x (可配置，默认 gpt-5.6-sol)  |  否  |   需要   | 付费             | 默认模型，上下文感知                                                     |
+| Gemini 3.x (可配置，默认 gemini-3.6-flash) |  否  |   需要   | 免费 / 低成本    | 推荐的低成本路线 ([获取密钥](https://aistudio.google.com/app/apikey))    |
+| Claude (可配置，默认 claude-opus-5)        |  否  |   需要   | 付费             | 上下文理解出色 ([获取密钥](https://console.anthropic.com/settings/keys)) |
+| 自定义 OpenAI 兼容提供商                   |  否  |   需要   | 各异             | 自带端点 (OpenRouter、Ollama、vLLM 等)                                   |
 
 只有本地 Hy-MT2 引擎无需 API 密钥、无需网络、无每次费用，台词不会离开你的电脑。
 
@@ -82,18 +82,18 @@ WhisperSubTranslate 内置 Tencent Hy-MT2 模型(默认 1.8B，可选 7B)。在 
 
 ## 语音识别模型
 
-模型按需下载到 `_models/`。有 CUDA 时用 GPU，否则用 CPU。请选择适合你 GPU 的大小。
+模型按需下载到 `_models/`。NVIDIA 使用 CUDA，其他支持 Vulkan 的 GPU (AMD、Intel) 使用 Vulkan，都不可用时回退到 CPU。请选择适合你 GPU 的大小。
 
-| 模型 | 大小 | 显存 | 速度 | 备注 |
-| --- | --- | --- | --- | --- |
-| tiny | 约75MB | 约1GB | 最快 | 基础 |
-| base | 约142MB | 约1GB | 快 | 良好 |
-| small | 约466MB | 约1GB | 中等 | 更好 |
-| medium | 约1.5GB | 约2GB | 中等 | 优秀 |
-| large-v3 | 约3GB | 约4GB | 慢 | 转写最佳 |
-| large-v3-turbo (默认) | 约809MB | 约2GB | 快 | 综合最均衡 |
-| large-v2 同步 | 约4.4GB | 约4.5GB | 慢 | 独立引擎，修复字幕同步 |
-| large-v2 同步轻量 | 共用 | 约3GB | 慢 | 与同步同一文件，int8，低显存 |
+| 模型                  | 大小    | 显存    | 速度 | 备注                         |
+| --------------------- | ------- | ------- | ---- | ---------------------------- |
+| tiny                  | 约75MB  | 约1GB   | 最快 | 基础                         |
+| base                  | 约142MB | 约1GB   | 快   | 良好                         |
+| small                 | 约466MB | 约1GB   | 中等 | 更好                         |
+| medium                | 约1.5GB | 约2GB   | 中等 | 优秀                         |
+| large-v3              | 约3GB   | 约4GB   | 慢   | 转写最佳                     |
+| large-v3-turbo (默认) | 约809MB | 约2GB   | 快   | 综合最均衡                   |
+| large-v2 同步         | 约4.4GB | 约4.5GB | 慢   | 独立引擎，修复字幕同步       |
+| large-v2 同步轻量     | 共用    | 约3GB   | 慢   | 与同步同一文件，int8，低显存 |
 
 同步与同步轻量使用独立的 Faster-Whisper 引擎(首次自动下载一次; 引擎压缩包约1.4GB + 模型文件约3GB，合计约4.4GB),并共用同一模型文件，所以下载一次即可两者通用。仅在普通模型字幕错位时使用。它们在非英语视频(日语、韩语、中文)上最准确，英语通常用 large-v3-turbo 即可。
 
@@ -109,12 +109,12 @@ whisper.cpp 模型的显存为 GGML 优化基准，远低于 PyTorch Whisper(lar
 
 所有数据仅本地保存在用户文件夹，不会上传。
 
-| 数据 | 位置 |
-| --- | --- |
-| 设置与 API 密钥 | `%APPDATA%\whispersubtranslate\translation-config-safe.json` |
-| 任务历史 | `%APPDATA%\whispersubtranslate\history.json` (最多200条) |
-| 错误日志 | `%APPDATA%\whispersubtranslate\logs\errors.log` |
-| 模型 | `%APPDATA%\whispersubtranslate\_models` (用户数据文件夹; 非 ASCII 的 Windows 账户回退到 `C:\Users\Public\WhisperSubTranslate\_models`) |
+| 数据            | 位置                                                                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 设置与 API 密钥 | `%APPDATA%\whispersubtranslate\translation-config-safe.json`                                                                           |
+| 任务历史        | `%APPDATA%\whispersubtranslate\history.json` (最多200条)                                                                               |
+| 错误日志        | `%APPDATA%\whispersubtranslate\logs\errors.log`                                                                                        |
+| 模型            | `%APPDATA%\whispersubtranslate\_models` (用户数据文件夹; 非 ASCII 的 Windows 账户回退到 `C:\Users\Public\WhisperSubTranslate\_models`) |
 
 API 密钥用操作系统的安全存储保存在本地，配置文件不会提交到 Git 也不会打包。任务历史为可选(在设置中开关),最多保留200条。
 

@@ -30,8 +30,12 @@ jobs:
       # 불일치하므로 빌드 전에 검증한다.
       - name: Verify tag matches package.json version
         shell: pwsh
+        env:
+          # git 태그명에는 따옴표·백틱·$() 등이 허용되므로 ref_name을 스크립트에
+          # 직접 삽입하지 않고 env로 건넨다(GitHub 보안 하드닝 가이드).
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:TAG_NAME
           $pkg = node -p "require('./package.json').version"
           if (-not $tag.StartsWith('v')) { Write-Error "Tag must start with 'v', got: $tag"; exit 1 }
           $tagVer = $tag.Substring(1)
@@ -64,14 +68,30 @@ jobs:
           # main.js always falls back to whisper-cpp/whisper-cli.exe, so the
           # top-level binary is mandatory; cpu/ is an optional CUDA fallback.
           # Each binary needs whisper.dll beside it or spawn() fails as ENOENT.
-          $required = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll")
+          $required = @(
+            "whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll",
+            "whisper-cpp/vulkan/whisper-cli.exe", "whisper-cpp/vulkan/ggml-vulkan.dll",
+            "whisper-cpp/vulkan/ggml.dll", "whisper-cpp/vulkan/ggml-base.dll", "whisper-cpp/vulkan/ggml-cpu.dll"
+          )
           $missing = $required | Where-Object { -not (Test-Path $_) }
           if ($missing) {
             Write-Error "Missing required whisper.cpp files ($($missing -join ', ')) - postinstall download failed; aborting release"
             Get-ChildItem -Recurse whisper-cpp -ErrorAction SilentlyContinue | Select-Object FullName
             exit 1
           }
-          Write-Host "whisper-cli.exe present with runtime DLL: $($required -join ', ')"
+          Write-Host "CUDA and Vulkan whisper-cli bundles are present: $($required -join ', ')"
+          $vulkanHash = (Get-FileHash "whisper-cpp/vulkan/whisper-cli.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Vulkan CLI SHA-256: $vulkanHash"
+          # whisper-cli는 usage를 stderr로 쓴다. pwsh 스텝은 ErrorActionPreference가 Stop이라
+          # 그대로 두면 정상 실행도 NativeCommandError로 죽는다(아래 샘플 전사 스텝과 동일).
+          $ErrorActionPreference = 'Continue'
+          $vulkanHelp = & "whisper-cpp/vulkan/whisper-cli.exe" --help 2>&1 | Out-String
+          $vulkanExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($vulkanExit -ne 0 -or [string]::IsNullOrWhiteSpace($vulkanHelp)) {
+            Write-Error "Vulkan whisper-cli failed its runtime --help probe (exit $vulkanExit); aborting release"
+            exit 1
+          }
           if (Test-Path "whisper-cpp/cpu/whisper-cli.exe") {
             if (-not (Test-Path "whisper-cpp/cpu/whisper.dll")) {
               Write-Error "whisper-cpp/cpu/whisper-cli.exe ships without cpu/whisper.dll; aborting release"
@@ -93,8 +113,21 @@ jobs:
         shell: pwsh
         run: |
           $model = "whisper-cpp/ggml-tiny.bin"
+          # main.js의 GGML_MODEL_REVISION / GGML_MODEL_MANIFEST.tiny와 동일한 고정값.
           Invoke-WebRequest -UseBasicParsing -OutFile $model `
-            -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+            -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin"
+          $expectedSize = 77691713
+          $expectedSha256 = "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+          $modelSize = (Get-Item $model).Length
+          if ($modelSize -ne $expectedSize) {
+            Write-Error "ggml-tiny.bin size mismatch (expected $expectedSize, got $modelSize); aborting release"
+            exit 1
+          }
+          $modelHash = (Get-FileHash $model -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($modelHash -ne $expectedSha256) {
+            Write-Error "ggml-tiny.bin SHA-256 mismatch (expected $expectedSha256, got $modelHash); aborting release"
+            exit 1
+          }
           $out = "$env:RUNNER_TEMP/release-transcribe-check"
           # whisper-cli는 진행 상황을 stderr로 쓴다. pwsh 스텝은 ErrorActionPreference가
           # Stop이라 그대로 두면 정상 실행도 NativeCommandError로 죽는다.
@@ -127,8 +160,11 @@ jobs:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         shell: pwsh
         run: |
+          # -Include는 경로가 와일드카드로 끝나거나 -Recurse일 때만 적용된다.
+          # 와일드카드 없이 쓰면 cpu/vulkan 바이너리 전체가 스캔 누락됐다.
           $targets = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll") + `
-            (Get-ChildItem "whisper-cpp/cpu" -Filter *.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+            (Get-ChildItem "whisper-cpp/cpu/*" -Include *.exe,*.dll -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) + `
+            (Get-ChildItem "whisper-cpp/vulkan/*" -Include *.exe,*.dll -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
           node scripts/virustotal-check.js @targets
 
       - name: Lint + smoke test + e2e
@@ -139,21 +175,71 @@ jobs:
 
       - name: Package portable zip
         shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          $zip = "dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip"
+          $zip = "dist2/WhisperSubTranslate-${env:TAG_NAME}-win-x64.zip"
           if (-not (Test-Path "dist2/win-unpacked")) { throw "dist2/win-unpacked not found - build failed?" }
           Compress-Archive -Path "dist2/win-unpacked/*" -DestinationPath $zip -Force
           Write-Host "Created $zip ($((Get-Item $zip).Length) bytes)"
 
+      # afterPack.js의 CUDA DLL 복사 등은 실패해도 빌드가 죽지 않으므로("never
+      # throws"), 압축 결과물 안에 필수 항목이 실제로 있는지 언팩해 확인한다.
+      - name: Verify packaged zip layout
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $zip = "dist2/WhisperSubTranslate-${env:TAG_NAME}-win-x64.zip"
+          if (-not (Test-Path $zip)) { throw "zip not found: $zip" }
+          $checkDir = "$env:RUNNER_TEMP/zip-layout-check"
+          if (Test-Path $checkDir) { Remove-Item $checkDir -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $checkDir -Force
+          $required = @(
+            "resources/app.asar",
+            "resources/LICENSE",
+            "resources/THIRD_PARTY_NOTICES.md",
+            "resources/ffprobe.exe",
+            "resources/whisper-cpp/vulkan/whisper-cli.exe",
+            "resources/whisper-cpp/vulkan/ggml-vulkan.dll",
+            "resources/app.asar.unpacked/node_modules/@node-llama-cpp/win-x64-cuda/bins/win-x64-cuda/cudart64_12.dll",
+            "resources/app.asar.unpacked/node_modules/@node-llama-cpp/win-x64-cuda/bins/win-x64-cuda/cublas64_12.dll",
+            "resources/app.asar.unpacked/node_modules/@node-llama-cpp/win-x64-cuda/bins/win-x64-cuda/cublasLt64_12.dll"
+          )
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $checkDir $_)) }
+          if ($missing) {
+            Write-Error "Packaged zip is missing required entries ($($missing -join ', ')); aborting release"
+            exit 1
+          }
+          Write-Host "Packaged zip layout OK ($($required.Count) required entries present)"
+
+      # 다운로더가 무결성을 검증할 수 있도록 zip 옆에 SHA-256 체크섬을 게시한다.
+      - name: Create zip checksum
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $zip = "dist2/WhisperSubTranslate-${env:TAG_NAME}-win-x64.zip"
+          if (-not (Test-Path $zip)) { throw "zip not found: $zip" }
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Linux sha256sum -c 호환: BOM 없는 UTF-8 + LF 한 줄을 명시 기록한다.
+          $sumsPath = Join-Path (Get-Location).Path "$zip.sha256"
+          [IO.File]::WriteAllText($sumsPath, "$hash  $(Split-Path $zip -Leaf)`n", [System.Text.UTF8Encoding]::new($false))
+          Write-Host "Wrote $zip.sha256 -> $(Get-Content "$zip.sha256")"
+
       - name: Build release notes
-        run: node scripts/release-notes.js ${{ github.ref_name }}
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: node scripts/release-notes.js "$env:TAG_NAME"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: WhisperSubTranslate ${{ github.ref_name }}
           body_path: RELEASE_BODY.md
-          files: dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip
+          files: |
+            dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip
+            dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip.sha256
           draft: false
           prerelease: false
           fail_on_unmatched_files: true
