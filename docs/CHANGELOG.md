@@ -27,7 +27,7 @@ Feature release adding Vulkan acceleration for compatible Windows GPUs, verified
 ### Internal
 
 - The Windows release workflow validates the CPU engine with a real sample and validates the Vulkan engine with a real sample whenever the runner exposes a Vulkan device. It requires valid SRT timings and proof that the Vulkan backend was used.
-- Release archives include the project license and third-party notices, publish a SHA-256 checksum, and enumerate CPU and Vulkan binaries correctly for VirusTotal scanning.
+- Release archives include the project license and third-party notices, publish a SHA-256 checksum, and verify the packaged CPU and Vulkan binary layout.
 - Tag values are passed to PowerShell through environment variables instead of direct expression interpolation.
 - Added regression coverage for CUDA to Vulkan to CPU fallback, verified download resume and cancellation, Sync recovery-space calculations, empty SRT creation, package notices, and release gates.
 

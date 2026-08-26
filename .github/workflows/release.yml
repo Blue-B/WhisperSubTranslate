@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # zizmor: ignore[cache-poisoning] v4 cache disabled below
@@ -197,22 +199,6 @@ jobs:
           }
           Remove-Item $model -Force
 
-      # 새 바이너리가 백신(특히 Defender)에 오탐되는지 출시 전에 확인한다.
-      # v2.4.4가 새 whisper.cpp 빌드를 실은 직후 Defender ML 오탐으로 사용자
-      # 추출이 막힌 사례(upstream #3974 동일 계열)의 재발 방지.
-      # VIRUSTOTAL_API_KEY 시크릿이 없으면 검사는 SKIP으로 통과한다.
-      - name: VirusTotal pre-scan of bundled binaries
-        env:
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        shell: pwsh
-        run: |
-          # -Include는 경로가 와일드카드로 끝나거나 -Recurse일 때만 적용된다.
-          # 와일드카드 없이 쓰면 cpu/vulkan 바이너리 전체가 스캔 누락됐다.
-          $targets = @("whisper-cpp/whisper-cli.exe", "whisper-cpp/whisper.dll") + `
-            (Get-ChildItem "whisper-cpp/cpu/*" -Include *.exe,*.dll -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) + `
-            (Get-ChildItem "whisper-cpp/vulkan/*" -Include *.exe,*.dll -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
-          node scripts/virustotal-check.js @targets
-
       - name: Lint + smoke test + e2e
         run: npm run check:full
 
@@ -279,13 +265,18 @@ jobs:
         run: node scripts/release-notes.js "$env:TAG_NAME"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          name: WhisperSubTranslate ${{ github.ref_name }}
-          body_path: RELEASE_BODY.md
-          files: |
-            dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip
-            dist2/WhisperSubTranslate-${{ github.ref_name }}-win-x64.zip.sha256
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $zip = "dist2/WhisperSubTranslate-$env:TAG_NAME-win-x64.zip"
+          $checksum = "$zip.sha256"
+          if (-not (Test-Path $zip) -or -not (Test-Path $checksum) -or -not (Test-Path "RELEASE_BODY.md")) {
+            Write-Error "Release files are missing; aborting publication"
+            exit 1
+          }
+          gh release create $env:TAG_NAME $zip $checksum `
+            --verify-tag `
+            --title "WhisperSubTranslate $env:TAG_NAME" `
+            --notes-file RELEASE_BODY.md

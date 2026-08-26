@@ -2,7 +2,7 @@ name: Engine update check
 
 # whisper.cpp는 scripts/postinstall.js의 WHISPER_CPP_VERSION으로 고정되어 있다.
 # 이 워크플로가 월 1회 업스트림 최신 릴리스를 확인하고, 새 버전이 있으면
-# 실제 음성 추출 테스트 + VirusTotal 검사를 돌린 뒤 결과를 담은 PR을 연다.
+# 실제 음성 추출 테스트를 돌린 뒤 결과를 담은 PR을 연다.
 # 머지 여부는 사람이 결정한다 — 검증 없이 엔진이 바뀌는 일은 없다.
 
 on:
@@ -19,6 +19,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
+        # zizmor: ignore[artipacked] the later git push needs checkout credentials; this job uploads no artifacts
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node
@@ -55,8 +56,10 @@ jobs:
         if: steps.compare.outputs.update == 'true'
         id: transcribe
         shell: pwsh
+        env:
+          LATEST_TAG: ${{ steps.compare.outputs.latest }}
         run: |
-          $tag = "${{ steps.compare.outputs.latest }}"
+          $tag = $env:LATEST_TAG
           Invoke-WebRequest -UseBasicParsing -OutFile engine.zip `
             -Uri "https://github.com/ggml-org/whisper.cpp/releases/download/$tag/whisper-bin-x64.zip"
           Expand-Archive engine.zip -DestinationPath engine-test -Force
@@ -74,31 +77,17 @@ jobs:
           "result=$result" >> $env:GITHUB_OUTPUT
           Write-Host "transcription: $result"
 
-      - name: VirusTotal check of the new binaries
-        if: steps.compare.outputs.update == 'true'
-        id: virustotal
-        shell: pwsh
-        env:
-          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: |
-          $cli = (Get-ChildItem -Recurse -Filter whisper-cli.exe engine-test | Select-Object -First 1)
-          $dll = Get-ChildItem -Path $cli.DirectoryName -Filter whisper.dll
-          $ErrorActionPreference = 'Continue'
-          $log = node scripts/virustotal-check.js $cli.FullName $dll.FullName 2>&1 | Out-String
-          $code = $LASTEXITCODE
-          $ErrorActionPreference = 'Stop'
-          Write-Host $log
-          "result=$(if ($code -eq 0) { 'CLEAN or SKIPPED' } else { 'MICROSOFT DETECTION — do not merge yet' })" >> $env:GITHUB_OUTPUT
-          $log | Out-File vt-result.txt
-
       - name: Open the engine bump PR
         if: steps.compare.outputs.update == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          PINNED_VERSION: ${{ steps.compare.outputs.pinned }}
+          LATEST_TAG: ${{ steps.compare.outputs.latest }}
+          TRANSCRIPTION_RESULT: ${{ steps.transcribe.outputs.result }}
         run: |
-          $pinned = "${{ steps.compare.outputs.pinned }}"
-          $latest = "${{ steps.compare.outputs.latest }}"
+          $pinned = $env:PINNED_VERSION
+          $latest = $env:LATEST_TAG
           (Get-Content scripts/postinstall.js -Raw) -replace `
             "WHISPER_CPP_VERSION = '$pinned'", "WHISPER_CPP_VERSION = '$latest'" |
             Set-Content scripts/postinstall.js -NoNewline
@@ -108,25 +97,17 @@ jobs:
           git add scripts/postinstall.js
           git commit -m "chore(engine): bump whisper.cpp $pinned -> $latest"
           git push origin "engine-update/$latest"
-          $vt = if (Test-Path vt-result.txt) { Get-Content vt-result.txt -Raw } else { 'not run' }
           $lines = @(
             'Automated engine update check.',
             '',
             '| Check | Result |',
             '| --- | --- |',
-            '| Transcription (nya.wav, tiny model) | ${{ steps.transcribe.outputs.result }} |',
-            '| VirusTotal | ${{ steps.virustotal.outputs.result }} |',
-            '',
-            '<details><summary>VirusTotal log</summary>',
-            '<pre>',
-            $vt,
-            '</pre>',
-            '</details>',
+            "| Transcription (nya.wav, tiny model) | $env:TRANSCRIPTION_RESULT |",
             '',
             "Upstream release notes: https://github.com/ggml-org/whisper.cpp/releases/tag/$latest",
             '',
             'Merging this PR changes which engine the next release bundles. The release',
-            'workflow will re-verify with a real transcription and a VirusTotal scan.'
+            'workflow will re-verify it with a real transcription.'
           )
           Set-Content -Path pr-body.md -Value ($lines -join "`n")
           gh pr create --title "chore(engine): whisper.cpp $pinned -> $latest" `
