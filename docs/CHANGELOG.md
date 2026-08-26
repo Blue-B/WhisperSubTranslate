@@ -2,6 +2,35 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-08-26
+
+Feature release adding Vulkan acceleration for compatible Windows GPUs, verified resumable downloads, and stronger release checks.
+
+### Added
+
+- **Vulkan GPU acceleration:** normal Whisper GGML models can use compatible AMD, Intel, and NVIDIA GPUs. Automatic mode tries CUDA first, then Vulkan, then CPU. Sync and Sync Lite remain CUDA or CPU only.
+- **Model-folder shortcut:** Settings can open the exact folder used for Whisper models, including the portable and non-ASCII Windows-path fallbacks. Manually placed model files are detected there.
+- **Backend status:** the device panel reports whether CUDA, Vulkan, or CPU will be used in the current environment.
+
+### Changed
+
+- **Verified downloads:** Whisper models, Sync files, VAD, whisper.cpp executables, the Vulkan runtime, and the Faster-Whisper archive are pinned to immutable revisions, expected sizes, and SHA-256 digests where available.
+- **Download recovery:** interrupted model and Sync downloads resume from `.partial` files, switch to the configured mirror when the official endpoint is blocked, and restart safely when a server ignores or rejects the requested byte range.
+- **GPU selection:** the existing GPU option now represents CUDA or Vulkan, so users do not need to know which backend their graphics card supports.
+
+### Fixed
+
+- **Sync disk preflight:** existing partial downloads and a verified engine archive count toward installation progress. Oversized or invalid files are removed before available space is calculated.
+- **Silent input results:** a successful transcription with no speech now creates a real empty SRT file instead of returning a path that does not exist.
+- **Download integrity failures:** wrong-size, oversized, truncated, or hash-mismatched files cannot be promoted to installed models or executable assets.
+
+### Internal
+
+- The Windows release workflow validates the CPU engine with a real sample and validates the Vulkan engine with a real sample whenever the runner exposes a Vulkan device. It requires valid SRT timings and proof that the Vulkan backend was used.
+- Release archives include the project license and third-party notices, publish a SHA-256 checksum, and enumerate CPU and Vulkan binaries correctly for VirusTotal scanning.
+- Tag values are passed to PowerShell through environment variables instead of direct expression interpolation.
+- Added regression coverage for CUDA to Vulkan to CPU fallback, verified download resume and cancellation, Sync recovery-space calculations, empty SRT creation, package notices, and release gates.
+
 ## [2.4.6] - 2026-08-09
 
 ### Fixed
