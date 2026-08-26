@@ -597,6 +597,8 @@ function runReleaseVulkanGate() {
   assert.ok(probe >= 0 && cleanup > probe, 'Vulkan transcription must run before the tiny model is removed');
   const gate = source.slice(probe, cleanup);
   for (const required of [
+    String.raw`whisper_backend_init_gpu:\s+no GPU found`,
+    'elseif ($vulkanNoGpu)',
     'if ($vulkanDeviceCount -eq 0)',
     'if ($vulkanTranscribeExit -ne 0)',
     'Test-Path "$vulkanOut.srt"',

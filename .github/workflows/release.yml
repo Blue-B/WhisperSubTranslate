@@ -164,11 +164,15 @@ jobs:
             $vulkanLog,
             'ggml_vulkan:\s*Found\s+(\d+)\s+Vulkan devices:'
           )
-          if (-not $vulkanDeviceMatch.Success) {
+          $vulkanNoGpu = $vulkanLog -match 'whisper_backend_init_gpu:\s+no GPU found'
+          if ($vulkanDeviceMatch.Success) {
+            $vulkanDeviceCount = [int]$vulkanDeviceMatch.Groups[1].Value
+          } elseif ($vulkanNoGpu) {
+            $vulkanDeviceCount = 0
+          } else {
             Write-Error "Vulkan probe did not report an unambiguous device count; aborting release"
             exit 1
           }
-          $vulkanDeviceCount = [int]$vulkanDeviceMatch.Groups[1].Value
           if ($vulkanDeviceCount -eq 0) {
             Write-Warning "Hosted runner reported 0 Vulkan devices; hardware transcription gate skipped"
           } else {
