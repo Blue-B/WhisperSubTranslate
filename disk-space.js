@@ -14,16 +14,41 @@ const SYNC_SHARED_INSTALL_BYTES = Math.ceil(4.4 * GIB);
 const SYNC_ENGINE_EXTRACTED_BYTES = SYNC_ENGINE_ARCHIVE_BYTES * 3;
 const SYNC_ENGINE_EXTRACTION_PEAK_BYTES = SYNC_ENGINE_ARCHIVE_BYTES + SYNC_ENGINE_EXTRACTED_BYTES;
 
-function getSyncInstallRequiredBytes(engineInstalled, modelInstalled) {
+function getReusablePartialSize(filePath, maxBytes) {
+  try {
+    const size = fs.statSync(filePath).size;
+    if (size <= maxBytes) return size;
+    fs.rmSync(filePath, { force: true });
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  return 0;
+}
+
+function getSyncInstallRequiredBytes(engineInstalled, modelInstalled, enginePartialBytes = 0, modelPartialBytes = 0) {
   if (engineInstalled && modelInstalled) return 0;
+
+  const engineProgress = Math.min(
+    Math.max(Number.isFinite(enginePartialBytes) ? enginePartialBytes : 0, 0),
+    SYNC_ENGINE_ARCHIVE_BYTES
+  );
+  const modelProgress = Math.min(
+    Math.max(Number.isFinite(modelPartialBytes) ? modelPartialBytes : 0, 0),
+    SYNC_MODEL_BYTES
+  );
+  const engineRemaining = engineInstalled ? 0 : SYNC_ENGINE_ARCHIVE_BYTES - engineProgress;
+  const modelRemaining = modelInstalled ? 0 : SYNC_MODEL_BYTES - modelProgress;
+
   if (!engineInstalled && !modelInstalled) {
+    // The engine archive exists during extraction, then is deleted before the model finishes.
+    // Measure both peaks against the partial files that already consume the caller's free space.
     return Math.max(
-      SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
-      SYNC_SHARED_INSTALL_BYTES,
-      SYNC_ENGINE_EXTRACTED_BYTES + SYNC_MODEL_BYTES
+      engineRemaining + SYNC_ENGINE_EXTRACTED_BYTES,
+      Math.max(0, SYNC_SHARED_INSTALL_BYTES - engineProgress - modelProgress),
+      Math.max(0, SYNC_ENGINE_EXTRACTED_BYTES + modelRemaining - engineProgress)
     );
   }
-  return engineInstalled ? SYNC_MODEL_BYTES : SYNC_ENGINE_EXTRACTION_PEAK_BYTES;
+  return engineInstalled ? modelRemaining : engineRemaining + SYNC_ENGINE_EXTRACTED_BYTES;
 }
 
 function assertDownloadDiskSpace(destPath, downloadBytes, reserveBytes = DEFAULT_RESERVE_BYTES) {
@@ -46,8 +71,19 @@ function assertDownloadDiskSpace(destPath, downloadBytes, reserveBytes = DEFAULT
   }
 }
 
-function assertSyncInstallDiskSpace(destPath, engineInstalled, modelInstalled) {
-  const requiredBytes = getSyncInstallRequiredBytes(engineInstalled, modelInstalled);
+function assertSyncInstallDiskSpace(
+  destPath,
+  engineInstalled,
+  modelInstalled,
+  enginePartialBytes = 0,
+  modelPartialBytes = 0
+) {
+  const requiredBytes = getSyncInstallRequiredBytes(
+    engineInstalled,
+    modelInstalled,
+    enginePartialBytes,
+    modelPartialBytes
+  );
   if (requiredBytes > 0) assertDownloadDiskSpace(destPath, requiredBytes);
   return requiredBytes;
 }
@@ -55,6 +91,7 @@ function assertSyncInstallDiskSpace(destPath, engineInstalled, modelInstalled) {
 module.exports = {
   assertDownloadDiskSpace,
   assertSyncInstallDiskSpace,
+  getReusablePartialSize,
   getSyncInstallRequiredBytes,
   SYNC_ENGINE_ARCHIVE_BYTES,
   SYNC_MODEL_BYTES,

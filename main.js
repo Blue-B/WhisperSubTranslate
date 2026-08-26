@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { pathToFileURL } = require('url');
-const { assertDownloadDiskSpace, assertSyncInstallDiskSpace } = require('./disk-space');
+const { assertDownloadDiskSpace, assertSyncInstallDiskSpace, getReusablePartialSize } = require('./disk-space');
 const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
 const { isCompleteWavFile } = require('./file-safety');
 // 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
@@ -1943,7 +1943,19 @@ async function downloadFileWithProgress(url, destPath, label, onPercent, manifes
   });
 }
 
-async function ensureFasterWhisperEngine(onPercent) {
+async function hasVerifiedFasterWhisperArchive(archivePath) {
+  if (!fs.existsSync(archivePath)) return false;
+  let verified = false;
+  try {
+    verified =
+      fs.statSync(archivePath).size === FASTER_WHISPER_ZIP_SIZE &&
+      (await sha256File(archivePath)) === FASTER_WHISPER_ZIP_SHA256;
+  } catch (_e) {}
+  if (!verified) fs.rmSync(archivePath, { force: true });
+  return verified;
+}
+
+async function ensureFasterWhisperEngine(onPercent, archiveReady = false) {
   if (process.platform !== 'win32') {
     throw new Error('Faster-Whisper sync engine is currently available on Windows only.');
   }
@@ -1961,17 +1973,7 @@ async function ensureFasterWhisperEngine(onPercent) {
   const partialPath = archivePath + '.partial';
   // 지난번 압축 해제가 실패해 검증된 아카이브가 남아 있으면 다시 받지 않는다.
   // 예전에는 무조건 지워서 디스크가 빠들한 사용자가 시도할 때마다 1.4GB를 재다운로드했다.
-  let archiveReady = false;
-  try {
-    if (fs.existsSync(archivePath)) {
-      archiveReady =
-        fs.statSync(archivePath).size === FASTER_WHISPER_ZIP_SIZE &&
-        (await sha256File(archivePath)) === FASTER_WHISPER_ZIP_SHA256;
-      if (!archiveReady) fs.unlinkSync(archivePath);
-    }
-  } catch (_e) {
-    archiveReady = false;
-  }
+  if (!archiveReady) archiveReady = await hasVerifiedFasterWhisperArchive(archivePath);
 
   if (archiveReady) {
     mainWindow?.webContents?.send('output-update', 'Reusing the verified sync engine archive already downloaded.\n');
@@ -2056,12 +2058,28 @@ async function ensureFasterWhisperAssets(onProgress) {
       // 네트워크 요청 전에 검사한다. 단계별 Content-Length 검사는 아래에서도 유지한다.
       const existingExePath = getFasterWhisperExePath();
       const engineInstalled = !!(existingExePath && fs.existsSync(existingExePath));
-      const modelInstalled = fs.existsSync(
-        path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin')
+      const rootDir = getFasterWhisperRootDir();
+      const modelPath = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin');
+      const modelManifest = SYNC_FILE_MANIFEST['model.bin'];
+      const modelInstalled = hasExpectedSize(modelPath, modelManifest);
+      const engineArchivePath = path.join(rootDir, 'Faster-Whisper-XXL_windows.7z');
+      const enginePartialPath = `${engineArchivePath}.partial`;
+      const engineArchiveReady = !engineInstalled && (await hasVerifiedFasterWhisperArchive(engineArchivePath));
+      if (engineInstalled || engineArchiveReady) fs.rmSync(enginePartialPath, { force: true });
+      if (engineInstalled) fs.rmSync(engineArchivePath, { force: true });
+      const enginePartialBytes = engineArchiveReady
+        ? FASTER_WHISPER_ZIP_SIZE
+        : getReusablePartialSize(enginePartialPath, FASTER_WHISPER_ZIP_SIZE);
+      const modelPartialBytes = getReusablePartialSize(`${modelPath}.partial`, modelManifest.size);
+      assertSyncInstallDiskSpace(
+        path.join(rootDir, '.installing'),
+        engineInstalled,
+        modelInstalled,
+        enginePartialBytes,
+        modelPartialBytes
       );
-      assertSyncInstallDiskSpace(path.join(getFasterWhisperRootDir(), '.installing'), engineInstalled, modelInstalled);
 
-      const exePath = await ensureFasterWhisperEngine((pct) => emit(pct * 0.32));
+      const exePath = await ensureFasterWhisperEngine((pct) => emit(pct * 0.32), engineArchiveReady);
       emit(34);
       await ensureFasterWhisperModel(emit);
       _cachedFwExePath = null;

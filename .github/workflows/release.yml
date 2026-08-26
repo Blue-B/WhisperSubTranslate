@@ -21,10 +21,10 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # zizmor: ignore[cache-poisoning] v4 cache disabled below
         with:
           node-version: '22'
-          cache: npm
+          cache: '' # release artifacts must never restore a writable dependency cache
 
       # 태그(v*)와 package.json 버전이 어긋나면 릴리스 산출물 이름과 body가
       # 불일치하므로 빌드 전에 검증한다.
@@ -149,6 +149,48 @@ jobs:
             exit 1
           }
           Write-Host "Bundled engine transcribed the sample:`n$srt"
+
+          # Hosted Windows runners may expose no Vulkan device. When a device is present,
+          # require a real transcription and proof that whisper used the Vulkan backend.
+          $vulkanOut = "$env:RUNNER_TEMP/release-vulkan-transcribe-check"
+          $ErrorActionPreference = 'Continue'
+          $vulkanLog = & "whisper-cpp/vulkan/whisper-cli.exe" `
+            -m $model -f "nya.wav" -osrt -of $vulkanOut -l en 2>&1 | Out-String
+          $vulkanTranscribeExit = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          Write-Host "Vulkan transcription probe output:`n$vulkanLog"
+
+          $vulkanDeviceMatch = [regex]::Match(
+            $vulkanLog,
+            'ggml_vulkan:\s*Found\s+(\d+)\s+Vulkan devices:'
+          )
+          if (-not $vulkanDeviceMatch.Success) {
+            Write-Error "Vulkan probe did not report an unambiguous device count; aborting release"
+            exit 1
+          }
+          $vulkanDeviceCount = [int]$vulkanDeviceMatch.Groups[1].Value
+          if ($vulkanDeviceCount -eq 0) {
+            Write-Warning "Hosted runner reported 0 Vulkan devices; hardware transcription gate skipped"
+          } else {
+            if ($vulkanTranscribeExit -ne 0) {
+              Write-Error "Vulkan whisper-cli exited with $vulkanTranscribeExit despite detecting $vulkanDeviceCount device(s); aborting release"
+              exit 1
+            }
+            if (-not (Test-Path "$vulkanOut.srt")) {
+              Write-Error "Vulkan whisper-cli exited 0 but produced no SRT; aborting release"
+              exit 1
+            }
+            if (-not ($vulkanLog -match 'whisper_backend_init_gpu:\s+using Vulkan\d+ backend')) {
+              Write-Error "Vulkan devices were detected but the Vulkan backend was not used; aborting release"
+              exit 1
+            }
+            $vulkanSrt = (Get-Content "$vulkanOut.srt" -Raw).Trim()
+            if (-not ($vulkanSrt -match '\d+:\d{2}:\d{2},\d{3} --> ')) {
+              Write-Error "Vulkan SRT has no usable cue timings; aborting release`n$vulkanSrt"
+              exit 1
+            }
+            Write-Host "Vulkan engine transcribed the sample with its GPU backend:`n$vulkanSrt"
+          }
           Remove-Item $model -Force
 
       # 새 바이너리가 백신(특히 Defender)에 오탐되는지 출시 전에 확인한다.

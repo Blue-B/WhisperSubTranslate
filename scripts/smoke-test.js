@@ -22,7 +22,9 @@ const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-c
 const {
   assertDownloadDiskSpace,
   assertSyncInstallDiskSpace,
+  getReusablePartialSize,
   getSyncInstallRequiredBytes,
+  SYNC_ENGINE_ARCHIVE_BYTES,
   SYNC_MODEL_BYTES,
   SYNC_ENGINE_EXTRACTED_BYTES,
   SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
@@ -486,6 +488,26 @@ function runSyncPreflightOrdering() {
   );
   assert.match(downloader, /fs\.statSync\(partialPath\)/, 'Sync downloads must resume from preserved partial files');
   assert.match(downloader, /Range: `bytes=\$\{offset\}-`/, 'Sync downloads must request HTTP Range when resuming');
+  assert.match(
+    source,
+    /enginePartialBytes = engineArchiveReady/,
+    'Sync preflight must count a verified final engine archive'
+  );
+  assert.match(
+    source,
+    /getReusablePartialSize\(enginePartialPath/,
+    'Sync preflight must count existing engine partial bytes'
+  );
+  assert.match(
+    source,
+    /modelPartialBytes = getReusablePartialSize\(/,
+    'Sync preflight must count existing model bytes'
+  );
+  assert.match(
+    source,
+    /ensureFasterWhisperEngine\(\(pct\) => emit\(pct \* 0\.32\), engineArchiveReady\)/,
+    'Sync install must reuse the archive verified before preflight'
+  );
   assert.match(source, /Preserving stale sibling WAV/, 'stale sibling WAVs must stay in place');
   assert.doesNotMatch(source, /backupStaleWav/, 'conversion must not create accumulating stale WAV backups');
   console.log('[SyncDiskPreflight] install peak, partial cleanup, and stale WAV preservation are wired (ok)');
@@ -566,6 +588,24 @@ function runPackageNoticesConfig() {
     assert.ok(shipped.includes(notice), `electron-builder build.extraResources must ship ${notice} into resources/`);
   }
   console.log('[PackageNotices] LICENSE and THIRD_PARTY_NOTICES.md ship into resources/ (ok)');
+}
+
+function runReleaseVulkanGate() {
+  const source = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8');
+  const probe = source.indexOf('$vulkanLog = & "whisper-cpp/vulkan/whisper-cli.exe"');
+  const cleanup = source.indexOf('Remove-Item $model -Force', probe);
+  assert.ok(probe >= 0 && cleanup > probe, 'Vulkan transcription must run before the tiny model is removed');
+  const gate = source.slice(probe, cleanup);
+  for (const required of [
+    'if ($vulkanDeviceCount -eq 0)',
+    'if ($vulkanTranscribeExit -ne 0)',
+    'Test-Path "$vulkanOut.srt"',
+    String.raw`whisper_backend_init_gpu:\s+using Vulkan\d+ backend`,
+    String.raw`\d+:\d{2}:\d{2},\d{3} --> `,
+  ]) {
+    assert.ok(gate.includes(required), `Vulkan release gate is missing: ${required}`);
+  }
+  console.log('[ReleaseVulkanGate] device count, exit, backend, and real SRT gates are wired (ok)');
 }
 
 function runRendererSourceLangPayload() {
@@ -657,9 +697,65 @@ function runDiskSpaceGuard() {
     'fresh Sync install must include the extracted engine and model together'
   );
 
+  const mib = 1024 ** 2;
+  const modelRemaining = 64 * mib;
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(true, false, 0, SYNC_MODEL_BYTES - modelRemaining),
+    modelRemaining,
+    'an installed engine with a nearly complete model partial needs only the remaining model bytes'
+  );
+  const engineRemaining = 64 * mib;
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(false, true, SYNC_ENGINE_ARCHIVE_BYTES - engineRemaining),
+    SYNC_ENGINE_EXTRACTED_BYTES + engineRemaining,
+    'an engine partial must still reserve its remaining download plus extraction space'
+  );
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(false, true, SYNC_ENGINE_ARCHIVE_BYTES),
+    SYNC_ENGINE_EXTRACTED_BYTES,
+    'a verified final engine archive must require extraction space without duplicate download space'
+  );
+  const largerModelRemaining = 512 * mib;
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(
+      false,
+      false,
+      SYNC_ENGINE_ARCHIVE_BYTES - engineRemaining,
+      SYNC_MODEL_BYTES - largerModelRemaining
+    ),
+    SYNC_ENGINE_EXTRACTED_BYTES + engineRemaining,
+    'nearly complete partials must still reserve the larger engine extraction peak'
+  );
+  const engineProgress = 128 * mib;
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(false, false, engineProgress, 0),
+    SYNC_ENGINE_EXTRACTED_BYTES + SYNC_MODEL_BYTES - engineProgress,
+    'fresh model download must keep the final engine+model peak after the engine archive is removed'
+  );
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(true, false, 0, 0),
+    SYNC_MODEL_BYTES,
+    'an oversized partial discarded by main must not reduce the required bytes'
+  );
+  assert.strictEqual(
+    getSyncInstallRequiredBytes(true, false, 0, Number.NaN),
+    SYNC_MODEL_BYTES,
+    'invalid partial progress must not reduce the required bytes'
+  );
+
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-disk-space-'));
   const dest = path.join(dir, 'models', 'model.bin');
   try {
+    const validPartial = path.join(dir, 'valid.partial');
+    fs.writeFileSync(validPartial, '1234');
+    assert.strictEqual(getReusablePartialSize(validPartial, 5), 4);
+    assert.ok(fs.existsSync(validPartial), 'valid partial must be preserved for resume');
+
+    const oversizedPartial = path.join(dir, 'oversized.partial');
+    fs.writeFileSync(oversizedPartial, '123456');
+    assert.strictEqual(getReusablePartialSize(oversizedPartial, 5), 0);
+    assert.ok(!fs.existsSync(oversizedPartial), 'oversized partial must be removed before disk preflight');
+
     assert.strictEqual(assertSyncInstallDiskSpace(dest, true, true), 0);
     const { bavail, bsize } = fs.statfsSync(dir);
     const freeBytes = bavail * bsize;
@@ -1870,6 +1966,7 @@ async function run() {
   await runThrottleTiers();
   await runQuotaMessagePrecision();
   runPackageNoticesConfig();
+  runReleaseVulkanGate();
   runWhisperFallbackEligibility();
   await runPostinstallDigestGuards();
 
