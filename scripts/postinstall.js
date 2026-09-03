@@ -22,7 +22,7 @@ const CPU_CLI = path.join(CPU_DIR, CLI_NAME);
 // 1.9.1 -> 1.9.2로 조용히 갈아끼운 사례), 같은 소스를 빌드해도 결과가
 // 달라져 문제 추적이 불가능해진다. 올릴 때는 이 태그를 바꾸고 릴리스
 // 워크플로우의 실제 자막 추출 검증을 통과시킨 뒤에 올린다.
-const WHISPER_CPP_VERSION = 'v1.9.1';
+const WHISPER_CPP_VERSION = 'b4938';
 const GITHUB_API = `https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/${WHISPER_CPP_VERSION}`;
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB limit for API response
 const MAX_REDIRECTS = 5;
