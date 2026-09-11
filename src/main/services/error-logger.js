@@ -1,5 +1,5 @@
 // 통합 에러 로거: %APPDATA%/whispersubtranslate/logs/errors.log
-// translator-enhanced.js + main.js (whisper, ffmpeg, IPC) 모두 여기로 통합
+// translator service + main process (whisper, ffmpeg, IPC) 모두 여기로 통합
 // 2MB 초과 시 최근 1000줄만 유지하는 self-trim.
 const fs = require('fs');
 const path = require('path');
@@ -18,7 +18,7 @@ function getLogPath() {
       return path.join(logsDir, 'errors.log');
     }
   } catch (_e) {}
-  return path.join(__dirname, '..', 'errors.log');
+  return path.resolve(__dirname, '../../..', 'errors.log');
 }
 
 const LOG_MAX_SIZE = 2 * 1024 * 1024;
@@ -56,13 +56,4 @@ function logError(scope, message, err) {
   }
 }
 
-function logInfo(scope, message) {
-  try {
-    const logPath = getLogPath();
-    cleanupIfLarge(logPath);
-    const ts = new Date().toISOString();
-    fs.appendFileSync(logPath, `[${ts}] [${scope}] ${message}\n`, 'utf8');
-  } catch (_e) {}
-}
-
-module.exports = { setElectronApp, getLogPath, logError, logInfo };
+module.exports = { setElectronApp, getLogPath, logError };

@@ -15,7 +15,7 @@
  *      Cue numbers are renumbered after any deletion.
  *
  * Both are opt-in because the app intentionally translates real words inside
- * brackets/parentheses (see translator-enhanced.js isNonDialogue). Turning SDH
+ * brackets/parentheses (see translator service isNonDialogue). Turning SDH
  * removal on is an explicit "I want sound descriptions gone" choice.
  */
 

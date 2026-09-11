@@ -1,7 +1,6 @@
 'use strict';
 
 const fs = require('fs');
-const { pipeline } = require('stream/promises');
 
 function isCompleteWavFile(wavPath, fileSize) {
   if (fileSize < 44) return false;
@@ -30,19 +29,4 @@ function isCompleteWavFile(wavPath, fileSize) {
   return false;
 }
 
-async function writeDownloadStream(readable, destPath, onWriter) {
-  const writer = fs.createWriteStream(destPath);
-  onWriter?.(writer);
-  try {
-    await pipeline(readable, writer);
-  } catch (error) {
-    try {
-      fs.rmSync(destPath, { force: true });
-    } catch (cleanupError) {
-      throw new Error(`${error.message}; partial cleanup failed: ${cleanupError.message}`, { cause: error });
-    }
-    throw error;
-  }
-}
-
-module.exports = { isCompleteWavFile, writeDownloadStream };
+module.exports = { isCompleteWavFile };

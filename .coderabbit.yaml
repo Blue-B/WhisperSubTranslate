@@ -44,16 +44,16 @@ reviews:
 
   # Targeted guidance per area of the codebase.
   path_instructions:
-    - path: 'main.js'
+    - path: 'src/main/**'
       instructions: >-
         Electron main process. Flag nodeIntegration:true without
         contextIsolation:true, unvalidated ipcMain handlers, shell.openExternal
         on untrusted input, and any API key / secret written to disk unencrypted.
-    - path: 'preload.js'
+    - path: 'src/preload/**'
       instructions: >-
         Only expose a minimal, explicit API via contextBridge. Flag exposing
         ipcRenderer or Node primitives directly to the renderer.
-    - path: 'renderer.js'
+    - path: 'src/renderer/**'
       instructions: >-
         Renderer (browser context). Flag innerHTML with untrusted data (XSS) and
         direct Node/Electron access that should go through the preload bridge.

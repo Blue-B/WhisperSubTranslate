@@ -9,8 +9,8 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
-    <link rel="icon" type="image/png" sizes="256x256" href="assets/app-icon-256.png?v=v4w" />
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/app-icon-32.png?v=v4w" />
+    <link rel="icon" type="image/png" sizes="256x256" href="../../assets/app-icon-256.png?v=v4w" />
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/app-icon-32.png?v=v4w" />
     <link rel="stylesheet" href="styles.css?v=v4log17" />
   </head>
   <body>
@@ -39,7 +39,7 @@
     <header class="header">
       <div class="header-left">
         <div class="logo">
-          <img src="assets/app-icon-96.png?v=v4w" alt="" aria-hidden="true" class="logo-img" />
+          <img src="../../assets/app-icon-96.png?v=v4w" alt="" aria-hidden="true" class="logo-img" />
           <span class="logo-text">WhisperSubTranslate</span>
         </div>
         <span id="versionBadge" class="version-badge">v2.5.0</span>
@@ -130,13 +130,13 @@
         <div id="dropZone" class="dropzone">
           <!-- ambient hero — 뒤 양옆으로 은은한 분위기 -->
           <div class="drop-hero-bg" aria-hidden="true">
-            <img src="assets/px-hero-scene.png?v=v4rice4" alt="" />
+            <img src="../../assets/px-hero-scene.png?v=v4rice4" alt="" />
           </div>
 
           <!-- 중앙 수직 스택 -->
           <div class="drop-stack">
             <div class="drop-mascot-frame">
-              <img class="drop-mascot-img" src="assets/px-mascot-asr.png?v=v4w" alt="" aria-hidden="true" />
+              <img class="drop-mascot-img" src="../../assets/px-mascot-asr.png?v=v4w" alt="" aria-hidden="true" />
             </div>
             <h3 id="dropTitle" class="drop-title">여기에 파일을 놓아주세요</h3>
             <p id="dropHint1" class="drop-hint">동영상이나 SRT 파일을 드래그 또는 클릭하세요</p>
@@ -374,7 +374,7 @@
         <div id="queueList" class="queue-list">
           <div class="queue-empty">
             <div class="queue-empty-icon queue-empty-pixel">
-              <img src="assets/px-empty-queue.png?v=v4w" alt="" aria-hidden="true" />
+              <img src="../../assets/px-empty-queue.png?v=v4w" alt="" aria-hidden="true" />
             </div>
             <p id="emptyQueueTitle" class="queue-empty-title">대기열 비어 있음</p>
             <p id="emptyQueueHint" class="queue-empty-hint">동영상이나 SRT 파일을<br />왼쪽 드랍존에 드래그하세요</p>
@@ -474,7 +474,7 @@
         <div id="historyList" class="history-list">
           <div class="history-empty">
             <div class="history-empty-pixel">
-              <img src="assets/px-empty-history.png?v=v4w" alt="" aria-hidden="true" />
+              <img src="../../assets/px-empty-history.png?v=v4w" alt="" aria-hidden="true" />
             </div>
             <p class="history-empty-title" id="historyEmptyTitle" data-i18n="historyEmptyTitleStatic">
               아직 작업 이력이 없습니다
@@ -517,7 +517,7 @@
           </div>
         </header>
         <div class="models-grid" id="modelsGrid">
-          <!-- Models will be rendered by renderer.js -->
+          <!-- Model cards are rendered by features/models.js -->
         </div>
       </section>
     </main>
@@ -1021,7 +1021,16 @@
       </div>
     </div>
 
-    <script src="locales/i18n.js?v=4ac67e1b"></script>
-    <script src="renderer.js?v=v4log17"></script>
+    <script src="../../locales/i18n.js?v=4ac67e1b"></script>
+    <script src="state.js?v=v5"></script>
+    <script src="features/logs.js?v=v5"></script>
+    <script src="features/progress.js?v=v5"></script>
+    <script src="features/queue.js?v=v5"></script>
+    <script src="features/history.js?v=v5"></script>
+    <script src="features/models.js?v=v5"></script>
+    <script src="features/settings.js?v=v5"></script>
+    <script src="features/providers.js?v=v5"></script>
+    <script src="features/processing.js?v=v5"></script>
+    <script src="index.js?v=v5"></script>
   </body>
 </html>

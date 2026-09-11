@@ -93,8 +93,8 @@ async function run() {
   // -------------------------------------------------------------------------
   // 2. extract-subtitles while preserving an invalid sibling WAV
   // -------------------------------------------------------------------------
-  const nya = path.join(ROOT, 'nya.wav');
-  if (!fs.existsSync(nya)) fail('nya.wav missing — cannot run extraction');
+  const nya = path.join(ROOT, 'assets', 'nya.wav');
+  if (!fs.existsSync(nya)) fail('assets/nya.wav missing — cannot run extraction');
   const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-pipeline-'));
   const media = path.join(fixtureDir, 'source.mp3');
   const siblingWav = path.join(fixtureDir, 'source.wav');

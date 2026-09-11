@@ -36,7 +36,7 @@ const VULKAN_ARCHIVE_NAME = 'whisper-vulkan-v1.9.1-win-x64.zip';
 // (the #1 quality complaint). ~0.9 MB. Optional: extraction still works without it.
 const VAD_MODEL_NAME = 'ggml-silero-v5.1.2.bin';
 const VAD_MODEL_PATH = path.join(WHISPER_CPP_DIR, VAD_MODEL_NAME);
-// HF main 브랜치 대신 고정 revision을 받는다(main.js GGML_MODEL_REVISION과 같은 이유).
+// HF main 브랜치 대신 고정 revision을 받는다(src/main/services/transcription.js GGML_MODEL_REVISION과 같은 이유).
 // 크기와 SHA-256도 함께 고정해 네트워크 절단·변조를 걸러낸다(verifyPinnedDownload).
 const VAD_MODEL_REVISION = '9ffd54a1e1ee413ddf265af9913beaf518d1639b';
 const VAD_MODEL_URL = `https://huggingface.co/ggml-org/whisper-vad/resolve/${VAD_MODEL_REVISION}/${VAD_MODEL_NAME}`;
@@ -155,6 +155,7 @@ function hasWhisperRuntimeLibraries(cliPath = WHISPER_CLI, runtimeDir = WHISPER_
     env[libraryPath] = [runtimeDir, env[libraryPath]].filter(Boolean).join(path.delimiter);
   }
 
+  // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- installer-owned CLI path
   const result = spawnSync(cliPath, ['--help'], {
     cwd: runtimeDir,
     env,

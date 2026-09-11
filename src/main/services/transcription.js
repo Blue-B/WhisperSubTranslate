@@ -1,55 +1,18 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { pathToFileURL } = require('url');
-const { assertDownloadDiskSpace, assertSyncInstallDiskSpace, getReusablePartialSize } = require('./disk-space');
-const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
-const { isCompleteWavFile } = require('./file-safety');
-// 앱 이름 고정 (우클릭 메뉴와 작업표시줄 레이블이 'Electron' 대신 이 이름으로)
-try {
-  app.setName('WhisperSubTranslate');
-} catch (_) {}
-try {
-  app.setAppUserModelId('com.whispersubtranslate.app');
-} catch (_) {}
-
-// ===== Portable data layout (포터블 데이터 레이아웃) =====
-// WHISPER_PORTABLE_DATA 환경변수, 또는 실행 파일(또는 소스 루트) 옆의
-// portable-data/ 디렉토리가 있으면 모델·캐시·설정(%APPDATA%)을 그 경로로
-// 리다이렉트한다. 시스템 SSD가 작거나 USB/외장 드라이브로 실행할 때 유용.
-// app ready 이전에 setPath 해야 하므로 모듈 최상단에서 처리한다.
-function resolvePortableUserData() {
-  if (process.env.WHISPER_PORTABLE_DATA) return process.env.WHISPER_PORTABLE_DATA;
-  const exeDir = app.isPackaged ? path.dirname(process.execPath) : __dirname;
-  const marker = path.join(exeDir, 'portable-data');
-  return fs.existsSync(marker) ? marker : null;
-}
-try {
-  const portableDir = resolvePortableUserData();
-  if (portableDir) {
-    fs.mkdirSync(portableDir, { recursive: true });
-    app.setPath('userData', portableDir);
-    console.log('[Portable] userData redirected to:', portableDir);
-  }
-} catch (e) {
-  console.warn('[Portable] Failed to redirect userData:', e.message);
-}
-
-let autoUpdater = null;
-try {
-  ({ autoUpdater } = require('electron-updater'));
-} catch (error) {
-  console.log('[Auto-Updater] electron-updater not available:', error.message);
-}
 const { spawn, spawnSync, execFile, execSync, execFileSync } = require('child_process');
 const os = require('os');
 const axios = require('axios');
-const EnhancedSubtitleTranslator = require('./translator-enhanced');
+const EnhancedSubtitleTranslator = require('./translator');
 const { applySrtCleanup, wrapCuesForDisplay, srtFromWhisperJson } = require('./srt-cleanup');
+const { assertDownloadDiskSpace, assertSyncInstallDiskSpace, getReusablePartialSize } = require('./disk-space');
+const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
+const { isCompleteWavFile } = require('./file-safety');
+const errLogger = require('./error-logger');
 
-// whisper.cpp -ojf JSON(outputBase.json)을 읽어 토큰 끝시각기반 타이트 SRT로 변환해 srtPath에 덮어쓴다.
-// VAD 되매핑으로 늘어난 세그먼트 끝을 실제 발화 끝으로 잘라 "말할 때만 자막이 뜨게" 한다.
-// JSON이 없거나 파싱 실패하면 아무것도 안 하고 -osrt 결과를 그대로 쓴다(우아한 폴백).
+const SOURCE_ROOT = path.resolve(__dirname, '../../..');
+
 function applyTokenTightTiming(outputBase, srtPath) {
   try {
     const jsonPath = outputBase + '.json';
@@ -65,25 +28,6 @@ function applyTokenTightTiming(outputBase, srtPath) {
     console.warn('[Timing] token-tight SRT failed, using -osrt output:', e.message);
   }
 }
-const errLogger = require('./lib/error-logger');
-const { Menu } = require('electron');
-try {
-  errLogger.setElectronApp(app);
-} catch (_) {}
-
-// Capture unhandled errors so they end up in errors.log for user support
-process.on('uncaughtException', (err) => {
-  try {
-    errLogger.logError('main:uncaughtException', err?.message || String(err), err);
-  } catch (_) {}
-  console.error('[uncaughtException]', err);
-});
-process.on('unhandledRejection', (reason) => {
-  try {
-    errLogger.logError('main:unhandledRejection', reason?.message || String(reason), reason);
-  } catch (_) {}
-  console.error('[unhandledRejection]', reason);
-});
 
 // ffmpeg-static: npm 패키지에서 자동으로 플랫폼별 ffmpeg 바이너리 제공
 let ffmpegStaticPath = null;
@@ -109,14 +53,7 @@ try {
   console.log('[FFprobe] ffprobe-static not available, will use system PATH or local binary');
 }
 
-// Allow autoplay of audio (오디오 자동재생 허용)
-try {
-  app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-} catch (error) {
-  console.log('[Audio] Failed to set autoplay policy:', error.message);
-}
-
-// Global variables
+// Runtime state owned by the transcription service
 let mainWindow;
 let currentProcess = null;
 let isUserStopped = false;
@@ -300,6 +237,7 @@ function isVulkanAvailable(basePath) {
     // 포터블 ZIP 첫 실행에서 백신이 미서명 exe를 실시간 스캔하면 probe가 쉽게 느려진다.
     // 한 번의 타임아웃을 "Vulkan 없음"으로 캐시해 버리면 재시작 전까지 GPU 가속이
     // 영영 꺼진다. 그래서 여유를 두고, 확답을 못 받았을 때는 캐시하지 않는다.
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- fixed bundled CLI path
     const probe = spawnSync(cliPath, ['--version'], {
       cwd: vulkanDir,
       encoding: 'utf8',
@@ -476,340 +414,9 @@ function forceMemoryCleanup(device, isFileTransition = false) {
 }
 
 // ===== Update Checker (업데이트 알림) =====
-const GITHUB_REPO = 'blue-b/WhisperSubTranslate';
-const CURRENT_VERSION = require('./package.json').version;
-
-async function checkForUpdates() {
-  console.log('[Update Check] Starting... Current version:', CURRENT_VERSION);
-  try {
-    const response = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { timeout: 10000 });
-
-    const latestVersion = response.data.tag_name.replace(/^v/, '');
-
-    // releaseUrl은 GitHub 릴리스 페이지 형태만 허용 (쿼리/해시 제거 후 검증).
-    let releaseUrl = response.data.html_url;
-    if (typeof releaseUrl === 'string') {
-      try {
-        const parsed = new URL(releaseUrl);
-        parsed.search = '';
-        parsed.hash = '';
-        releaseUrl = parsed.href;
-      } catch (_err) {
-        /* keep raw */
-      }
-    }
-    if (typeof releaseUrl !== 'string' || !isAllowedOpenExternalUrl(releaseUrl)) {
-      console.warn('[Update Check] Rejecting invalid release URL:', releaseUrl);
-      return { hasUpdate: false, error: 'Invalid release URL' };
-    }
-    const releaseName = response.data.name || `v${latestVersion}`;
-
-    // 버전 비교 (semver 간단 비교)
-    const isNewer = compareVersions(latestVersion, CURRENT_VERSION) > 0;
-
-    console.log(`[Update Check] Latest: ${latestVersion}, Current: ${CURRENT_VERSION}, HasUpdate: ${isNewer}`);
-
-    return {
-      hasUpdate: isNewer,
-      currentVersion: CURRENT_VERSION,
-      latestVersion,
-      releaseUrl,
-      releaseName,
-    };
-  } catch (error) {
-    console.log('[Update Check] Failed:', error.message);
-    return { hasUpdate: false, error: error.message };
-  }
-}
-
-// 간단한 semver 비교 (1.3.3 vs 1.3.4)
-function compareVersions(v1, v2) {
-  const parts1 = v1.split('.').map(Number);
-  const parts2 = v2.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const p1 = parts1[i] || 0;
-    const p2 = parts2[i] || 0;
-    if (p1 > p2) return 1;
-    if (p1 < p2) return -1;
-  }
-  return 0;
-}
-
-// App Initialization
-// 렌더러 크래시 자동복구 백오프용 타임스탬프 기록 (무한 reload 루프 방지)
-let rendererReloadTimes = [];
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280, // 더 넓게 (900→1280) - 2열 레이아웃에 적합
-    height: 900, // 메인 드롭존/설정 영역이 답답하지 않도록 기본 세로 공간 확보
-    minWidth: 1000, // 최소 너비 제한 (UI 깨짐 방지)
-    minHeight: 760, // 파일 선택 CTA가 너무 아래로 밀리지 않도록 최소 높이 상향
-    title: 'WhisperSubTranslate', // 윈도우 타이틀
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      webSecurity: true,
-      devTools: !app.isPackaged,
-      // 긴 작업 후 완료 효과음이 자동재생 정책에 막히지 않도록 명시(commandLine 스위치 보강).
-      autoplayPolicy: 'no-user-gesture-required',
-    },
-    icon: path.join(__dirname, 'build', 'icon.png'),
-    autoHideMenuBar: true,
-    show: false, // 준비 완료 전 깜빡임 방지
-  });
-
-  // 창이 준비되면 표시 (깜빡임 방지)
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-  });
-  // Content-Security-Policy header for the renderer
-  try {
-    const csp = [
-      "default-src 'self'",
-      "script-src 'self'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: blob:",
-      "media-src 'self' data: blob:",
-      // renderer는 모든 네트워크 호출을 main IPC로 우회하므로(직접 fetch/axios 없음)
-      // connect-src는 'self'로만 충분하다. 서드파티 API 호스트는 추가하지 않는다.
-      "connect-src 'self'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "frame-ancestors 'none'",
-      "form-action 'none'",
-      "worker-src 'none'",
-    ].join('; ');
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-      const responseHeaders = { ...details.responseHeaders };
-      responseHeaders['Content-Security-Policy'] = [csp];
-      callback({ responseHeaders });
-    });
-  } catch (cspError) {
-    console.log('[Security] Failed to register CSP header:', cspError.message);
-  }
-
-  const { shell: windowShell } = require('electron');
-
-  // Block window.open and external navigation to anything outside an allow list
-  const ALLOWED_EXTERNAL_HOSTS = new Set([
-    'github.com',
-    'api.github.com',
-    'huggingface.co',
-    'platform.openai.com',
-    'openai.com',
-    'ai.google.dev',
-    'aistudio.google.com',
-    'deepl.com',
-    'www.deepl.com',
-  ]);
-  const isAllowedExternalUrl = (rawUrl) => {
-    try {
-      const parsed = new URL(rawUrl);
-      if (parsed.protocol !== 'https:') return false;
-      return ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase());
-    } catch (_err) {
-      return false;
-    }
-  };
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      windowShell.openExternal(url);
-    } else {
-      console.warn('[Security] Blocked window.open for non-allowlisted URL:', url);
-    }
-    return { action: 'deny' };
-  });
-  // 앱 자체 index.html 이외의 file:// 네비게이션은 차단한다 (렌더러가 임의 로컬
-  // 파일을 열어 파일 내용을 노출하는 경로 방지). https 외부 URL은 allow-list로만.
-  const APP_INDEX_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const isOwnFile = url.startsWith('file://') && url === APP_INDEX_URL;
-    if (!isOwnFile) {
-      event.preventDefault();
-      if (isAllowedExternalUrl(url)) {
-        windowShell.openExternal(url);
-      } else {
-        console.warn('[Security] Blocked navigation to:', url);
-      }
-    }
-  });
-
-  mainWindow.loadFile('index.html');
-
-  // DOM이 완전히 로드된 후 업데이트 체크 (main → renderer 직접 실행)
-  mainWindow.webContents.on('did-finish-load', async () => {
-    console.log('[Update] Page loaded, checking for updates...');
-    // renderer.js 초기화 대기
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    try {
-      const result = await checkForUpdates();
-      if (result && result.hasUpdate) {
-        console.log('[Update] New version found:', result.latestVersion);
-        // Push update info via IPC instead of injecting JS into the renderer
-        try {
-          mainWindow.webContents.send('update-available', {
-            hasUpdate: true,
-            latestVersion: result.latestVersion,
-            releaseUrl: result.releaseUrl,
-            releaseName: result.releaseName,
-          });
-        } catch (sendErr) {
-          console.error('[Update] Failed to send update info:', sendErr.message);
-        }
-      } else {
-        console.log('[Update] No update available');
-      }
-    } catch (error) {
-      console.error('[Update] Auto-check failed:', error.message);
-    }
-  });
-
-  // 개발 모드에서 캐시 비활성화 (파일 변경 즉시 반영)
-  mainWindow.webContents.session.clearCache();
-
-  // F12 개발자 도구 (배포 버전: 비활성화)
-  // 개발 시에만 아래 코드 주석 해제
-  // mainWindow.webContents.on('before-input-event', (event, input) => {
-  //     if (input.key === 'F12') {
-  //         mainWindow.webContents.toggleDevTools();
-  //     }
-  // });
-
-  // Translator에 mainWindow 설정 (UI 업데이트용)
-  translator.setMainWindow(mainWindow);
-
-  // 기본 메뉴 제거 (File/Edit/View/Window/Help 등)
-  try {
-    Menu.setApplicationMenu(null);
-  } catch (error) {
-    console.log('[Menu] Failed to remove application menu:', error.message);
-  }
-  try {
-    mainWindow.setMenuBarVisibility(false);
-  } catch (error) {
-    console.log('[Menu] Failed to hide menu bar:', error.message);
-  }
-
-  // 개발자 도구 오픈 비활성화 (F12/단축키)
-  // 필요 시 개발 빌드에서만 활성화하도록 별도 환경변수로 제어 가능
-
-  // 웹콘텐츠 기본 우클릭 메뉴 차단 (Inspect / Reload 등이 드러나지 않게)
-  try {
-    mainWindow.webContents.on('context-menu', (e) => {
-      e.preventDefault();
-    });
-  } catch (_) {}
-
-  // 렌더러가 죽으면(예: 추출 직후 후처리 중 미처리 예외) 창이 조용히 닫히는 대신
-  // 원인을 errors.log에 남기고 렌더러를 자동 복구한다. (정상 종료/사용자 닫기는 제외)
-  mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    const reason = details?.reason || 'unknown';
-    console.error('[render-process-gone]', JSON.stringify(details));
-    try {
-      errLogger.logError('main:render-process-gone', reason, details);
-    } catch (_) {}
-    // clean-exit(정상 종료) 는 복구 대상 아님
-    if (reason === 'clean-exit' || reason === 'killed') return;
-
-    // 고아 whisper-cli 자식 프로세스가 남아 돌지 않도록 정리
-    try {
-      if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
-    } catch (_) {}
-
-    // 결정론적 크래시(불량 preload/렌더러 init 예외 등)에서 reload→크래시 무한루프 방지:
-    // 최근 30초 내 reload가 3회 이상이면 자동 복구를 멈추고 안내 다이얼로그를 띄운다.
-    const now = Date.now();
-    rendererReloadTimes = rendererReloadTimes.filter((t) => now - t < 30000);
-    rendererReloadTimes.push(now);
-    if (rendererReloadTimes.length > 3) {
-      try {
-        dialog.showErrorBox(
-          'WhisperSubTranslate',
-          'The app window crashed repeatedly and auto-recovery was stopped.\n' +
-            `Reason: ${reason}\n\n` +
-            'Please restart the app. Details were written to errors.log.'
-        );
-      } catch (_) {}
-      return;
-    }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      try {
-        mainWindow.webContents.reload();
-      } catch (_) {}
-    }
-  });
-
-  mainWindow.on('closed', () => {
-    forceMemoryCleanup('cuda');
-    mainWindow = null;
-  });
-}
-
-app.whenReady().then(async () => {
-  if (app.isPackaged === false) {
-    app.commandLine.appendSwitch('js-flags', '--expose-gc');
-  }
-
-  // 캐시 완전 삭제 (개발 모드에서만)
-  if (!app.isPackaged) {
-    try {
-      const { session } = require('electron');
-      await session.defaultSession.clearCache();
-      await session.defaultSession.clearStorageData();
-      console.log('[Cache] Cleared all cache and storage');
-    } catch (e) {
-      console.log('[Cache] Failed to clear cache:', e.message);
-    }
-  }
-
-  createWindow();
-  // 자동 업데이트 체크 (배포 환경에서만 적용 가능)
-  try {
-    if (autoUpdater) {
-      autoUpdater.autoDownload = true;
-      autoUpdater.checkForUpdatesAndNotify();
-    }
-  } catch (error) {
-    console.log('[Auto-Updater] Update check failed:', error.message);
-  }
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    // 정리 중 창이 닫힌 경우: quit 요청은 before-quit의 정리 시퀀스를 타게 하고,
-    // 정리 완료 전 종료가 일어나지 않도록 before-quit에서 preventDefault 후
-    // 재요청하는 구조를 그대로 따른다 (F2).
-    app.quit();
-  }
-});
-
-// GPU/유틸리티 자식 프로세스가 죽으면 로그만 남긴다(앜 수 없이 창이 닫힐 때 진단용).
-app.on('child-process-gone', (_event, details) => {
-  if (details?.reason && details.reason !== 'clean-exit') {
-    console.error('[child-process-gone]', JSON.stringify(details));
-    try {
-      errLogger.logError('main:child-process-gone', `${details.type}:${details.reason}`, details);
-    } catch (_) {}
-  }
-});
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
-});
-
-// ===== Safe Temp Directory (유니코드 경로 문제 해결) =====
-// spawn()으로 whisper-cli 호출 시 유니코드 경로가 깨지는 문제 해결
-// WAV/SRT를 ASCII 경로에 생성 후 원본 위치로 복사
 function getSafeTempDir() {
   // 1순위: 앱 실행 경로 내 temp (대부분 영어 경로)
-  const basePath = app.isPackaged ? path.dirname(process.execPath) : __dirname;
+  const basePath = app.isPackaged ? path.dirname(process.execPath) : SOURCE_ROOT;
   const appTemp = path.join(basePath, 'temp');
 
   // ASCII 문자만 있는지 체크 (유니코드 없으면 안전)
@@ -882,7 +489,7 @@ const OVERLAP_DURATION = 5; // 5초 오버랩 (경계 자막 누락 방지)
 // 영상/오디오 길이 확인 (ffprobe 사용)
 function getMediaDuration(inputPath) {
   return new Promise((resolve, reject) => {
-    const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+    const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
     let ffprobePath = 'ffprobe';
 
     // ffprobe 경로 설정 (우선순위: ffprobe-static > 로컬 파일 > 시스템 PATH)
@@ -966,7 +573,7 @@ async function splitAudioToSegments(wavPath, duration) {
   console.log(`[Split] Splitting ${(duration / 60).toFixed(1)} min audio into segments...`);
   mainWindow.webContents.send('output-update', `Splitting long audio into segments for stable processing...\n`);
 
-  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
   let ffmpegPath = ffmpegStaticPath || 'ffmpeg';
   const localFfmpeg = path.join(basePath, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
   if (fs.existsSync(localFfmpeg)) {
@@ -1304,6 +911,7 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
     console.log(`[Segment] Processing: ${path.basename(segmentPath)}`);
 
     const spawnEnv = getWhisperSpawnEnv(device, whisperDir);
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- caller supplies bundled CLI path
     const proc = spawn(exePath, args, {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1504,7 +1112,7 @@ function convertToWav(inputPath) {
     mainWindow.webContents.send('output-update', `Converting audio to WAV format...\n`);
 
     // ffmpeg 경로 설정 (우선순위: ffmpeg-static > 로컬 파일 > 시스템 PATH)
-    const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+    const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
     let ffmpegPath = 'ffmpeg'; // 기본: 시스템 PATH에서 찾기
 
     // 1. ffmpeg-static npm 패키지 사용 (가장 우선)
@@ -1821,7 +1429,7 @@ function getFasterWhisperExePath() {
 // 번들된 7za.exe 경로 (구버전 Windows의 tar가 BCJ2 7z를 못 풀 때 폴백).
 function get7zaExePath() {
   const rel = path.join('node_modules', '7zip-bin', 'win', 'x64', '7za.exe');
-  return app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked', rel) : path.join(__dirname, rel);
+  return app.isPackaged ? path.join(process.resourcesPath, 'app.asar.unpacked', rel) : path.join(SOURCE_ROOT, rel);
 }
 
 // .7z 추출: Windows 내장 tar.exe(libarchive, BCJ2 지원) 우선, 실패 시 번들 7za.exe 폴백.
@@ -2317,7 +1925,7 @@ async function runFasterWhisperExtraction(
 //          -vp 100: 분할 경계에 100ms 패딩(단어 끝 잘림 방지).
 function getWhisperVadArgs() {
   if (!reduceRepetition) return [];
-  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
   const vadModel = path.join(basePath, 'whisper-cpp', VAD_MODEL_NAME);
   if (!fs.existsSync(vadModel)) {
     console.log('[VAD] silero model not found, skipping VAD:', vadModel);
@@ -2343,7 +1951,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
       // Force cleanup before each file
       await forceMemoryCleanup(device, true);
 
-      const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+      const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
 
       // 실제 사용할 장치 결정: CUDA 우선, 없으면 동봉 Vulkan, 마지막으로 CPU.
       const chosenDevice = resolveDevice(device, basePath);
@@ -2951,7 +2559,7 @@ async function extractSingleFile(filePath, model, language, device, srtOutputOve
     return extractSingleFileOnce(filePath, model, language, device, srtOutputOverride);
   }
 
-  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
+  const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
   const selected = resolveDevice(device, basePath);
   // 사용할 수 없는 Vulkan은 후보에서 미리 빼둔다. 그래야 폴백 안내 문구가
   // 실제로 다음에 실행될 장치와 일치한다.
@@ -2990,559 +2598,83 @@ async function extractSingleFile(filePath, model, language, device, srtOutputOve
 }
 
 // IPC Handler for processing one or more files sequentially
-ipcMain.handle('extract-subtitles', async (event, payload) => {
-  const { filePaths, filePath, model, language, device, cleanup } = payload;
-  // 반복 억제 토글을 whisper 설정에 반영 (undefined=구판 호환을 위해 기본 ON)
+
+function setMainWindow(window) {
+  mainWindow = window;
+  translator.setMainWindow(window);
+}
+
+function configureExtraction(payload = {}) {
   reduceRepetition = payload.reduceRepetition !== false;
-  // 자연 문장 단위 전사 토글 (undefined=구판 호환 위해 기본 ON, 번역 품질 향상)
   naturalSegmentation = payload.naturalSegmentation !== false;
-  // This now correctly handles both a single `filePath` and an array `filePaths`
-  const filesToProcess = filePaths || (filePath ? [filePath] : []);
+}
 
-  if (filesToProcess.length === 0) {
-    console.log('No valid files to process.');
-    return { success: true };
-  }
-
-  let successCount = 0;
-  let failCount = 0;
-  let userStopped = false;
-  const successDetails = [];
-  const failureDetails = [];
-  // 새 배치는 이전 배치의 stop 상태에서 벗어난다. 이후 각 파일 시작부가 아니라
-  // 여기서만 리셋해 파일 간 대기 창의 stop을 살아있게 한다(P1-3).
+function resetStop() {
   isUserStopped = false;
-  // 배치 내 같은 basename(예: movie.mkv + movie.mp4)이 같은 .srt로 덮어쓰는 충돌 방지.
-  // 이미 쓰인 출력 베이스가 있으면 소스 확장자를 붙인 이름(movie.mkv.srt)으로 분리한다.
-  const usedSrtBases = new Set();
-
-  for (let i = 0; i < filesToProcess.length; i++) {
-    const currentFile = filesToProcess[i];
-    if (!currentFile) continue;
-
-    // 이전 파일 처리 중(대기 창 포함) stop이 세워졌으면 남은 파일을 건너뛴다.
-    if (isUserStopped) {
-      userStopped = true;
-      break;
-    }
-
-    // 충돌 시 사용할 출력 SRT 경로 결정 (extractSingleFile이 내부에서 이 값을 그대로 쓴다)
-    const normalSrt = srtOutputPathFor(currentFile);
-    let srtOutputOverride = null;
-    if (usedSrtBases.has(normalSrt)) {
-      const srcExt = path.extname(currentFile);
-      srtOutputOverride = `${withoutExt(currentFile)}${srcExt}.srt`;
-      event.sender.send(
-        'output-update',
-        `[Collision] ${path.basename(normalSrt)} already used by an earlier file — saving as ${path.basename(srtOutputOverride)}\n`
-      );
-      usedSrtBases.add(srtOutputOverride);
-    } else {
-      usedSrtBases.add(normalSrt);
-    }
-
-    try {
-      const srtPath = await extractSingleFile(currentFile, model, language, device, srtOutputOverride);
-
-      // 출력 정리(Output cleanup): 화자 표시(>>) / SDH 태그 제거 (옵트인)
-      // 번역 단계는 이 .srt 파일을 다시 읽으므로, 여기서 미리 정리하면
-      // [music] 같은 태그가 번역되거나 >> 가 남는 것을 방지한다.
-      if (cleanup && (cleanup.removeSpeakerTags || cleanup.removeSDH)) {
-        try {
-          const raw = fs.readFileSync(srtPath, 'utf-8');
-          const cleaned = applySrtCleanup(raw, cleanup);
-          // 안전장치: 정리 결과가 통째로 비었는데(예: 전부 SDH) 원본엔 내용이 있으면
-          // 빈 파일로 덮어쓰지 않고 원본 유지(다음 번역 단계가 빈 SRT를 읽는 것 방지).
-          if (cleaned.trim() === '' && raw.trim() !== '') {
-            event.sender.send('output-update', `Output cleanup skipped (would remove all lines).\n`);
-          } else if (cleaned !== raw) {
-            fs.writeFileSync(srtPath, cleaned, 'utf-8');
-            const applied = [cleanup.removeSpeakerTags ? 'speaker tags' : null, cleanup.removeSDH ? 'SDH tags' : null]
-              .filter(Boolean)
-              .join(', ');
-            event.sender.send('output-update', `Output cleanup applied (${applied}).\n`);
-          }
-        } catch (cleanErr) {
-          console.warn('[Cleanup] SRT cleanup failed:', cleanErr.message);
-        }
-      }
-
-      // 화면 표시용 줄바꿈: 자연 문장 단위 전사는 긴 줄을 만들 수 있으므로, 큐(타임스탬프)
-      // 구조는 그대로 둔 채 텍스트만 가독성 있게 여러 줄로 감싼다. 큐 단위(완결 문장)는
-      // 유지되므로 다음 번역 단계가 문장을 그대로 읽어 번역 품질에 영향 없다.
-      try {
-        const rawForWrap = fs.readFileSync(srtPath, 'utf-8');
-        const wrapped = wrapCuesForDisplay(rawForWrap);
-        if (wrapped && wrapped !== rawForWrap) fs.writeFileSync(srtPath, wrapped, 'utf-8');
-      } catch (wrapErr) {
-        console.warn('[Wrap] display wrap failed:', wrapErr.message);
-      }
-
-      successCount++;
-      successDetails.push({ source: currentFile, srtPath });
-      event.sender.send(
-        'output-update',
-        `[${i + 1}/${filesToProcess.length}] Completed: ${path.basename(currentFile)}\n`
-      );
-
-      // Next file preview message
-      if (i < filesToProcess.length - 1) {
-        const nextFile = filesToProcess[i + 1];
-        event.sender.send('output-update', `Next file: ${path.basename(nextFile)}\n`);
-
-        if (device === 'cuda') {
-          event.sender.send('output-update', `Cleaning GPU memory and preparing next file... (wait 10s)\n`);
-          await new Promise((resolve) => setTimeout(resolve, 10000));
-          // 대기 중 stop이 세워졌으면 다음 파일을 시작하지 않는다(P1-3).
-          if (isUserStopped) {
-            userStopped = true;
-            break;
-          }
-          event.sender.send('output-update', `Start next file!\n\n`);
-        }
-      }
-    } catch (error) {
-      const message = error?.message || String(error);
-      const stopped = message === 'Stopped by user';
-      if (!stopped) {
-        failCount++;
-      }
-      failureDetails.push({ source: currentFile, error: message, userStopped: stopped });
-      // 실패 메시지는 renderer가 result.error를 보고 한 번만 출력함 (이중 출력 방지)
-
-      if (stopped) {
-        userStopped = true;
-        break;
-      }
-
-      // Next file preview after failure
-      if (i < filesToProcess.length - 1 && !isUserStopped) {
-        const nextFile = filesToProcess[i + 1];
-        event.sender.send('output-update', `Next file: ${path.basename(nextFile)}\n`);
-
-        if (device === 'cuda') {
-          event.sender.send('output-update', `Recovering and preparing next file... (wait 10s)\n`);
-          await new Promise((resolve) => setTimeout(resolve, 10000));
-          // 대기 중 stop이 세워졌으면 다음 파일을 시작하지 않는다(P1-3).
-          if (isUserStopped) {
-            userStopped = true;
-            break;
-          }
-          event.sender.send('output-update', `Start next file!\n\n`);
-        }
-      }
-    }
-  }
-
-  // 자막 추출 단계 완료 알림 (번역 옵션 시 추가 완료까지는 별도 핸들러에서 처리)
-  const extractionSummary = `\nExtraction stage finished (success: ${successCount}, failed: ${failCount})`;
-  event.sender.send('output-update', extractionSummary);
-
-  const response = {
-    success: failCount === 0 && !userStopped,
-    results: successDetails,
-  };
-  if (successDetails.length === 1) {
-    response.srtFile = successDetails[0].srtPath;
-  }
-  if (failureDetails.length > 0) {
-    response.failures = failureDetails;
-    if (failureDetails.length === 1) {
-      response.error = failureDetails[0].error;
-    }
-  }
-  if (userStopped) {
-    response.userStopped = true;
-  }
-
-  return response;
-});
-
-// Other handlers
-ipcMain.handle('show-open-dialog', async (_event, options) => {
-  return await dialog.showOpenDialog(mainWindow, options);
-});
-
-// 파일 위치 열기
-function isSafeLocalPath(candidate) {
-  return (
-    typeof candidate === 'string' && candidate.length > 0 && candidate.length < 4096 && !candidate.includes('\u0000')
-  );
 }
 
-function openWithXdg(targetPath) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const done = (ok) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(ok);
-    };
-    // 데스크톱 핸들러가 없는 환경(헤드리스, 최소 설치 WM)에서는 xdg-open이
-    // 종료도 오류도 없이 매달릴 수 있다. 그러면 이 Promise가 영영 안 끝나서
-    // 호출한 IPC가 "reply was never sent"로 멈췄다. 상한을 둔다.
-    const timer = setTimeout(() => done(false), 5000);
-    timer.unref?.();
-    try {
-      const proc = spawn('xdg-open', [targetPath], { stdio: 'ignore', detached: true });
-      proc.on('error', () => done(false));
-      proc.on('exit', (code) => done(code === 0));
-      proc.unref();
-    } catch (_err) {
-      done(false);
-    }
-  });
+function isStopped() {
+  return isUserStopped;
 }
 
-// 히스토리 포렌식-안전 삭제
-// localStorage.removeItem 은 LevelDB log 에 tombstone만 추가하고 실제 데이터는 compaction 전까지 남아있음.
-// session.clearStorageData 는 난문한 이름의 leveldb 마커 파일과 디렉토리를 제대로 처리하지 못함.
-// 안전한 방식: 세션 storage 초기화 + 0으로 덮어쓰고 파일 삭제.
-// 히스토리 파일 저장소 — localStorage 는 file:// origin 차이로 날아갈 수 있으므로
-// userData 의 JSON 파일을 단일 소스 오브 트루스로 사용.
-function getHistoryFilePath() {
-  return path.join(app.getPath('userData'), 'history.json');
-}
-ipcMain.handle('history-load', async () => {
-  try {
-    const fp = getHistoryFilePath();
-    if (!fs.existsSync(fp)) return { success: true, list: [] };
-    const raw = fs.readFileSync(fp, 'utf8');
-    const arr = JSON.parse(raw);
-    return { success: true, list: Array.isArray(arr) ? arr : [] };
-  } catch (e) {
-    return { success: false, error: e.message, list: [] };
-  }
-});
-ipcMain.handle('history-save', async (_event, list) => {
-  try {
-    const fp = getHistoryFilePath();
-    const dir = path.dirname(fp);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const safe = Array.isArray(list) ? list.slice(0, 200) : [];
-    // atomic 쓰기
-    const tmp = fp + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(safe), 'utf8');
-    fs.renameSync(tmp, fp);
-    return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-});
-
-// 히스토리 안전 삭제 — 히스토리 키만 지우고 다른 localStorage (API 키, 설정) 은 보존.
-// removeItem 은 LevelDB tombstone만 추가되므로, padding 키 1MB 쓰고 지워 compaction 을 유도.
-// flushStorageData 로 디스크 반영. main leveldb 디렉토리 파일은 절대 손대지 않음 (API 키 손실 방지).
-ipcMain.handle('secure-clear-history', async (event) => {
-  try {
-    const wc = event.sender;
-    // 1) localStorage 내 히스토리 키 (legacy) 제거
-    try {
-      await wc.executeJavaScript(
-        '(function(){try{localStorage.removeItem("wst_history_v1");localStorage.removeItem("wst_history");}catch(_){}' +
-          'try{var pad=new Array(65536).join("0");for(var i=0;i<16;i++){localStorage.setItem("__wst_pad_"+i,pad);}for(var j=0;j<16;j++){localStorage.removeItem("__wst_pad_"+j);}}catch(_){}})();'
-      );
-    } catch (_) {}
-    try {
-      await wc.session.flushStorageData();
-    } catch (_) {}
-    // 2) userData/history.json 파일 안전 삭제 (0으로 덮어쓰고 unlink)
-    try {
-      const fp = getHistoryFilePath();
-      if (fs.existsSync(fp)) {
-        try {
-          const st = fs.statSync(fp);
-          fs.writeFileSync(fp, Buffer.alloc(Math.min(st.size, 4 * 1024 * 1024), 0));
-        } catch (_) {}
-        // unlink 실패를 삼키지 않는다: 상위 catch로 전파해 { success: false, error }를 반환
-        // (히스토리 파일이 남으면 재시작 시 기록이 부활하므로 정직하게 실패를 알린다)
-        fs.unlinkSync(fp);
-      }
-    } catch (unlinkErr) {
-      // 위 내부 catch(_)와 달리 여기는 실제 unlink 실패(EACCES/EBUSY)만 잡아 전파한다.
-      return { success: false, error: `Failed to clear history file: ${unlinkErr.message}` };
-    }
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('open-file-location', async (_event, filePath) => {
-  const { shell } = require('electron');
-  if (!isSafeLocalPath(filePath)) {
-    return { success: false, error: 'invalid path' };
-  }
-  try {
-    shell.showItemInFolder(filePath);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to open file location:', error);
-    if (process.platform === 'linux') {
-      const dirPath = path.dirname(filePath);
-      const ok = await openWithXdg(dirPath);
-      if (ok) return { success: true };
-    }
-    return { success: false, error: error.message };
-  }
-});
-
-// shell.openPath는 데스크톱 포털이 없는 리눅스에서 resolve되지 않고 매달릴 수 있다.
-// 그대로 두면 호출한 IPC가 응답을 못 보내 버튼이 먹힌다(reply was never sent).
-// 상한을 두고 리눅스에서는 xdg-open으로 폴백한다.
-async function openPathSafely(targetPath) {
-  const { shell } = require('electron');
-  const TIMED_OUT = Symbol('timeout');
-  let timer = null;
-  let result;
-  try {
-    result = await Promise.race([
-      shell.openPath(targetPath),
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve(TIMED_OUT), 3000);
-        timer.unref?.();
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-  // openPath는 성공 시 빈 문자열, 실패 시 오류 문자열을 돌려준다.
-  if (result !== TIMED_OUT && !result) return true;
-  if (process.platform === 'linux') return openWithXdg(targetPath);
-  return false;
+function terminateCurrentProcess() {
+  if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
 }
 
-// 폴더 열기
-ipcMain.handle('open-folder', async (_event, folderPath) => {
-  if (!isSafeLocalPath(folderPath)) {
-    return { success: false, error: 'invalid path' };
-  }
-  try {
-    const opened = await openPathSafely(folderPath);
-    return opened ? { success: true } : { success: false, error: 'no handler available' };
-  } catch (error) {
-    console.error('Failed to open folder:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 모델 폴더 열기: 렌더러가 경로를 몰라도 되게 main에서 직접 해석한다.
-// getGgmlModelsDir()를 그대로 쓰므로 비ASCII 계정 폴백 경로까지 자동으로 따른다.
-ipcMain.handle('open-models-folder', async () => {
-  const dir = getGgmlModelsDir();
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    const opened = await openPathSafely(dir);
-    return opened ? { success: true, path: dir } : { success: false, error: 'no handler available', path: dir };
-  } catch (error) {
-    console.error('Failed to open models folder:', error);
-    return { success: false, error: error.message, path: dir };
-  }
-});
-
-// 외부 URL을 기본 브라우저에서 열기
-const ALLOWED_OPEN_EXTERNAL_HOSTS = new Set([
-  'github.com',
-  'api.github.com',
-  'huggingface.co',
-  'platform.openai.com',
-  'openai.com',
-  'ai.google.dev',
-  'aistudio.google.com',
-  'deepl.com',
-  'www.deepl.com',
-]);
-
-function isAllowedOpenExternalUrl(rawUrl) {
-  try {
-    const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'https:') return false;
-    if (!ALLOWED_OPEN_EXTERNAL_HOSTS.has(parsed.hostname.toLowerCase())) return false;
-    // github.com은 <소유자>/<레포> 하위 경로만 허용한다. 릴리스 노트 링크는
-    // /releases/tag/v2.4.5, 엔진 다운로드는 /releases/download/... 형태라
-    // 레포 루트 두 세그먼트만 고정하고 그 아래는 허용한다.
-    // (경로 세그먼트에 .. 이 섞이면 거부해 상위 탈출 표기를 막는다.)
-    const pathname = parsed.pathname.replace(/\/$/, '');
-    if (parsed.hostname.toLowerCase() === 'github.com') {
-      if (!/^\/[\w.-]+\/[\w.-]+(\/[\w./+-]*)?$/.test(pathname)) return false;
-      if (pathname.split('/').includes('..')) return false;
-    }
-    return true;
-  } catch (_err) {
-    return false;
-  }
+function stop() {
+  isUserStopped = true;
+  terminateCurrentProcess();
+  killTrackedChildProcesses();
+  translator.abort?.();
+  cancelActiveDownloads();
 }
 
-ipcMain.handle('open-external', async (_event, url) => {
-  const { shell } = require('electron');
-  if (!isAllowedOpenExternalUrl(url)) {
-    console.warn('[Security] Blocked open-external for URL:', url);
-    return { success: false, error: 'URL not allowed' };
-  }
-  try {
-    await shell.openExternal(url);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to open external link:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Whisper GGML 모델 삭제
-ipcMain.handle('delete-whisper-model', async (_event, modelName) => {
-  try {
-    const modelsPath = getGgmlModelsDir();
-    const modelFile = path.join(modelsPath, `ggml-${modelName}.bin`);
-    if (fs.existsSync(modelFile)) {
-      fs.unlinkSync(modelFile);
-      return { success: true };
-    }
-    return { success: false, error: 'File not found' };
-  } catch (error) {
-    return { success: false, error: String(error?.message || error) };
-  }
-});
-
-// 싱크 엔진(large-v2-sync) 사전 다운로드: 엔진(7z) + Systran large-v2 모델 파일을 받는다.
-// 모델 관리 카드가 쓰는 'whisper-model-progress'(modelName='large-v2-sync')로 진행률을 보낸다.
-ipcMain.handle('download-sync-engine', async () => {
-  const emit = (percent) => {
-    try {
-      mainWindow?.webContents?.send('whisper-model-progress', {
-        modelName: SYNC_ENGINE_MODEL_ID,
-        percent: Math.max(0, Math.min(100, Math.round(percent))),
-      });
-    } catch (_e) {}
-  };
-  try {
-    // 엔진과 모델 전체를 일반 실행 경로와 같은 단일 in-flight 다운로드로 공유한다.
-    await ensureFasterWhisperAssets(emit);
-    return { success: true };
-  } catch (error) {
-    const msg = String(error?.message || error);
-    const cancelled =
-      /cancell?ed/i.test(msg) || error?.name === 'CanceledError' || String(error?.name || '').includes('AbortError');
-    if (cancelled) return { success: false, error: 'cancelled', userStopped: true };
-    return { success: false, error: msg };
-  }
-});
-
-// 싱크 엔진 삭제: 엔진+모델 전체(_faster-whisper) 제거.
-ipcMain.handle('delete-sync-engine', async () => {
-  try {
-    const root = getFasterWhisperRootDir();
-    if (fs.existsSync(root)) fs.rmSync(root, { recursive: true, force: true });
-    _cachedFwExePath = null;
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: String(error?.message || error) };
-  }
-});
-
-ipcMain.handle('check-model-status', async () => {
+async function checkModelStatus() {
   const modelsPath = getGgmlModelsDir();
-  const availableModels = {};
-
-  // GGML 모델 이름 목록
+  const available = {};
   const modelNames = ['tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3', 'large-v3-turbo'];
-
   try {
     if (fs.existsSync(modelsPath)) {
       for (const modelName of modelNames) {
         const modelFile = path.join(modelsPath, `ggml-${modelName}.bin`);
-        // 비어 있지 않은 파일은 설치된 것으로 인정한다. 사용자가 직접 넣었거나 미러에서
-        // 받은 모델도 그대로 쓰게 하기 위함이다(이슈 #72). 잘린 다운로드는 이제 .partial이
-        // 검증을 통과해야만 최종 이름이 되므로 여기서 엄격할 필요가 없다.
         try {
-          if (fs.existsSync(modelFile) && fs.statSync(modelFile).size > 0) availableModels[modelName] = true;
-        } catch (_e) {
-          /* ignore */
-        }
+          if (fs.existsSync(modelFile) && fs.statSync(modelFile).size > 0) available[modelName] = true;
+        } catch (_e) {}
       }
     }
   } catch (error) {
     console.error('Error checking model status:', error);
   }
-
-  // 싱크 엔진: GGML이 아니라 Faster-Whisper-XXL 엔진+모델이 받아졌는지로 판단.
-  // 정밀(large-v2-sync)과 라이트(large-v2-sync-lite)는 같은 파일을 공유하므로 함께 available 처리.
   try {
     const fwExe = getFasterWhisperExePath();
     const fwModel = path.join(getFasterWhisperModelsDir(), `faster-whisper-${FASTER_WHISPER_MODEL}`, 'model.bin');
     if (fwExe && fs.existsSync(fwModel) && hasExpectedSize(fwModel, SYNC_FILE_MANIFEST['model.bin'])) {
-      availableModels[SYNC_ENGINE_MODEL_ID] = true;
-      availableModels[SYNC_ENGINE_LITE_MODEL_ID] = true;
+      available[SYNC_ENGINE_MODEL_ID] = true;
+      available[SYNC_ENGINE_LITE_MODEL_ID] = true;
     }
-  } catch (_e) {
-    /* ignore */
-  }
+  } catch (_e) {}
+  return available;
+}
 
-  return availableModels;
-});
-
-// 모델 자동 다운로드 (Hugging Face: ggerganov/whisper.cpp GGML 형식)
-ipcMain.handle('download-model', async (_event, modelName) => {
+async function downloadModel(modelName) {
   try {
-    // GGML 모델 파일 URL 매핑
     const manifest = GGML_MODEL_MANIFEST[modelName];
-    const modelUrlMap = Object.fromEntries(
-      Object.entries(GGML_MODEL_MANIFEST).map(([name, entry]) => [
-        name,
-        `https://huggingface.co/ggerganov/whisper.cpp/resolve/${GGML_MODEL_REVISION}/${entry.file}`,
-      ])
-    );
-    const modelUrl = modelUrlMap[modelName];
-    if (!modelUrl || !manifest) {
-      throw new Error(`Unknown model: ${modelName}`);
-    }
-
+    if (!manifest) throw new Error(`Unknown model: ${modelName}`);
+    const modelUrl = `https://huggingface.co/ggerganov/whisper.cpp/resolve/${GGML_MODEL_REVISION}/${manifest.file}`;
     const targetDir = getGgmlModelsDir();
-    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-    const modelFileName = `ggml-${modelName}.bin`;
-    const targetPath = path.join(targetDir, modelFileName);
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetPath = path.join(targetDir, `ggml-${modelName}.bin`);
     const partialPath = targetPath + '.partial';
-
     downloadsCancelled = false;
-
     const emitProgress = (percent, received, total) => {
-      try {
-        mainWindow?.webContents?.send('output-update', `${path.basename(partialPath)} ${percent}%\n`);
-        mainWindow?.webContents?.send('whisper-model-progress', {
-          modelName,
-          percent,
-          received,
-          total,
-        });
-      } catch (_e) {}
+      mainWindow?.webContents?.send('output-update', `${path.basename(partialPath)} ${percent}%\n`);
+      mainWindow?.webContents?.send('whisper-model-progress', { modelName, percent, received, total });
     };
-
-    // 파일 존재하면 스킵 — 단 0바이트/손상 잔재(이전 실패)가 있으면 재다운로드
-    if (fs.existsSync(targetPath)) {
-      const existingOk = hasExpectedSize(targetPath, manifest);
-      if (existingOk) {
-        try {
-          mainWindow.webContents.send('output-update', `Model already prepared: ${modelName}\n`);
-        } catch (_e) {
-          console.log('[Download] Failed to send model ready message:', _e.message);
-        }
-        return { success: true };
-      }
-      // 크기가 다르면 받긴 받되, 기존 파일을 먼저 지우지는 않는다. 다운로드가 실패하면
-      // 잘 쓰던 모델까지 잃기 때문이다. 검증을 통과한 새 파일이 아래 rename으로 덮어쓴다.
-      try {
-        mainWindow?.webContents?.send('output-update', `Model file size differs, re-downloading: ${modelName}\n`);
-      } catch (_e) {}
+    if (fs.existsSync(targetPath) && hasExpectedSize(targetPath, manifest)) {
+      mainWindow?.webContents?.send('output-update', `Model already prepared: ${modelName}\n`);
+      return { success: true };
     }
-
-    try {
-      mainWindow.webContents.send('output-update', `Starting GGML model download: ${modelName}\n`);
-    } catch (_e) {
-      console.log('[Download] Failed to send download start message:', _e.message);
-    }
-
-    if (downloadsCancelled) throw new Error('cancelled');
+    mainWindow?.webContents?.send('output-update', `Starting GGML model download: ${modelName}\n`);
     await downloadVerifiedFile({
       axios,
       assertDownloadDiskSpace,
@@ -3555,521 +2687,85 @@ ipcMain.handle('download-model', async (_event, modelName) => {
       sha256: manifest.sha256,
       onProgress: emitProgress,
     });
-    // 완료되어야만 최종 경로로 rename — 부분 파일이 'installed'로 보이지 않도록
     fs.renameSync(partialPath, targetPath);
-
-    try {
-      mainWindow.webContents.send('output-update', `GGML Model download completed: ${modelName}\n`);
-    } catch (_e) {
-      console.log('[Download] Failed to send completion message:', _e.message);
-    }
+    mainWindow?.webContents?.send('output-update', `GGML Model download completed: ${modelName}\n`);
     return { success: true };
   } catch (error) {
-    console.error('Model download failed:', error);
-    // axios 취소(CanceledError, message 'canceled')와 수동 throw('cancelled')를 모두 취소로
-    // 판정 — 철자 불일치로 취소가 네트워크 실패로 오인되어 배치가 계속되는 것 방지 (MED-4).
-    const isCancel =
-      String(error && error.message).includes('cancelled') ||
-      String(error && error.message).includes('canceled') ||
-      (error && error.name === 'CanceledError') ||
-      String(error && error.name).includes('AbortError');
-    if (isCancel) {
-      try {
-        mainWindow.webContents.send('output-update', `Model download cancelled\n`);
-      } catch (_e) {
-        console.log('[Download] Failed to send cancellation message:', _e.message);
-      }
-      return { success: false, error: 'cancelled' };
-    }
-    try {
-      mainWindow.webContents.send('output-update', `[ERROR] Model download failed: ${error.message}\n`);
-    } catch (_e) {
-      console.log('[Download] Failed to send error message:', _e.message);
-    }
+    const cancelled =
+      /cancell?ed/i.test(String(error?.message || '')) ||
+      error?.name === 'CanceledError' ||
+      String(error?.name || '').includes('AbortError');
+    if (cancelled) return { success: false, error: 'cancelled' };
+    mainWindow?.webContents?.send('output-update', `[ERROR] Model download failed: ${error.message}\n`);
     return { success: false, error: error.message };
   }
-});
+}
 
-ipcMain.handle('stop-current-process', async () => {
-  isUserStopped = true;
-
-  if (currentProcess && !currentProcess.killed) {
-    currentProcess.kill('SIGKILL');
-    console.log('Process stopped by user.');
-  }
-
-  // 파일 전환 중/분할 ffmpeg 실행 중 stop이면 currentProcess뿐 아니라 추적된
-  // 자식(분할 ffmpeg 등)도 함께 종료한다 (F5).
-  killTrackedChildProcesses();
-
-  // 번역 중이면 translator에도 중지 시그널 전달
-  if (translator && typeof translator.abort === 'function') {
-    try {
-      translator.abort();
-      console.log('Translation aborted by user.');
-    } catch (_e) {
-      /* ignore */
-    }
-  }
-
-  try {
-    cancelActiveDownloads();
-  } catch (_e) {
-    /* ignore */
-  }
-
-  return { success: true };
-});
-
-// ========== 번역 관련 IPC 핸들러 ==========
-
-// API 키 저장
-ipcMain.handle('save-api-keys', async (_event, keys) => {
-  try {
-    const result = translator.saveApiKeys(keys);
-    // result가 객체면 { success: true, insecure } 형태 (AES 폴백 저장) —
-    // 평탄화해 renderer가 insecure 플래그를 볼 수 있게 한다
-    if (result && typeof result === 'object') {
-      return { success: true, insecure: !!result.insecure };
-    }
-    return { success: !!result };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-// API 키 불러오기
-ipcMain.handle('load-api-keys', async () => {
-  try {
-    const keys = translator.loadApiKeys();
-    return { success: true, keys };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-// 설정 UI에서 프롬프트를 기본값으로 되돌리거나 공급자 기본 모델명을 보여줄 때 사용
-ipcMain.handle('get-provider-defaults', async () => {
-  return {
-    success: true,
-    defaults: {
-      prompts: {
-        translationPrompt: EnhancedSubtitleTranslator.DEFAULT_SYSTEM_PROMPT,
-        contextPrompt: EnhancedSubtitleTranslator.DEFAULT_CONTEXT_SYSTEM_PROMPT,
-      },
-      providers: EnhancedSubtitleTranslator.PROVIDER_DEFAULTS,
-      modelPresets: EnhancedSubtitleTranslator.PROVIDER_MODEL_PRESETS,
-      formats: EnhancedSubtitleTranslator.PROVIDER_FORMATS,
-    },
-  };
-});
-
-// 설정 UI의 모델 새로고침 — 저장 전이라도 입력된 키·Base URL로 바로 조회한다.
-ipcMain.handle('list-provider-models', async (_event, { method, tempKeys } = {}) => {
-  try {
-    const source = new EnhancedSubtitleTranslator();
-    source.apiKeys = { ...source.apiKeys, ...(tempKeys || {}) };
-    const models = await source.listModels(source.resolveProvider(method));
-    return { success: true, models };
-  } catch (error) {
-    console.error('[List Provider Models Error]', error.response?.data || error.message);
-    return { success: false, error: error.message };
-  }
-});
-
-// 오프라인 관련 IPC 제거됨
-
-// API 키 유효성 검사 (임시 키 지원)
-ipcMain.handle('validate-api-keys', async (_event, tempKeys) => {
-  try {
-    console.log('[API Key Validation]', {
-      hasTempKeys: !!tempKeys,
-      tempKeysCount: tempKeys ? Object.keys(tempKeys).length : 0,
-      tempKeys: tempKeys ? Object.keys(tempKeys) : [],
+async function downloadSyncEngine() {
+  const emit = (percent) =>
+    mainWindow?.webContents?.send('whisper-model-progress', {
+      modelName: SYNC_ENGINE_MODEL_ID,
+      percent: Math.max(0, Math.min(100, Math.round(percent))),
     });
-
-    // 임시 키가 제공되면 사용, 아니면 저장된 키 사용
-    if (tempKeys && Object.keys(tempKeys).length > 0) {
-      console.log('[Using temporary keys for validation]');
-      const tempTranslator = new EnhancedSubtitleTranslator();
-      tempTranslator.apiKeys = { ...tempTranslator.apiKeys, ...tempKeys };
-      const results = await tempTranslator.validateApiKeys();
-      return { success: true, results };
-    } else {
-      console.log('[Using saved keys for validation]');
-      const results = await translator.validateApiKeys();
-      return { success: true, results };
-    }
-  } catch (error) {
-    console.error('[API Key Validation Error]', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 자막 번역
-// targetLang 검증: 알파벳 2~8자 언어 코드(ko, en, ja, zh-CN 등)만 허용.
-const TARGET_LANG_RE = /^[a-z]{2,8}$/i;
-ipcMain.handle(
-  'translate-subtitle',
-  async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId, sessionId }) => {
-    // ABORTED catch에서 지금까지 성공한 언어 경로를 응답에 담기 위해
-    // 핸들러 스코프로 끌어올린다 (MED).
-    const outputPaths = [];
-    const failedLangs = [];
-    try {
-      // 새 요청 시작을 세션 시작으로 표시: 중지 후에도 새 번역이 정상 시작된다.
-      // 이후 중지 감지는 언어 루프의 _aborted 검사가 담당한다 (MAJOR).
-      translator.resetAbort();
-      const fileName = path.basename(filePath, path.extname(filePath));
-      const fileDir = path.dirname(filePath);
-      // 다국어 지원: targetLangs 배열 우선, 없으면 단일 targetLang (구판 호환). 중복/빈값 제거.
-      let langs = (Array.isArray(targetLangs) && targetLangs.length ? targetLangs : [targetLang])
-        .map((l) => (typeof l === 'string' && l.trim() ? l.trim() : ''))
-        .filter(Boolean);
-      langs = [...new Set(langs)];
-      if (!langs.length) langs = ['ko'];
-      // 검증: 허용된 언어 코드만 번역 대상으로 삼는다.
-      const invalidLangs = langs.filter((l) => !TARGET_LANG_RE.test(l));
-      if (invalidLangs.length) {
-        throw new Error(`Invalid target language code: ${invalidLangs.join(', ')}`);
-      }
-
-      // 파일별 캐시 격리 활성화
-      translator.setCurrentFile(filePath);
-      // local 번역 device 설정 전달
-      translator.localDevice = device === 'cpu' ? 'cpu' : 'auto';
-      translator.localModelId = localModelId || '1.8b';
-
-      event.sender.send('translation-progress', { stage: 'starting', sessionId });
-
-      for (let li = 0; li < langs.length; li++) {
-        const safeTarget = langs[li];
-        // 사용자 중지 시 남은 언어를 시작하지 않는다. 플래그는 요청 진입 시
-        // 리셋됐으므로 여기서는 언어 간 중지만 감지한다 (HIGH-1b).
-        if (translator._aborted) {
-          console.log(`[Translate] Aborted by user, skipping remaining languages: ${langs.slice(li).join(', ')}`);
-          throw new Error('ABORTED: Translation stopped by user');
-        }
-        const outputPath = path.join(fileDir, `${fileName}_${safeTarget}.srt`);
-        try {
-          const result = await translator.translateSRTFile(
-            filePath,
-            outputPath,
-            method,
-            safeTarget,
-            // 진행률 콜백: 여러 언어 전체 기준으로 환산 ((현재언어순번 + 언어내진행)/전체언어)
-            (prog) => {
-              try {
-                const within = prog && prog.total ? prog.current / prog.total : 0;
-                const overall = Math.round(((li + within) / langs.length) * 100);
-                event.sender.send('translation-progress', {
-                  stage: prog?.stage || 'translating',
-                  current: prog?.current,
-                  total: prog?.total,
-                  progress: overall,
-                  currentText: prog?.text,
-                  lang: safeTarget,
-                  langIndex: li + 1,
-                  langTotal: langs.length,
-                  sessionId,
-                });
-              } catch (_) {
-                /* noop */
-              }
-            },
-            sourceLang
-          );
-          outputPaths.push(result);
-        } catch (langErr) {
-          // 사용자 중지(ABORTED)는 언어 실패와 다르다: 원본 에러를 그대로 상위로
-          // 전파해 'Stopped by user' userStopped 마커가 설정되게 한다 (HIGH-3).
-          // 중지 후 남은 언어는 번역하지 않는다. 일반 실패만 기록하고 계속 진행한다.
-          if (String(langErr?.message || '').includes('ABORTED')) {
-            throw langErr;
-          }
-          // 한 언어의 실패가 다른 언어까지 중단시키지 않는다: 실패 언어만 기록하고
-          // 계속 진행한다. 성공한 언어 SRT는 응답에 포함된다 (P1).
-          console.error(`[Translate] Language ${safeTarget} failed: ${langErr.message}`);
-          failedLangs.push(safeTarget);
-        }
-      }
-
-      // 파일 처리 완료: 이 파일의 번역 캐시만 정리 (메모리 해제) — 성공/실패 무관
-      try {
-        translator.clearFileCache();
-      } catch (_e) {
-        /* noop */
-      }
-
-      if (!outputPaths.length) {
-        // 모든 언어가 실패한 경우에만 전체 실패로 처리한다.
-        const msg = failedLangs.length
-          ? `All target languages failed: ${failedLangs.join(', ')}`
-          : 'Translation failed';
-        throw new Error(msg);
-      }
-
-      // 모든 언어 완료 후 단 한 번만 completed 전송(이벤트 중복 방지)
-      event.sender.send('translation-progress', {
-        stage: 'completed',
-        progress: 99,
-        outputPath: outputPaths[0],
-        outputPaths,
-        failedLangs,
-        sessionId,
-      });
-
-      return { success: true, outputPath: outputPaths[0], outputPaths, failedLangs };
-    } catch (error) {
-      if (error.message && error.message.includes('ABORTED')) {
-        // MED: 도중 중지여도 완료된 이전 언어 SRT 경로는 응답에 포함한다.
-        // renderer가 읽는 기존 outputPaths 필드도 함께 유지한다.
-        event.sender.send('translation-progress', {
-          stage: 'error',
-          errorMessage: 'Stopped by user',
-          outputPaths,
-          sessionId,
-        });
-        return {
-          success: false,
-          error: 'Stopped by user',
-          userStopped: true,
-          partialOutputPaths: outputPaths,
-          outputPaths,
-        };
-      }
-      event.sender.send('translation-progress', { stage: 'error', errorMessage: error.message, sessionId });
-      return { success: false, error: error.message };
-    }
-  }
-);
-
-// 텍스트 직접 번역 (테스트용)
-ipcMain.handle('translate-text', async (_event, { text, method, targetLang }) => {
   try {
-    // translate-subtitle과 동일: 새 요청 시작 시 중지 플래그 리셋 (MAJOR).
-    translator.resetAbort();
-    const result = await translator.translateAuto(text, method, targetLang);
-    return { success: true, translatedText: result };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-});
-
-// 앱 경로 반환 (nya.wav 등 리소스 접근용)
-ipcMain.handle('get-app-path', async () => {
-  return app.isPackaged ? process.resourcesPath : __dirname;
-});
-
-// 로그 디렉터리 경로 반환 (%APPDATA%\whispersubtranslate\logs)
-ipcMain.handle('get-log-dir', async () => {
-  const logsDir = path.join(app.getPath('userData'), 'logs');
-  // 디렉터리가 없으면 생성
-  if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-  }
-  return logsDir;
-});
-
-// 업데이트 체크 IPC 핸들러 (폴백용 - 주로 did-finish-load에서 자동 체크)
-ipcMain.handle('check-for-updates', async () => {
-  return await checkForUpdates();
-});
-
-ipcMain.handle('get-current-version', async () => {
-  return CURRENT_VERSION;
-});
-
-ipcMain.handle('get-gpu-info', async () => {
-  const basePath = app.isPackaged ? process.resourcesPath : __dirname;
-  return { ...getGpuInfo(), vulkanAvailable: isVulkanAvailable(basePath) };
-});
-
-// nya.wav 파일을 base64로 읽어서 반환 (renderer에서 file:// 보안 문제 회피)
-// 임의 경로 탐색 방지: 허용리스트 + basename 검증으로 resources 내 파일만 노출한다.
-const ALLOWED_AUDIO_FILES = new Set(['nya.wav']);
-ipcMain.handle('get-audio-data', async (_event, filename) => {
-  try {
-    // basename과 다른 경로(하위/상위 디렉터리 포함)는 즉시 거부
-    if (typeof filename !== 'string' || path.basename(filename) !== filename) {
-      console.warn('[Security] Blocked get-audio-data path traversal attempt:', filename);
-      return null;
-    }
-    if (!ALLOWED_AUDIO_FILES.has(filename)) {
-      console.warn('[Security] Blocked get-audio-data for non-allowlisted file:', filename);
-      return null;
-    }
-
-    const basePath = app.isPackaged ? process.resourcesPath : __dirname;
-    const filePath = path.join(basePath, filename);
-
-    if (!fs.existsSync(filePath)) {
-      console.log('[Audio] File not found:', filePath);
-      return null;
-    }
-
-    const buffer = fs.readFileSync(filePath);
-    const base64 = buffer.toString('base64');
-    console.log('[Audio] Loaded audio file:', filePath, '- size:', buffer.length);
-    return `data:audio/wav;base64,${base64}`;
-  } catch (error) {
-    console.error('[Audio] Failed to read audio file:', error.message);
-    return null;
-  }
-});
-
-// ─── Local Hy-MT2 Translation IPC ───────────────────────────────────────────
-const localTranslator = require('./local-translator');
-let _localDownloadAbort = null;
-
-// 자동 다운로드 진행률을 renderer로 실시간 전송
-localTranslator.setDownloadProgressHandler((progress) => {
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('local-model-progress', progress);
-    }
-  } catch (_e) {
-    /* ignore */
-  }
-});
-
-ipcMain.handle('local-model-list', async () => {
-  return localTranslator.listModels();
-});
-
-ipcMain.handle('local-model-status', async (_event, modelId) => {
-  const id = modelId || localTranslator.DEFAULT_MODEL_ID;
-  const meta = localTranslator.MODELS[id];
-  return {
-    modelId: id,
-    installed: localTranslator.isModelInstalled(id),
-    path: localTranslator.getModelPath(id),
-    modelFile: meta?.file,
-    sizeMB: Math.round((meta?.sizeBytes || 0) / 1024 / 1024),
-    requirements: meta?.requirements,
-  };
-});
-
-ipcMain.handle('local-model-download', async (event, modelId) => {
-  const id = modelId || localTranslator.DEFAULT_MODEL_ID;
-  if (!localTranslator.isModelInstalled(id)) {
-    _localDownloadAbort = new AbortController();
-    try {
-      await localTranslator.downloadModel(
-        (progress) => {
-          event.sender.send('local-model-progress', progress);
-        },
-        _localDownloadAbort.signal,
-        id
-      );
-      return { success: true };
-    } catch (e) {
-      const cancelled = /cancell?ed|aborted/i.test(String(e?.message || '')) || e?.name === 'AbortError';
-      if (cancelled) return { success: false, error: 'cancelled', userStopped: true };
-      return { success: false, error: e.message };
-    } finally {
-      _localDownloadAbort = null;
-    }
-  }
-  return { success: true, alreadyInstalled: true };
-});
-
-// Whisper GGML 다운로드 취소 (download-model 이 사용하는 activeDownloads / downloadsCancelled 소스)
-ipcMain.handle('whisper-model-cancel', async () => {
-  try {
-    cancelActiveDownloads();
+    await ensureFasterWhisperAssets(emit);
     return { success: true };
-  } catch (e) {
-    return { success: false, error: e.message };
+  } catch (error) {
+    const cancelled =
+      /cancell?ed/i.test(String(error?.message || '')) ||
+      error?.name === 'CanceledError' ||
+      String(error?.name || '').includes('AbortError');
+    return cancelled
+      ? { success: false, error: 'cancelled', userStopped: true }
+      : { success: false, error: String(error?.message || error) };
   }
-});
+}
 
-ipcMain.handle('local-model-cancel', async () => {
-  if (_localDownloadAbort) {
-    _localDownloadAbort.abort(new Error('cancelled'));
-    _localDownloadAbort = null;
-  }
-  return true;
-});
-
-ipcMain.handle('local-model-delete', async (_event, modelId) => {
-  const id = modelId || localTranslator.DEFAULT_MODEL_ID;
-  await localTranslator.unloadModel();
-  localTranslator.deleteModel(id);
-  return true;
-});
-
-ipcMain.handle('local-translate', async (_event, { text, targetLang, modelId }) => {
+function deleteSyncEngine() {
   try {
-    const result = await localTranslator.translateLocal(
-      text,
-      targetLang,
-      'auto',
-      modelId || localTranslator.DEFAULT_MODEL_ID
-    );
-    return { success: true, result };
-  } catch (e) {
-    return { success: false, error: e.message };
+    const root = getFasterWhisperRootDir();
+    if (fs.existsSync(root)) fs.rmSync(root, { recursive: true, force: true });
+    _cachedFwExePath = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error?.message || error) };
   }
-});
+}
 
-// App Exit Cleanup
-let _isCleaningUp = false;
-let _quitRequested = false; // preventDefault 후 재호출된 quit을 정리 완료와 구분
-app.on('before-quit', (event) => {
-  // 정리 완료 후 재호출된 quit(또는 두 번째 종료 요청이 이미 정리 시퀀스 안이면)은 통과시킨다.
-  if (_quitRequested || _isCleaningUp) {
-    // 단, 아직 정리 중(_isCleaningUp && !_quitRequested)인데 창 닫기 경로에서
-    // quit이 재도착하면 preventDefault 해서 정리 완료까지 앱이 죽지 않게 한다.
-    if (_isCleaningUp && !_quitRequested) {
-      event.preventDefault();
-      console.log('[Cleanup] Quit requested during cleanup, deferring until cleanup finishes');
-    }
-    return;
+function deleteWhisperModel(modelName) {
+  try {
+    const modelFile = path.join(getGgmlModelsDir(), `ggml-${modelName}.bin`);
+    if (!fs.existsSync(modelFile)) return { success: false, error: 'File not found' };
+    fs.unlinkSync(modelFile);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error?.message || error) };
   }
-  event.preventDefault();
-  _isCleaningUp = true;
-  console.log('[Cleanup] App closing, cleaning up...');
-  // 진행 중인 모델 다운로드 중단 + 부분 파일 정리
-  const cleanup = async () => {
-    try {
-      cancelActiveDownloads();
-    } catch (_e) {}
-    try {
-      if (_localDownloadAbort) {
-        _localDownloadAbort.abort();
-        _localDownloadAbort = null;
-      }
-    } catch (_e) {}
-    try {
-      if (currentProcess && !currentProcess.killed) currentProcess.kill('SIGKILL');
-    } catch (_e) {}
-    // 번역 중이면 먼저 중단해 unloadModel의 뮤텍스 대기가 빨리 풀리게 한다.
-    // (translateLocal은 acquireTranslateLock에서 abort 시그널을 대기 중에도
-    // 즉시 반환하므로 선행 abort 없이는 수 분 블록될 수 있다)
-    try {
-      if (translator && typeof translator.abort === 'function') translator.abort();
-    } catch (_e) {}
-    // unloadModel은 15초 안에 끝내고, 초과하면 강제로 진행한다 (종료 보장).
-    await Promise.race([
-      localTranslator.unloadModel().catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, 15000)),
-    ]);
-    // GPU 리셋은 비동기 1회 시도로 충분하다 — 정리가 실패해도 종료는 보장한다.
-    await forceMemoryCleanup('cuda', true).catch(() => {});
-    _isCleaningUp = false;
-    _quitRequested = true;
-    app.quit(); // 정리 완료 후 실제 종료 재요청
-  };
-  cleanup();
-});
+}
 
-process.on('SIGINT', () => {
-  console.log('[Cleanup] SIGINT received');
-  app.quit();
-});
+function getGpuStatus() {
+  const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
+  return { ...getGpuInfo(), vulkanAvailable: isVulkanAvailable(basePath) };
+}
 
-process.on('SIGTERM', () => {
-  console.log('[Cleanup] SIGTERM received');
-  app.quit();
-});
+module.exports = {
+  cancelDownloads: cancelActiveDownloads,
+  checkModelStatus,
+  configureExtraction,
+  deleteSyncEngine,
+  deleteWhisperModel,
+  downloadModel,
+  downloadSyncEngine,
+  extractSingleFile,
+  forceMemoryCleanup,
+  getGgmlModelsDir,
+  getGpuStatus,
+  isStopped,
+  resetStop,
+  setMainWindow,
+  srtOutputPathFor,
+  stop,
+  terminateCurrentProcess,
+  translator,
+  withoutExt,
+};

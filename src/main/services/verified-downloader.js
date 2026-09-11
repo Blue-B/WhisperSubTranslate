@@ -257,4 +257,4 @@ async function downloadVerifiedFile({
   }
 }
 
-module.exports = { downloadVerifiedFile, getDownloadUrls, isRetryableDownloadError, sha256File };
+module.exports = { downloadVerifiedFile, sha256File };

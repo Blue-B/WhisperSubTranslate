@@ -4,25 +4,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { wrapCuesForDisplay } = require('./srt-cleanup');
-const MyMemoryTranslator = require('./myMemoryTranslator');
+const MyMemoryTranslator = require('./mymemory-translator');
 const localTranslator = require('./local-translator');
-
-let electronApp = null;
-let electronSafeStorage = null;
-try {
-  const electronModule = require('electron');
-  electronApp = electronModule.app || null;
-  electronSafeStorage = electronModule.safeStorage || null;
-} catch (error) {
-  console.log('[Translator] Running without Electron app context:', error.message);
-}
-
-// Hardcoded AES key: ACTIVE fallback when Electron safeStorage is unavailable
-// (e.g. Linux without a keyring daemon). The key is public in the source, so saves
-// through this path are flagged insecure and logged loudly (see README).
-// Prefer safeStorage (OS-level: DPAPI / Keychain / libsecret).
-const ENCRYPTION_KEY = 'whisper-sub-translate-secure-key-2024-32bytes!!';
-const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
+const errLogger = require('./error-logger');
+const translationConfig = require('./translation-config');
 
 // ===== LLM 공급자 기본값 =====
 // 모델명·엔드포인트·프롬프트는 전부 설정에서 덮어쓸 수 있고, 여기는 빈 설정일 때 쓰는 값이다.
@@ -175,195 +160,6 @@ function normalizeCustomProviders(list) {
     });
 }
 
-function safeStorageAvailable() {
-  try {
-    return !!(
-      electronSafeStorage &&
-      typeof electronSafeStorage.isEncryptionAvailable === 'function' &&
-      electronSafeStorage.isEncryptionAvailable()
-    );
-  } catch (_err) {
-    return false;
-  }
-}
-
-function getSafeStorageConfigPath() {
-  try {
-    if (electronApp && electronApp.getPath) {
-      return path.join(electronApp.getPath('userData'), 'translation-config-safe.json');
-    }
-  } catch (_err) {
-    /* noop */
-  }
-  return path.join(__dirname, 'translation-config-safe.json');
-}
-
-function safeStorageEncryptJson(jsonText) {
-  if (!safeStorageAvailable()) return null;
-  try {
-    const buf = electronSafeStorage.encryptString(jsonText);
-    return buf.toString('base64');
-  } catch (error) {
-    console.error('[safeStorage] encrypt failed:', error.message);
-    return null;
-  }
-}
-
-function safeStorageDecryptJson(base64Text) {
-  if (!safeStorageAvailable()) return null;
-  try {
-    const buf = Buffer.from(base64Text, 'base64');
-    return electronSafeStorage.decryptString(buf);
-  } catch (error) {
-    console.error('[safeStorage] decrypt failed:', error.message);
-    return null;
-  }
-}
-
-function getConfigPath() {
-  try {
-    if (electronApp && electronApp.getPath) {
-      const base = electronApp.getPath('userData');
-      return path.join(base, 'translation-config.json');
-    }
-  } catch (error) {
-    console.log('[Config] Failed to get user data path:', error.message);
-  }
-  return path.join(__dirname, 'translation-config.json');
-}
-
-function getEncryptedConfigPath() {
-  try {
-    if (electronApp && electronApp.getPath) {
-      const base = electronApp.getPath('userData');
-      return path.join(base, 'translation-config-encrypted.json');
-    }
-  } catch (error) {
-    console.log('[Config] Failed to get encrypted config path:', error.message);
-  }
-  return path.join(__dirname, 'translation-config-encrypted.json');
-}
-
-function getLogPath() {
-  try {
-    if (electronApp && electronApp.getPath) {
-      const base = electronApp.getPath('userData');
-      const logsDir = path.join(base, 'logs');
-
-      // Create logs directory if it doesn't exist
-      if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
-        console.log('[Logs] Created logs directory:', logsDir);
-      }
-
-      // 통합 errors.log로 일본화 (이전엔 translation-errors.log)
-      return path.join(logsDir, 'errors.log');
-    }
-  } catch (error) {
-    console.log('[Logs] Failed to get log path:', error.message);
-  }
-  // Fallback to current directory
-  return path.join(__dirname, 'translation-errors.log');
-}
-
-// 로그 파일 크기 체크 및 정리 (2MB 초과 시 최근 1000줄만 유지)
-const LOG_MAX_SIZE = 2 * 1024 * 1024; // 2MB
-const LOG_KEEP_LINES = 1000;
-
-function cleanupLogFile(logPath) {
-  try {
-    if (!fs.existsSync(logPath)) return;
-
-    const stats = fs.statSync(logPath);
-    if (stats.size <= LOG_MAX_SIZE) return;
-
-    console.log(
-      `[Logs] Log file exceeds ${LOG_MAX_SIZE / 1024 / 1024}MB (${(stats.size / 1024 / 1024).toFixed(2)}MB), cleaning up...`
-    );
-
-    // 파일 읽어서 최근 1000줄만 유지
-    const content = fs.readFileSync(logPath, 'utf8');
-    const lines = content.split('\n');
-
-    if (lines.length > LOG_KEEP_LINES) {
-      const keptLines = lines.slice(-LOG_KEEP_LINES);
-      const header = `[Log Cleanup] Trimmed from ${lines.length} lines to ${LOG_KEEP_LINES} lines at ${new Date().toISOString()}\n---\n`;
-      fs.writeFileSync(logPath, header + keptLines.join('\n'), 'utf8');
-      console.log(`[Logs] Cleaned up: ${lines.length} -> ${LOG_KEEP_LINES} lines`);
-    }
-  } catch (err) {
-    console.warn('[Logs] Failed to cleanup log file:', err.message);
-  }
-}
-
-// Encrypt data (데이터 암호화)
-function encryptData(text) {
-  try {
-    const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
-  } catch (error) {
-    console.error('[Encryption] Failed:', error.message);
-    return null;
-  }
-}
-
-// Decrypt data (데이터 복호화)
-function decryptData(encryptedText) {
-  try {
-    const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
-    const parts = encryptedText.split(':');
-    const iv = Buffer.from(parts[0], 'hex');
-    const encrypted = parts[1];
-    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv);
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (error) {
-    console.error('[Decryption] Failed:', error.message);
-    return null;
-  }
-}
-
-// Migrate from plaintext to encrypted storage (평문에서 암호화 저장소로 마이그레이션)
-function migratePlaintextConfig() {
-  const configPath = getConfigPath();
-  const encryptedConfigPath = getEncryptedConfigPath();
-
-  if (fs.existsSync(configPath) && !fs.existsSync(encryptedConfigPath)) {
-    try {
-      console.log('[Migration] Found plaintext config, migrating to encrypted storage...');
-      const plainConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-      // Encrypt and save
-      const encryptedData = encryptData(JSON.stringify(plainConfig));
-      if (encryptedData) {
-        fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
-
-        // 평문 키 파일은 마이그레이션 성공 후 보안을 위해 즉시 삭제한다.
-        // (백업 보존 시 평문 API 키가 디스크에 계속 남는다)
-        console.log('[Migration] Removing plaintext config after successful migration');
-        try {
-          fs.rmSync(configPath, { force: true });
-        } catch (cleanupErr) {
-          console.warn('[Migration] Failed to remove plaintext config:', cleanupErr.message);
-        }
-
-        console.log('[Migration] Success! API keys are now stored securely with encryption');
-        return true;
-      }
-    } catch (error) {
-      console.error('[Migration] Failed to migrate plaintext config:', error.message);
-      return false;
-    }
-  }
-
-  return false;
-}
-
 class EnhancedSubtitleTranslator {
   constructor() {
     this.deeplTranslator = null;
@@ -402,7 +198,6 @@ class EnhancedSubtitleTranslator {
   setCurrentFile(filePath) {
     if (filePath) {
       // 파일 경로를 간단한 ID로 변환 (파일명만 사용)
-      const path = require('path');
       this.currentFileId = path.basename(filePath, path.extname(filePath));
       console.log(`[Cache] File-specific cache activated for: ${this.currentFileId}`);
     } else {
@@ -459,53 +254,10 @@ class EnhancedSubtitleTranslator {
   }
 
   loadApiKeys() {
-    migratePlaintextConfig();
-
-    const safePath = getSafeStorageConfigPath();
-    if (safeStorageAvailable() && fs.existsSync(safePath)) {
-      try {
-        const payload = JSON.parse(fs.readFileSync(safePath, 'utf8'));
-        const decrypted = safeStorageDecryptJson(payload.data);
-        if (decrypted) {
-          return this.hydrateApiConfig(JSON.parse(decrypted));
-        }
-      } catch (error) {
-        console.error('[Config] Failed to load safeStorage config:', error.message);
-      }
-    }
-
-    const encryptedConfigPath = getEncryptedConfigPath();
-    try {
-      if (fs.existsSync(encryptedConfigPath)) {
-        const encryptedFile = JSON.parse(fs.readFileSync(encryptedConfigPath, 'utf8'));
-        const decrypted = decryptData(encryptedFile.data);
-        if (decrypted) {
-          const hydrated = this.hydrateApiConfig(JSON.parse(decrypted));
-          if (safeStorageAvailable()) {
-            try {
-              const reencrypted = safeStorageEncryptJson(JSON.stringify(hydrated));
-              if (reencrypted) {
-                fs.writeFileSync(safePath, JSON.stringify({ data: reencrypted }));
-                // AES legacy 파일은 재암호화 성공 후 보안을 위해 삭제한다.
-                try {
-                  fs.rmSync(encryptedConfigPath, { force: true });
-                } catch (_e) {
-                  /* noop */
-                }
-                console.log('[Config] Migrated legacy AES config to safeStorage:', safePath);
-              }
-            } catch (error) {
-              console.warn('[Config] safeStorage migration failed:', error.message);
-            }
-          }
-          return hydrated;
-        }
-      }
-    } catch (error) {
-      console.error('[Config] Failed to load encrypted config:', error.message);
-    }
-
-    return this.getDefaultConfig();
+    return translationConfig.loadConfig(
+      (config) => this.hydrateApiConfig(config),
+      () => this.getDefaultConfig()
+    );
   }
 
   getDefaultConfig() {
@@ -579,45 +331,17 @@ class EnhancedSubtitleTranslator {
   }
 
   saveApiKeys(keys) {
+    const saved = translationConfig.saveConfig(
+      keys,
+      (config) => this.hydrateApiConfig(config),
+      () => this.getDefaultConfig()
+    );
+    if (!saved.result) return false;
+
     try {
-      const existingConfig = this.loadApiKeys();
-      const newConfig = { ...existingConfig, ...keys };
-      const json = JSON.stringify(newConfig);
-
-      if (safeStorageAvailable()) {
-        const encryptedSafe = safeStorageEncryptJson(json);
-        if (encryptedSafe) {
-          fs.writeFileSync(getSafeStorageConfigPath(), JSON.stringify({ data: encryptedSafe }));
-          this.apiKeys = this.loadApiKeys();
-          if (this.apiKeys.deepl) {
-            this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
-          }
-          console.log('[Config] API keys saved via Electron safeStorage');
-          return true;
-        }
-        console.warn('[Config] safeStorage save failed, falling back to legacy AES');
-      }
-
-      // safeStorage(OS 키링) 부재 시 하드코딩 키 AES 폴백. 키가 소스에 공개되어
-      // 있으므로 이 저장은 난독화 수준이며, '안전하지 않음'을 로그와 반환값의
-      // insecure 플래그로 명시적으로 드러낸다. 저장 자체는 Linux UX를 위해 유지.
-      console.warn(
-        '[Security] API keys stored with legacy AES fallback using a HARDCODED key ' +
-          '(safeStorage/OS keyring unavailable). Keys are recoverable by anyone with the ' +
-          'app source - NOT secure. Use a desktop session with a keyring (e.g. gnome-keyring).'
-      );
-      const encryptedConfigPath = getEncryptedConfigPath();
-      const encryptedData = encryptData(json);
-      if (!encryptedData) {
-        throw new Error('Encryption failed');
-      }
-      fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
-      this.apiKeys = this.loadApiKeys();
-      if (this.apiKeys.deepl) {
-        this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
-      }
-      console.warn('[Config] API keys saved via legacy AES fallback (INSECURE - hardcoded key)');
-      return { success: true, insecure: true };
+      this.apiKeys = saved.config;
+      if (this.apiKeys.deepl) this.deeplTranslator = new deepl.Translator(this.apiKeys.deepl);
+      return saved.result;
     } catch (error) {
       console.error('[Config] Failed to save API keys:', error.message);
       return false;
@@ -757,7 +481,7 @@ class EnhancedSubtitleTranslator {
     });
   }
 
-  // Enhanced error handling (향상된 에러 처리) - 콘솔 + 파일 로그
+  // Enhanced error handling (향상된 에러 처리) - 콘솔 + 통합 파일 로그
   logError(context, error) {
     const errorInfo = {
       timestamp: new Date().toISOString(),
@@ -766,21 +490,7 @@ class EnhancedSubtitleTranslator {
       stack: error.stack,
     };
     console.error('[Translation Error]', errorInfo);
-
-    // 파일에도 에러 로그 저장 (디버깅용)
-    // 로그 위치: %APPDATA%\whispersubtranslate\logs\translation-errors.log
-    try {
-      const logPath = getLogPath();
-
-      // 로그 쓰기 전에 크기 체크 및 정리 (2MB 초과 시 최근 1000줄 유지)
-      cleanupLogFile(logPath);
-
-      const logEntry = `[${errorInfo.timestamp}] ${context}: ${error.message}\n${error.stack || ''}\n---\n`;
-      fs.appendFileSync(logPath, logEntry, 'utf8');
-    } catch (fileErr) {
-      // 파일 로그 실패 시 무시
-      console.warn('[Logs] Failed to write error log:', fileErr.message);
-    }
+    errLogger.logError('translation', `${context}: ${error.message}`, error);
   }
 
   // Translation with retry (재시도 로직)
@@ -1278,7 +988,11 @@ class EnhancedSubtitleTranslator {
     //  실패하므로 명확한 에러가 맞다. 일시 장애만 원문 유지 passthrough.)
     console.warn(`[Final Attempt] All services failed, trying MyMemory as last resort: "${text.substring(0, 40)}..."`);
     try {
-      return await this.translateWithMyMemory(text, targetLanguage === 'KO' ? 'ko' : targetLanguage.toLowerCase());
+      return await this.translateWithMyMemory(
+        text,
+        targetLanguage === 'KO' ? 'ko' : targetLanguage.toLowerCase(),
+        sourceLang || 'auto'
+      );
     } catch (finalErr) {
       console.error(`[Final Attempt Failed] "${text.substring(0, 40)}..." - ${finalErr.message}`);
       // 쿼터 초과는 폴백이 끝난 뒤에도 삼키지 않는다: 할당량이면 다른 줄도
@@ -1338,7 +1052,7 @@ class EnhancedSubtitleTranslator {
       th: 'Thai (ไทย)',
       vi: 'Vietnamese (Tiếng Việt)',
       // translateAuto 기본값이 'KO'(대문자)로 올 수 있어 유지.
-      // 하이픈/영문 키(ko-KR, en-US, zh-CN 등)는 main.js TARGET_LANG_RE가
+      // 하이픈/영문 키(ko-KR, en-US, zh-CN 등)는 translation IPC TARGET_LANG_RE가
       // 소문자 2~8자만 허용하므로 도달 불가 — 별도 키를 둘 필요 없다.
       KO: 'Korean (한국어)',
     };
@@ -1851,7 +1565,7 @@ ${lines}`;
   ) {
     // HIGH-1: 중지 플래그는 새 번역 요청마다 항상 리셋한다. 한 번 중지해도
     // 같은 세션의 다음 새 번역은 다시 시작할 수 있어야 한다. 언어 간 abort
-    // 보호(중지 후 남은 언어 시작 금지)는 main.js 다국어 루프가 translateSRTFile
+    // 보호(중지 후 남은 언어 시작 금지)는 translation IPC 다국어 루프가 translateSRTFile
     // 호출 전에 translator._aborted를 직접 검사하므로 여기서 리셋해도 유지된다.
     this.resetAbort();
     // 구버전 설정에 남은 경량 항목은 OpenAI로 보낸다.

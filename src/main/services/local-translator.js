@@ -8,16 +8,19 @@
 
 const path = require('path');
 const fs = require('fs');
-const https = require('https');
+const axios = require('axios');
 const { assertDownloadDiskSpace } = require('./disk-space');
+const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
 
 // 모델 카탈로그 — 새 모델 추가는 여기에만
 const MODELS = {
   '1.8b': {
     id: '1.8b',
     repo: 'tencent/Hy-MT2-1.8B-GGUF',
+    revision: '1cd5208700acedef4ef93019b6cfc148b8522d45',
     file: 'Hy-MT2-1.8B-Q4_K_M.gguf',
-    sizeBytes: 1_133_080_448, // ~1.13GB
+    sizeBytes: 1_133_080_448, // Hugging Face LFS metadata
+    sha256: 'dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699',
     displayName: 'Hy-MT2 1.8B Q4',
     requirements: {
       vram: '2GB',
@@ -29,8 +32,10 @@ const MODELS = {
   '7b': {
     id: '7b',
     repo: 'tencent/Hy-MT2-7B-GGUF',
+    revision: 'ab8472660ac61fac25f1af43fac2599d52a8a775',
     file: 'HY-MT2-7B-Q6_K.gguf',
-    sizeBytes: 6_164_482_720, // ~6.16GB (Q6_K — higher quality tier)
+    sizeBytes: 6_164_482_720, // Hugging Face LFS metadata (Q6_K)
+    sha256: '88ef0aba59952a4cfe4be36cb5baf797dbb370bc60e9dcbd7297036021e52831',
     displayName: 'Hy-MT2 7B Q6',
     requirements: {
       vram: '8GB',
@@ -48,14 +53,13 @@ const LOCAL_LOAD_TIMEOUT_MS = 15 * 60 * 1000;
 
 function getModelUrl(modelId) {
   const m = MODELS[modelId];
-  return `https://huggingface.co/${m.repo}/resolve/main/${m.file}`;
+  return `https://huggingface.co/${m.repo}/resolve/${m.revision}/${m.file}`;
 }
 
 // Language name map for prompt — Hy-MT2 officially supports 33+ languages.
 // Use FULL language names in the prompt (per Tencent Hy-MT2 model card).
-// 참고: 'zh-Hant'/'yue'는 main.js TARGET_LANG_RE(소문자 2~8자)로 UI 드롭다운에서
-// 도달 불가지만, local-translate IPC는 검증 없이 targetLang을 받으므로
-// 직접 호출 경로를 위해 유지한다.
+// 'zh-Hant' and 'yue' are not currently exposed by the renderer, but the
+// service keeps them because direct internal callers may request them.
 const LANG_NAMES = {
   ko: 'Korean',
   en: 'English',
@@ -174,16 +178,11 @@ let _downloadPromises = {}; // modelId → Promise
 let _loadPromise = null;
 let _translateMutex = Promise.resolve();
 const _activeAbortControllers = new Set();
+const _validatedModelFiles = new Map();
 let _onDownloadProgress = null;
 // in-flight 다운로드의 진행률 구독자 (동일 모델에 두 번째 호출자가 붙어도
 // 체인을 무한 누적하지 않고 Set으로 관리해 완료 시 정리한다 — MED 8).
 const _downloadSubscribers = new Map(); // modelId → Set<fn>
-
-// 모델 다운로드 전 디스크 여유 공간 확인 (MED 4).
-function assertDiskSpaceFor(modelId, alreadyDownloaded = 0) {
-  const m = MODELS[modelId];
-  if (m) assertDownloadDiskSpace(getModelPath(modelId), Math.max(0, m.sizeBytes - alreadyDownloaded));
-}
 
 async function withTimeout(run, timeoutMs = LOCAL_OPERATION_TIMEOUT_MS, parentSignal = null) {
   const controller = new AbortController();
@@ -269,7 +268,7 @@ function isModelInstalled(modelId = DEFAULT_MODEL_ID) {
   if (!m) return false;
   try {
     const stat = fs.statSync(getModelPath(modelId));
-    return stat.size > m.sizeBytes * 0.95;
+    return stat.isFile() && stat.size === m.sizeBytes;
   } catch {
     return false;
   }
@@ -356,7 +355,9 @@ async function downloadModel(onProgress, signal, modelId = DEFAULT_MODEL_ID) {
     delete _downloadPromises[modelId];
     _downloadSubscribers.delete(modelId);
   });
-  return await waitForDownload(_downloadPromises[modelId], signal);
+  // The owner waits for the transfer itself to settle. Returning early on its abort
+  // would let an immediate retry attach to the still-cancelling shared promise.
+  return await _downloadPromises[modelId];
 }
 
 function waitForDownload(promise, signal) {
@@ -365,8 +366,48 @@ function waitForDownload(promise, signal) {
   return new Promise((resolve, reject) => {
     const onAbort = () => reject(signal.reason || new Error('Download cancelled'));
     signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      }
+    );
   });
+}
+
+function installVerifiedModelFile(partialPath, destinationPath) {
+  const backupPath = `${destinationPath}.previous-${process.pid}-${Date.now()}`;
+  const hadDestination = fs.existsSync(destinationPath);
+  if (hadDestination) fs.renameSync(destinationPath, backupPath);
+  try {
+    fs.renameSync(partialPath, destinationPath);
+  } catch (error) {
+    if (hadDestination) fs.renameSync(backupPath, destinationPath);
+    throw error;
+  }
+  if (hadDestination) {
+    try {
+      fs.unlinkSync(backupPath);
+    } catch (error) {
+      console.warn(`[Local] installed model but could not remove replacement backup: ${error.message}`);
+    }
+  }
+}
+
+async function ensureModelIntegrity(modelId) {
+  const m = MODELS[modelId];
+  if (!m) throw new Error(`Unknown model id: ${modelId}`);
+  const modelPath = getModelPath(modelId);
+  const stat = fs.statSync(modelPath);
+  const cacheKey = `${stat.size}:${stat.mtimeMs}`;
+  if (_validatedModelFiles.get(modelPath) === cacheKey) return;
+  const digest = await sha256File(modelPath);
+  if (digest !== m.sha256) throw new Error(`LOCAL_MODEL_INTEGRITY: SHA-256 verification failed (${modelId})`);
+  _validatedModelFiles.set(modelPath, cacheKey);
 }
 
 async function _downloadModelImpl(signal, modelId) {
@@ -376,160 +417,47 @@ async function _downloadModelImpl(signal, modelId) {
   fs.mkdirSync(dir, { recursive: true });
   const dest = getModelPath(modelId);
   const tmp = dest + '.tmp';
-
-  // 진행률 구독자 일괄 호출 (첫 호출자 + 추가 대기자).
-  const emitProgress = (p) => {
+  const emitProgress = (percent, downloaded, total) => {
+    const progress = { modelId, percent, downloaded, total };
     for (const sub of _downloadSubscribers.get(modelId) || []) {
       try {
-        sub(p);
-      } catch (_e) {
-        /* ignore */
-      }
+        sub(progress);
+      } catch (_e) {}
     }
-    if (_onDownloadProgress)
-      try {
-        _onDownloadProgress(p);
-      } catch (_e) {
-        /* ignore */
-      }
+    try {
+      _onDownloadProgress?.(progress);
+    } catch (_e) {}
   };
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const abortError = () => (signal?.reason instanceof Error ? signal.reason : new Error('Download cancelled'));
-    const fail = (error) => {
-      if (settled) return;
-      settled = true;
-      try {
-        fs.unlinkSync(tmp);
-      } catch {}
-      reject(error);
-    };
-    const failPreservingTmp = (error) => {
-      if (settled) return;
-      settled = true;
-      reject(error);
-    };
-
-    const doRequest = (url, redirects = 0, resumeOffset = 0) => {
-      if (settled) return;
-      if (signal?.aborted) return fail(abortError());
-      if (redirects > 5) return fail(new Error('Too many redirects'));
-
-      let out = null;
-      let req = null;
-      let redirected = false;
-      const detachAbort = () => signal?.removeEventListener('abort', abortRequest);
-      const abortRequest = () => {
-        req?.destroy();
-        out?.destroy();
-        fail(abortError());
-      };
-
-      const headers = {};
-      if (resumeOffset > 0) headers.Range = `bytes=${resumeOffset}-`;
-      req = https.get(url, { headers }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          redirected = true;
-          detachAbort();
-          res.on('error', () => {});
-          res.resume();
-          return doRequest(res.headers.location, redirects + 1, resumeOffset);
-        }
-        // resume 지원 서버는 206, 미지원/서버가 재시작한 경우 200으로 온다.
-        const isPartial = res.statusCode === 206;
-        if (res.statusCode !== 200 && !isPartial) {
-          detachAbort();
-          res.resume();
-          return fail(new Error(`HTTP ${res.statusCode}`));
-        }
-        if (resumeOffset > 0 && !isPartial) {
-          // 서버가 Range를 무시했다. 전체 크기를 받을 공간을 먼저 확인하고,
-          // 충분할 때만 기존 tmp를 지워 이어받기 데이터를 보존한다.
-          try {
-            assertDiskSpaceFor(modelId);
-          } catch (error) {
-            detachAbort();
-            res.destroy();
-            return failPreservingTmp(error);
-          }
-          try {
-            fs.unlinkSync(tmp);
-          } catch {}
-          resumeOffset = 0;
-        }
-
-        const total = parseInt(res.headers['content-length'] || m.sizeBytes, 10) + (isPartial ? resumeOffset : 0);
-        let downloaded = resumeOffset;
-        const writeFlags = isPartial || resumeOffset > 0 ? 'a' : 'w';
-        out = fs.createWriteStream(tmp, { flags: writeFlags });
-        out.on('error', (error) => {
-          detachAbort();
-          res.destroy();
-          fail(error);
-        });
-
-        res.on('data', (chunk) => {
-          downloaded += chunk.length;
-          if (!out.write(chunk)) {
-            res.pause();
-            out.once('drain', () => res.resume());
-          }
-          const p = { modelId, percent: Math.round((downloaded / total) * 100), downloaded, total };
-          emitProgress(p);
-        });
-
-        res.on('end', () => {
-          detachAbort();
-          out.end(() => {
-            if (settled) return;
-            try {
-              // 잘린 다운로드 방지: content-length가 주어졌고 받은 양이 다르면 실패 (MED 4).
-              if (res.headers['content-length'] && downloaded !== total) {
-                return failPreservingTmp(
-                  new Error(`Download incomplete: got ${downloaded} of ${total} bytes (model ${modelId})`)
-                );
-              }
-              fs.renameSync(tmp, dest);
-              settled = true;
-              resolve(dest);
-            } catch (error) {
-              fail(error);
-            }
-          });
-        });
-
-        res.on('error', (error) => {
-          detachAbort();
-          out.destroy();
-          failPreservingTmp(error);
-        });
-      });
-
-      signal?.addEventListener('abort', abortRequest, { once: true });
-      req.on('error', (error) => {
-        detachAbort();
-        if (redirected) return;
-        if (signal?.aborted) fail(abortError());
-        else failPreservingTmp(error);
-      });
-    };
-
-    // 이미 받다 만 tmp가 있으면 이어받기 시도 (MED 5).
-    let resumeOffset = 0;
-    try {
-      resumeOffset = fs.statSync(tmp).size;
-    } catch {
-      resumeOffset = 0;
+  const activeDownloads = new Set();
+  const abortDownloads = () => {
+    for (const tracker of activeDownloads) {
+      tracker.cancelled = true;
+      tracker.controller?.abort();
+      tracker.writer?.destroy();
     }
-    try {
-      assertDiskSpaceFor(modelId, resumeOffset);
-    } catch (error) {
-      // 공간만 부족한 경우 이미 받은 tmp는 보존해 다음 실행에서 이어받는다.
-      return failPreservingTmp(error);
-    }
-    doRequest(getModelUrl(modelId), 0, resumeOffset);
-  });
+  };
+  signal?.addEventListener('abort', abortDownloads, { once: true });
+  try {
+    await downloadVerifiedFile({
+      axios,
+      assertDownloadDiskSpace,
+      url: getModelUrl(modelId),
+      partialPath: tmp,
+      label: m.displayName,
+      expectedSize: m.sizeBytes,
+      sha256: m.sha256,
+      onProgress: emitProgress,
+      activeDownloads,
+      isCancelled: () => Boolean(signal?.aborted),
+    });
+    if (signal?.aborted) throw signal.reason || new Error('Download cancelled');
+    installVerifiedModelFile(tmp, dest);
+    const stat = fs.statSync(dest);
+    _validatedModelFiles.set(dest, `${stat.size}:${stat.mtimeMs}`);
+    return dest;
+  } finally {
+    signal?.removeEventListener('abort', abortDownloads);
+  }
 }
 
 function deleteModel(modelId = DEFAULT_MODEL_ID) {
@@ -546,6 +474,7 @@ function deleteModel(modelId = DEFAULT_MODEL_ID) {
 async function loadModelUnlocked(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = null) {
   const desiredMode = device === 'cpu' ? 'cpu' : 'auto';
   if (_model && _currentGpuMode === desiredMode && _currentModelId === modelId) return;
+  await ensureModelIntegrity(modelId);
   if (_loadPromise) return _loadPromise;
   _loadPromise = (async () => {
     // translateLocal이 잡은 mutex 안에서 다시 unloadModel의 mutex를 기다리면 교착된다.
@@ -773,7 +702,6 @@ module.exports = {
   unloadModel,
   setDownloadProgressHandler,
   cleanupLegacyModels,
-  // Backwards compat
-  MODEL_FILE: MODELS[DEFAULT_MODEL_ID].file,
-  MODEL_SIZE_BYTES: MODELS[DEFAULT_MODEL_ID].sizeBytes,
+  ensureModelIntegrity,
+  installVerifiedModelFile,
 };

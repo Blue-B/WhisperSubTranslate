@@ -2,7 +2,7 @@
 
 English | [한국어](./docs/README.ko.md) | [日本語](./docs/README.ja.md) | [中文](./docs/README.zh.md) | [Polski](./docs/README.pl.md)
 
-Turn any video into multilingual subtitles, locally. Drop in a video, generate an SRT with whisper.cpp, then translate it offline with the bundled Hy-MT2 model or with free/paid online engines.
+Turn any video into multilingual subtitles, locally. Drop in a video, generate an SRT with whisper.cpp, then translate it offline with a downloaded Hy-MT2 model or with free/paid online engines.
 
 > This app creates new subtitles from your video's audio (speech to text). It does not extract embedded subtitle tracks or read on-screen text (no OCR).
 
@@ -15,7 +15,7 @@ Turn any video into multilingual subtitles, locally. Drop in a video, generate a
 ## Features
 
 - 100% local speech to text. Your video never leaves your machine, no account, no upload.
-- Offline translation with the bundled Hy-MT2 model, or online engines (MyMemory, DeepL, OpenAI, Gemini) with your own keys.
+- Offline translation with Hy-MT2 after the initial model download, or online engines (MyMemory, DeepL, OpenAI, Gemini) with your own keys.
 - Automatic model download. No Python, no manual setup.
 - Sync repair models (large-v2 Sync and Sync Lite) for videos where normal models drift out of sync.
 - Queue, live progress, and local-only job history.
@@ -24,7 +24,7 @@ Turn any video into multilingual subtitles, locally. Drop in a video, generate a
 
 ### Users
 
-Download the latest portable archive from [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), extract it, and run `WhisperSubTranslate.exe`. Extraction runs fully offline on your PC. Translation is optional.
+Download the latest portable archive from [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), extract it, and run `WhisperSubTranslate.exe`. After the selected speech model is downloaded, extraction runs fully offline on your PC. Translation is optional.
 
 ### Developers
 
@@ -36,6 +36,8 @@ npm start
 - Node.js >= 22.12.0 (see `engines` in package.json; Electron 43 toolchain)
 - whisper.cpp is downloaded during `npm install` (Windows gets the CUDA build ~700MB plus a Vulkan build ~23MB)
 - FFmpeg is included via npm; the selected GGML model downloads on first use
+
+Application code is organized under `src/main/` (Electron main process and services), `src/preload/` (renderer bridge), `src/renderer/` (UI), and `src/shared/` (shared IPC channels).
 
 ### Linux
 
@@ -55,30 +57,36 @@ For CUDA acceleration, install the NVIDIA CUDA Toolkit before `npm install`. Man
 npm run build-win   # artifacts are emitted to dist2/
 ```
 
+Build on Windows for normal Windows dependency installation. When cross-building from Linux, npm may omit Windows-only optional packages. The build workspace must include the lockfile-pinned `@node-llama-cpp/win-x64`, `win-x64-cuda`, `win-x64-cuda-ext`, and `win-x64-vulkan` packages, including their JS/JSON metadata and native binaries. A successful build alone does not verify that local translation can load its backend on Windows.
+
 ## Translation engines
 
-Translate subtitles fully offline with the bundled Tencent Hy-MT2 model, or route to free/paid online engines using your own API keys.
+Download a Tencent Hy-MT2 model once to translate subtitles offline, or use free/paid online engines (API keys required where applicable).
 
 | Engine                                           | Offline | API key | Cost            | Notes                                                                                    |
 | ------------------------------------------------ | :-----: | :-----: | --------------- | ---------------------------------------------------------------------------------------- |
 | Hy-MT2 1.8B (local, default)                     |   Yes   |   No    | Free            | ~1.13GB, VRAM 2GB / RAM 4GB, on-device                                                   |
 | Hy-MT2 7B (local)                                |   Yes   |   No    | Free            | ~6.16GB, VRAM 8GB / RAM 12GB, larger model                                               |
 | MyMemory                                         |   No    |   No    | Free            | ~50K chars/day per IP                                                                    |
-| DeepL                                            |   No    |   Yes   | Free 500K/month | Deterministic output                                                                     |
+| DeepL                                            |   No    |   Yes   | Varies by plan  | New API Developer: 1M total; legacy API Free: 500K/month                                  |
 | OpenAI GPT-5.x (configurable, e.g. gpt-5.6-sol)  |   No    |   Yes   | Paid            | Default model; context-aware                                                             |
 | Gemini 3.x (configurable, e.g. gemini-3.6-flash) |   No    |   Yes   | Free / low-cost | Recommended low-cost route ([get key](https://aistudio.google.com/app/apikey))           |
 | Claude (configurable, e.g. claude-opus-5)        |   No    |   Yes   | Paid            | Strong at context understanding ([get key](https://console.anthropic.com/settings/keys)) |
 | Custom OpenAI-compatible providers               |   No    |   Yes   | Varies          | Bring your own endpoint (OpenRouter, Ollama, vLLM, …)                                    |
 
-The local Hy-MT2 engine is the only option that needs no API key, no network, and no per-use cost, so your dialogue never leaves your machine.
+Local Hy-MT2 translation needs no API key or network connection after the model download, and has no per-use cost. Subtitle text stays on your machine when using this engine.
+
+Hy-MT2 downloads use pinned model revisions and are checked against exact file sizes and SHA-256 digests before installation. Existing models are also hash-checked before loading, with successful checks cached for unchanged files during the app session. A failed integrity check does not delete an existing model.
+
+Local translation selects its GPU backend automatically; NVIDIA hardware can use Vulkan as well as CUDA, depending on backend availability. This selection is separate from whisper.cpp speech recognition. CPU mode is also available.
 
 ### Translation quality (offline engine)
 
-WhisperSubTranslate ships Tencent's Hy-MT2 models (1.8B default, 7B optional). Tencent's official evaluation shows the Hy-MT2 family competing with leading commercial translation APIs, and ahead of several of them on some benchmarks.
+WhisperSubTranslate supports downloading Tencent's Hy-MT2 models (1.8B default, 7B optional). Tencent's official evaluation shows the Hy-MT2 family competing with leading commercial translation APIs, and ahead of several of them on some benchmarks.
 
-![Hy-MT2 translation benchmark, official Tencent figures, bundled in WhisperSubTranslate](assets/hy-mt2-benchmark.png)
+![Hy-MT2 translation benchmark, official Tencent figures](assets/hy-mt2-benchmark.png)
 
-Source: official benchmarks from Tencent: [Hy-MT2 repository](https://github.com/Tencent-Hunyuan/Hy-MT2), [technical report](https://arxiv.org/pdf/2605.22064), [models on HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). The chart is redrawn from Tencent's official Figure 1, with bundled-model (1.8B/7B) numbers checked against the paper tables. These figures measure the underlying model on standard machine translation benchmarks (WildMTBench, WMT25, FLORES-200, etc.), not a WhisperSubTranslate-specific benchmark.
+Source: official benchmarks from Tencent: [Hy-MT2 repository](https://github.com/Tencent-Hunyuan/Hy-MT2), [technical report](https://arxiv.org/pdf/2605.22064), [models on HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). The chart is redrawn from Tencent's official Figure 1, with supported-model (1.8B/7B) numbers checked against the paper tables. These figures measure the underlying model on standard machine translation benchmarks (WildMTBench, WMT25, FLORES-200, etc.), not a WhisperSubTranslate-specific benchmark.
 
 For long videos (1hr+), MyMemory's daily limit can cause slowdowns. Use Gemini, DeepL, or a configured GPT model instead.
 

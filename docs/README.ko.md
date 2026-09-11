@@ -2,7 +2,7 @@
 
 [English](../README.md) | 한국어 | [日本語](./README.ja.md) | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-영상을 내 PC에서 다국어 자막으로 만듭니다. 영상을 넣으면 whisper.cpp로 SRT를 생성하고, 번들된 Hy-MT2 모델로 오프라인 번역하거나 무료/유료 온라인 엔진으로 번역합니다.
+영상을 내 PC에서 다국어 자막으로 만듭니다. 영상을 넣으면 whisper.cpp로 SRT를 생성하고, 다운로드한 Hy-MT2 모델로 오프라인 번역하거나 무료/유료 온라인 엔진으로 번역합니다.
 
 > 이 앱은 영상의 음성을 받아써서 새 자막을 만듭니다. 영상에 들어 있는 자막 트랙을 추출하거나 화면의 글자를 읽지 않습니다(OCR 아님).
 
@@ -15,7 +15,7 @@
 ## 주요 기능
 
 - 음성 인식이 100% 로컬에서 돌아갑니다. 영상이 PC를 벗어나지 않고 계정도 업로드도 없습니다.
-- 번들된 Hy-MT2 모델로 오프라인 번역하거나, 본인 키로 온라인 엔진(MyMemory, DeepL, OpenAI, Gemini)을 씁니다.
+- Hy-MT2 모델을 처음 다운로드한 뒤 오프라인으로 번역하거나, 본인 키로 온라인 엔진(MyMemory, DeepL, OpenAI, Gemini)을 씁니다.
 - 모델 자동 다운로드. 파이썬 설치나 수동 설정이 필요 없습니다.
 - 일반 모델로 싱크가 밀릴 때 쓰는 싱크 교정 모델(large-v2 싱크, 싱크 라이트)을 제공합니다.
 - 작업 큐, 실시간 진행률, 로컬 전용 작업 히스토리.
@@ -24,7 +24,7 @@
 
 ### 사용자
 
-[Releases](https://github.com/Blue-B/WhisperSubTranslate/releases)에서 최신 포터블 파일을 받아 압축을 풀고 `WhisperSubTranslate.exe`를 실행합니다. 자막 추출은 PC에서 완전히 오프라인으로 돌아갑니다. 번역은 선택입니다.
+[Releases](https://github.com/Blue-B/WhisperSubTranslate/releases)에서 최신 포터블 파일을 받아 압축을 풀고 `WhisperSubTranslate.exe`를 실행합니다. 선택한 음성 인식 모델을 다운로드한 뒤에는 자막 추출이 PC에서 완전히 오프라인으로 돌아갑니다. 번역은 선택입니다.
 
 ### 개발자
 
@@ -33,9 +33,11 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 이상 또는 22.12 이상 (Electron 43 빌드 툴체인)
+- Node.js 22.12.0 이상 (`package.json`의 `engines` 참고, Electron 43 빌드 툴체인)
 - whisper.cpp는 `npm install` 때 자동으로 받습니다 (윈도우는 CUDA 빌드 약 700MB와 Vulkan 빌드 약 23MB)
 - FFmpeg는 npm으로 포함되며, 선택한 GGML 모델은 처음 쓸 때 받습니다
+
+애플리케이션 코드는 `src/main/`(Electron 메인 프로세스와 서비스), `src/preload/`(렌더러 브리지), `src/renderer/`(UI), `src/shared/`(공용 IPC 채널)로 구성됩니다.
 
 ### Linux
 
@@ -47,36 +49,44 @@ npm start
 
 CUDA 가속이 필요하면 `npm install` 전에 NVIDIA CUDA Toolkit을 설치하세요. whisper.cpp 수동 빌드 방법은 [CONTRIBUTING.md](../CONTRIBUTING.md)에 있습니다.
 
+- **Linux 키링**: API 키는 Electron safeStorage(libsecret)로 저장됩니다. 키링 데몬이 없는 환경(헤드리스 SSH 세션, 최소 데스크톱/WM)에서는 하드코딩된 키를 쓰는 기존 AES 방식으로 폴백되며, 앱은 명시적인 보안 경고를 기록하고 저장을 `insecure`로 표시합니다. 이 저장 방식은 **안전하지 않습니다**. 안전한 저장을 사용하려면 `gnome-keyring`을 설치하거나 키링이 실행되는 데스크톱 세션에서 앱을 실행하세요.
+
 ### Windows 빌드
 
 ```bash
 npm run build-win   # 결과물은 dist2/에 생성됩니다
 ```
 
+일반적인 Windows 의존성 설치를 위해서는 Windows에서 빌드하세요. Linux에서 교차 빌드하면 npm이 Windows 전용 선택적 패키지를 생략할 수 있습니다. 빌드 작업 공간에는 잠금 파일에 고정된 `@node-llama-cpp/win-x64`, `win-x64-cuda`, `win-x64-cuda-ext`, `win-x64-vulkan` 패키지와 각 패키지의 JS/JSON 메타데이터 및 네이티브 바이너리가 모두 있어야 합니다. 빌드 성공만으로는 로컬 번역 백엔드가 Windows에서 로드된다는 사실을 확인할 수 없습니다.
+
 ## 번역 엔진
 
-번들된 Tencent Hy-MT2 모델로 완전히 오프라인 번역하거나, 본인 API 키로 무료/유료 온라인 엔진을 씁니다.
+Tencent Hy-MT2 모델을 한 번 다운로드해 자막을 오프라인으로 번역하거나, 필요한 경우 API 키를 사용해 무료/유료 온라인 엔진을 씁니다.
 
 | 엔진                                          | 오프라인 | API 키 | 비용            | 비고                                                                      |
 | --------------------------------------------- | :------: | :----: | --------------- | ------------------------------------------------------------------------- |
 | Hy-MT2 1.8B (로컬, 기본)                      |    예    | 불필요 | 무료            | 약 1.13GB, VRAM 2GB / RAM 4GB, 온디바이스                                 |
 | Hy-MT2 7B (로컬)                              |    예    | 불필요 | 무료            | 약 6.16GB, VRAM 8GB / RAM 12GB, 더 큰 모델                                |
 | MyMemory                                      |  아니오  | 불필요 | 무료            | IP당 하루 약 5만 자                                                       |
-| DeepL                                         |  아니오  |  필요  | 월 50만 자 무료 | 결과가 일정함                                                             |
+| DeepL                                         |  아니오  |  필요  | 요금제별 상이   | 신규 API Developer: 총 100만 자, 기존 API Free: 월 50만 자                 |
 | OpenAI GPT-5.x (설정 가능, 기본 gpt-5.6-sol)  |  아니오  |  필요  | 유료            | 기본 모델, 문맥 인식                                                      |
 | Gemini 3.x (설정 가능, 기본 gemini-3.6-flash) |  아니오  |  필요  | 무료 / 저비용   | 추천 저비용 경로 ([키 받기](https://aistudio.google.com/app/apikey))      |
 | Claude (설정 가능, 기본 claude-opus-5)        |  아니오  |  필요  | 유료            | 문맥 이해에 강함 ([키 받기](https://console.anthropic.com/settings/keys)) |
 | 커스텀 OpenAI 호환 공급자                     |  아니오  |  필요  | 상이            | 자체 엔드포인트 사용 (OpenRouter, Ollama, vLLM 등)                        |
 
-로컬 Hy-MT2 엔진만 API 키도, 네트워크도, 사용 비용도 필요 없어서 대사가 PC를 벗어나지 않습니다.
+로컬 Hy-MT2 번역은 모델 다운로드 후 API 키나 네트워크 연결이 필요 없고, 사용당 비용도 없습니다. 이 엔진을 사용하면 자막 텍스트가 PC를 벗어나지 않습니다.
+
+Hy-MT2는 고정된 모델 리비전에서 다운로드되며, 설치 전에 정확한 파일 크기와 SHA-256 다이제스트를 확인합니다. 기존 모델도 로드 전에 해시를 확인하고, 앱 세션 중 변경되지 않은 파일은 성공한 검사 결과를 캐시합니다. 무결성 검사에 실패해도 기존 모델을 삭제하지 않습니다.
+
+로컬 번역은 GPU 백엔드를 자동으로 선택합니다. 백엔드 가용성에 따라 NVIDIA 하드웨어도 CUDA뿐 아니라 Vulkan을 사용할 수 있습니다. 이 선택은 whisper.cpp 음성 인식과 별개이며, CPU 모드도 사용할 수 있습니다.
 
 ### 번역 품질 (오프라인 엔진)
 
-WhisperSubTranslate는 Tencent Hy-MT2 모델(기본 1.8B, 선택 7B)을 함께 제공합니다. Tencent 공식 평가에서 Hy-MT2 계열은 주요 상용 번역 API와 경쟁력 있는 결과를 보였고, 일부 벤치마크에서는 앞선 결과도 냈습니다.
+WhisperSubTranslate는 Tencent Hy-MT2 모델(기본 1.8B, 선택 7B) 다운로드를 지원합니다. Tencent 공식 평가에서 Hy-MT2 계열은 주요 상용 번역 API와 경쟁력 있는 결과를 보였고, 일부 벤치마크에서는 앞선 결과도 냈습니다.
 
-![Tencent Hy-MT2 공식 벤치마크, WhisperSubTranslate 번들 모델](../assets/hy-mt2-benchmark.ko.png)
+![Tencent Hy-MT2 공식 번역 벤치마크](../assets/hy-mt2-benchmark.ko.png)
 
-출처: Tencent 공식 벤치마크: [Hy-MT2 저장소](https://github.com/Tencent-Hunyuan/Hy-MT2), [기술 보고서](https://arxiv.org/pdf/2605.22064), [HuggingFace 모델](https://huggingface.co/tencent/Hy-MT2-1.8B). 위 그래프는 Tencent 공식 Figure 1을 재작도한 것이며, 내장 모델(1.8B/7B) 수치는 논문 표와 대조했습니다. 이 수치는 표준 기계번역 벤치마크(WildMTBench, WMT25, FLORES-200 등)에서 모델 자체를 측정한 결과이며, WhisperSubTranslate 앱 자체를 재측정한 것은 아닙니다.
+출처: Tencent 공식 벤치마크: [Hy-MT2 저장소](https://github.com/Tencent-Hunyuan/Hy-MT2), [기술 보고서](https://arxiv.org/pdf/2605.22064), [HuggingFace 모델](https://huggingface.co/tencent/Hy-MT2-1.8B). 위 그래프는 Tencent 공식 Figure 1을 재작도한 것이며, 지원 모델(1.8B/7B) 수치는 논문 표와 대조했습니다. 이 수치는 표준 기계번역 벤치마크(WildMTBench, WMT25, FLORES-200 등)에서 모델 자체를 측정한 결과이며, WhisperSubTranslate 앱 자체를 재측정한 것은 아닙니다.
 
 긴 영상(1시간 이상)에서는 MyMemory 일일 한도 때문에 느려질 수 있습니다. 그럴 때는 Gemini, DeepL, 설정한 GPT 모델을 쓰세요.
 

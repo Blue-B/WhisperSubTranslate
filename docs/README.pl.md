@@ -2,7 +2,7 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | [中文](./README.zh.md) | Polski
 
-Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneruj SRT za pomocą whisper.cpp, a następnie przetłumacz je offline dołączonym modelem Hy-MT2 albo darmowymi/płatnymi silnikami online.
+Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneruj SRT za pomocą whisper.cpp, a następnie przetłumacz je offline pobranym modelem Hy-MT2 albo darmowymi/płatnymi silnikami online.
 
 > Aplikacja tworzy nowe napisy z dźwięku wideo (mowa na tekst). Nie wyciąga osadzonych ścieżek napisów ani nie czyta tekstu z ekranu (bez OCR).
 
@@ -15,7 +15,7 @@ Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneru
 ## Funkcje
 
 - Rozpoznawanie mowy w 100% lokalnie. Twoje wideo nie opuszcza komputera, bez konta, bez wysyłania.
-- Tłumaczenie offline dołączonym modelem Hy-MT2 lub silnikami online (MyMemory, DeepL, OpenAI, Gemini) z własnymi kluczami.
+- Tłumaczenie offline z Hy-MT2 po pierwszym pobraniu modelu lub silnikami online (MyMemory, DeepL, OpenAI, Gemini) z własnymi kluczami.
 - Automatyczne pobieranie modeli. Bez Pythona, bez ręcznej konfiguracji.
 - Modele naprawy synchronizacji (large-v2 Sync i Sync Lite) do wideo, gdzie zwykłe modele tracą synchronizację.
 - Kolejka, postęp na żywo i lokalna historia zadań.
@@ -24,7 +24,7 @@ Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneru
 
 ### Użytkownicy
 
-Pobierz najnowsze archiwum przenośne z [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), rozpakuj je i uruchom `WhisperSubTranslate.exe`. Wyodrębnianie napisów działa w pełni offline. Tłumaczenie jest opcjonalne.
+Pobierz najnowsze archiwum przenośne z [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), rozpakuj je i uruchom `WhisperSubTranslate.exe`. Po pobraniu wybranego modelu rozpoznawania mowy wyodrębnianie napisów działa w pełni offline. Tłumaczenie jest opcjonalne.
 
 ### Programiści
 
@@ -33,9 +33,11 @@ npm install
 npm start
 ```
 
-- Node.js >= 20.19 lub >= 22.12 (łańcuch narzędzi Electron 43)
+- Node.js >= 22.12.0 (zobacz `engines` w `package.json`; łańcuch narzędzi Electron 43)
 - whisper.cpp jest pobierany podczas `npm install` (Windows otrzymuje wersję CUDA ~700MB oraz wersję Vulkan ~23MB)
 - FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
+
+Kod aplikacji znajduje się w `src/main/` (główny proces Electron i usługi), `src/preload/` (most do renderera), `src/renderer/` (interfejs) oraz `src/shared/` (współdzielone kanały IPC).
 
 ### Linux
 
@@ -47,36 +49,44 @@ npm start
 
 Aby przyspieszyć przez CUDA, zainstaluj NVIDIA CUDA Toolkit przed `npm install`. Ręczne kroki budowania whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+- **Pęk kluczy w Linuxie**: klucze API są przechowywane przez Electron safeStorage (libsecret). Bez demona pęku kluczy (sesja SSH bez interfejsu, minimalny pulpit/WM) zapis wraca do starszego AES z kluczem zapisanym na stałe. Aplikacja rejestruje wyraźne ostrzeżenie i oznacza zapis jako `insecure`. Taki zapis **nie jest bezpieczny**. Zainstaluj `gnome-keyring` lub uruchom aplikację w sesji pulpitu z pękiem kluczy, aby włączyć bezpieczne przechowywanie.
+
 ### Budowanie (Windows)
 
 ```bash
 npm run build-win   # wynik trafia do dist2/
 ```
 
+Buduj w Windows, aby zależności Windows zostały zainstalowane normalnie. Przy budowaniu krzyżowym z Linuxa npm może pominąć opcjonalne pakiety tylko dla Windows. Obszar roboczy musi zawierać przypięte w pliku blokady pakiety `@node-llama-cpp/win-x64`, `win-x64-cuda`, `win-x64-cuda-ext` i `win-x64-vulkan`, w tym ich metadane JS/JSON oraz natywne pliki binarne. Sam udany build nie potwierdza, że lokalne tłumaczenie załaduje backend w Windows.
+
 ## Silniki tłumaczeń
 
-Tłumacz napisy w pełni offline dołączonym modelem Tencent Hy-MT2 albo kieruj do darmowych/płatnych silników online przy użyciu własnych kluczy API.
+Pobierz raz model Tencent Hy-MT2, aby tłumaczyć napisy offline, albo użyj darmowych/płatnych silników online, z kluczami API tam, gdzie są wymagane.
 
 | Silnik                                                  | Offline | Klucz API | Koszt              | Uwagi                                                                                         |
 | ------------------------------------------------------- | :-----: | :-------: | ------------------ | --------------------------------------------------------------------------------------------- |
 | Hy-MT2 1.8B (lokalny, domyślny)                         |   Tak   |    Nie    | Darmowy            | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu                                                    |
 | Hy-MT2 7B (lokalny)                                     |   Tak   |    Nie    | Darmowy            | ~6,16GB, VRAM 8GB / RAM 12GB, większy model                                                   |
 | MyMemory                                                |   Nie   |    Nie    | Darmowy            | ~50K znaków/dzień na IP                                                                       |
-| DeepL                                                   |   Nie   |    Tak    | 500K/mies. darmowo | Stabilny wynik                                                                                |
+| DeepL                                                   |   Nie   |    Tak    | Zależny od planu   | Nowe API Developer: łącznie 1M; starsze API Free: 500K/mies.                                  |
 | OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol)  |   Nie   |    Tak    | Płatny             | Domyślny model, świadomy kontekstu                                                            |
 | Gemini 3.x (konfigurowalny, domyślnie gemini-3.6-flash) |   Nie   |    Tak    | Darmowy / tani     | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey))              |
 | Claude (konfigurowalny, domyślnie claude-opus-5)        |   Nie   |    Tak    | Płatny             | Świetny w rozumieniu kontekstu ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
 | Niestandardowy dostawca zgodny z OpenAI                 |   Nie   |    Tak    | Różny              | Własny endpoint (OpenRouter, Ollama, vLLM, …)                                                 |
 
-Tylko lokalny silnik Hy-MT2 nie wymaga klucza API, sieci ani opłat za użycie, więc dialogi nie opuszczają komputera.
+Lokalne tłumaczenie Hy-MT2 po pobraniu modelu nie wymaga klucza API ani połączenia z siecią i nie ma opłat za użycie. Przy tym silniku tekst napisów nie opuszcza komputera.
+
+Modele Hy-MT2 są pobierane z przypiętych rewizji, a przed instalacją sprawdzane są dokładne rozmiary plików i skróty SHA-256. Istniejące modele także są sprawdzane przed załadowaniem. Wyniki udanych kontroli niezmienionych plików są zapisywane w pamięci podręcznej na czas sesji aplikacji. Nieudana kontrola integralności nie usuwa istniejącego modelu.
+
+Lokalne tłumaczenie automatycznie wybiera backend GPU. Zależnie od dostępności backendu sprzęt NVIDIA może używać Vulkan tak samo jak CUDA. Ten wybór jest niezależny od rozpoznawania mowy whisper.cpp. Dostępny jest też tryb CPU.
 
 ### Jakość tłumaczenia (silnik offline)
 
-WhisperSubTranslate dołącza modele Tencent Hy-MT2 (domyślnie 1.8B, opcjonalnie 7B). W oficjalnej ocenie Tencent rodzina Hy-MT2 konkuruje z czołowymi komercyjnymi API tłumaczeniowymi i w części benchmarków uzyskuje lepsze wyniki.
+WhisperSubTranslate obsługuje pobieranie modeli Tencent Hy-MT2 (domyślnie 1.8B, opcjonalnie 7B). W oficjalnej ocenie Tencent rodzina Hy-MT2 konkuruje z czołowymi komercyjnymi API tłumaczeniowymi i w części benchmarków uzyskuje lepsze wyniki.
 
-![Oficjalny benchmark Tencent Hy-MT2, model dołączony do WhisperSubTranslate](../assets/hy-mt2-benchmark.pl.png)
+![Benchmark tłumaczenia Hy-MT2, oficjalne dane Tencent](../assets/hy-mt2-benchmark.pl.png)
 
-Źródło: oficjalne benchmarki Tencent: [repozytorium Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2), [raport techniczny](https://arxiv.org/pdf/2605.22064), [modele na HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). Wykres jest przerysowany z oficjalnego Figure 1 Tencent, a liczby modeli dołączonych (1.8B/7B) sprawdzono z tabelami w pracy. Liczby mierzą sam model na standardowych benchmarkach tłumaczenia maszynowego (WildMTBench, WMT25, FLORES-200 itd.), nie są osobnym benchmarkiem aplikacji WhisperSubTranslate.
+Źródło: oficjalne benchmarki Tencent: [repozytorium Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2), [raport techniczny](https://arxiv.org/pdf/2605.22064), [modele na HuggingFace](https://huggingface.co/tencent/Hy-MT2-1.8B). Wykres jest przerysowany z oficjalnego Figure 1 Tencent, a liczby obsługiwanych modeli (1.8B/7B) sprawdzono z tabelami w pracy. Liczby mierzą sam model na standardowych benchmarkach tłumaczenia maszynowego (WildMTBench, WMT25, FLORES-200 itd.), nie są osobnym benchmarkiem aplikacji WhisperSubTranslate.
 
 Przy długich filmach (1h+) dzienny limit MyMemory może powodować spowolnienia. Użyj wtedy Gemini, DeepL lub skonfigurowanego modelu GPT.
 

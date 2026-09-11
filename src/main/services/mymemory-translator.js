@@ -46,8 +46,24 @@ class MyMemoryTranslator {
           // MyMemory는 실패해도 HTTP 200 + 에러 문구를 translatedText로 돌려준다(이슈 #42).
           // 이 문구들이 자막 파일에 그대로 기록되지 않게 검증한다.
           const status = response.data.responseStatus;
-          // 403은 responseData와 함께 오기도 한다. 에러 문구 검증 전에
-          // 로테이션 분기로 보낸다 (이메일 교체 재시도, 무한 스핀 방지 sleep 포함).
+          const upper = typeof translatedText === 'string' ? translatedText.trim().toUpperCase() : '';
+          // 영구 오류: 이메일을 바꿔도 성공할 수 없는 입력/설정 오류라
+          // 10회 재시도+1초 sleep은 무료 할당량만 태운다. 1회차에 즉시 던진다.
+          // responseStatus 403과 함께 와도 이 입력 오류 판정이 쿼터 로테이션보다 우선한다.
+          const PERMANENT_ERROR_PHRASES = [
+            'PLEASE SELECT TWO DISTINCT LANGUAGES',
+            'NO QUERY SPECIFIED',
+            'INVALID LANGUAGE PAIR',
+          ];
+          if (PERMANENT_ERROR_PHRASES.includes(upper)) {
+            throw new Error(
+              `MyMemory returned an error message instead of a translation (permanent, not retried): ${translatedText
+                .trim()
+                .substring(0, 80)}`
+            );
+          }
+          // 그 외 403은 기존 쿼터 로테이션을 유지한다 (이메일 교체 재시도,
+          // 무한 스핀 방지 sleep 포함).
           if (status === 403) {
             console.log('[MyMemory] Quota exceeded (403), trying next email...');
             this.emailIndex++;
@@ -59,7 +75,6 @@ class MyMemoryTranslator {
             throw new Error(`MyMemory returned status ${status}`);
           }
           if (typeof translatedText === 'string') {
-            const upper = translatedText.trim().toUpperCase();
             // MyMemory가 실제로 돌려주는 오류 문구(이슈 #42).
             // MED-1: 오탐 방지 — 자막 원문이 'Please select two distinct
             // languages' 같은 문구로 시작하는 정상 번역 결과를 오류로 던지던
@@ -77,20 +92,6 @@ class MyMemoryTranslator {
               'ANONYMOUS USERS CAN ONLY',
               'DAILY LIMIT',
             ];
-            // 영구 오류: 이메일을 바꿔도 성공할 수 없는 입력/설정 오류라
-            // 10회 재시도+1초 sleep은 무료 할당량만 태운다. 1회차에 즉시 던진다.
-            const PERMANENT_ERROR_PHRASES = [
-              'PLEASE SELECT TWO DISTINCT LANGUAGES',
-              'NO QUERY SPECIFIED',
-              'INVALID LANGUAGE PAIR',
-            ];
-            if (PERMANENT_ERROR_PHRASES.includes(upper)) {
-              throw new Error(
-                `MyMemory returned an error message instead of a translation (permanent, not retried): ${translatedText
-                  .trim()
-                  .substring(0, 80)}`
-              );
-            }
             if (MYMEMORY_ERROR_PHRASES.includes(upper) || MYMEMORY_ERROR_PREFIXES.some((p) => upper.startsWith(p))) {
               throw new Error(
                 `MyMemory returned an error message instead of a translation: ${translatedText.trim().substring(0, 80)}`
@@ -129,7 +130,7 @@ class MyMemoryTranslator {
             lower.includes('status 429') ||
             /quota|daily limit|too many requests/.test(lower)
           ) {
-            // renderer.js의 'MyMemory daily quota exceeded' 분기가 매칭되도록
+            // renderer log localization의 'MyMemory daily quota exceeded' 분기가 매칭되도록
             // 'daily quota' 문구를 유지한다 (그 외 'quota exceeded' 폴백 분기도 동작).
             throw new Error(
               `MyMemory daily quota exceeded (${msg.substring(0, 80)}). Try again tomorrow or use DeepL/OpenAI.`

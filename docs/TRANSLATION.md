@@ -7,12 +7,12 @@ Want to help translate WhisperSubTranslate into a new language? This guide cover
 ### UI languages
 
 | Language | Code | Maintainer |
-| --- | --- | --- |
-| Korean | `ko` | @Blue-B |
-| English | `en` | @Blue-B |
-| Japanese | `ja` | @Blue-B |
-| Chinese | `zh` | @Blue-B |
-| Polish | `pl` | @Blue-B |
+| -------- | ---- | ---------- |
+| Korean   | `ko` | @Blue-B    |
+| English  | `en` | @Blue-B    |
+| Japanese | `ja` | @Blue-B    |
+| Chinese  | `zh` | @Blue-B    |
+| Polish   | `pl` | @Blue-B    |
 
 ### Translation targets
 
@@ -44,9 +44,9 @@ npm run i18n:check      # verifies i18n.js is in sync (also runs in `npm run che
 > **Important**: Every key in `locales/en.json` and every helper in
 > `locales/i18n.functions.js` must be present. Missing keys fall back to English.
 
-### 2. Add LOG_I18N mappings (renderer.js)
+### 2. Add LOG_I18N mappings (src/renderer/features/logs.js)
 
-In `renderer.js`, find the `LOG_I18N` object and add a mapping array for your language. This translates Korean log output into your language:
+In `src/renderer/features/logs.js`, find the `LOG_I18N` object and add a mapping array for your language. This translates Korean log output into your language:
 
 ```js
 const LOG_I18N = {
@@ -65,7 +65,7 @@ const LOG_I18N = {
 
 ### 3. Add language selector option
 
-In `index.html`, add an `<option>` to the language selector:
+In `src/renderer/index.html`, add an `<option>` to the language selector:
 
 ```html
 <select id="uiLangSelect">
@@ -76,18 +76,13 @@ In `index.html`, add an `<option>` to the language selector:
 </select>
 ```
 
-### 4. Add MODEL_I18N, LANG_NAMES_I18N entries (renderer.js)
+Model names, descriptions, and target-language names come from the `modelNames`, `modelDescriptions`, `modelSelectNames`, `modelSelectDescs`, and `langNames` keys in the locale JSON you created in step 1.
 
-In `renderer.js`, add your language to these objects:
-
-- `MODEL_I18N.xx` — model descriptions
-- `LANG_NAMES_I18N.xx` — language names in your language
-
-### 5. (Optional) Add a README translation
+### 4. (Optional) Add a README translation
 
 Create `README.xx.md` following the same structure as `README.md`, and add a link to it in all existing READMEs.
 
-### 6. Submit a Pull Request
+### 5. Submit a Pull Request
 
 - Branch: `feature/i18n-add-<language>`
 - Include all modified files
@@ -97,35 +92,32 @@ Create `README.xx.md` following the same structure as `README.md`, and add a lin
 
 Translation target languages allow users to translate subtitles into that language.
 
-### 1. Add display names (renderer.js)
+### 1. Add display names
 
-In `renderer.js`, add the language code to every UI language block in
-`LANG_NAMES_I18N`:
+Add the language code to the `langNames` object in every `locales/*.json` UI language file:
 
-```js
-const LANG_NAMES_I18N = {
-  ko: { ..., xx: '새언어' },
-  en: { ..., xx: 'New Language' },
-  // ... for all UI languages
-};
+```json
+{
+  "langNames": {
+    "xx": "New Language"
+  }
+}
 ```
 
 ### 2. Add provider mappings
 
-- In `translator-enhanced.js`, update `mapToHumanLang()`.
-- In `translator-enhanced.js`, update `mapToDeepLLang()` if DeepL supports the language.
-- In `local-translator.js`, update `LANGUAGE_NAMES` for the bundled Hy-MT2 model.
+- In `src/main/services/translator.js`, update `mapToHumanLang()`.
+- In `src/main/services/translator.js`, update `mapToDeepLLang()` if DeepL supports the language.
+- In `src/main/services/local-translator.js`, update `LANGUAGE_NAMES` for the bundled Hy-MT2 model.
 
-### 3. Add to index.html
+### 3. Add to src/renderer/index.html
 
 Add a checkbox to the `targetLanguageList` panel:
 
 ```html
 <div id="targetLanguageList">
   <!-- Add your language -->
-  <label class="lang-check">
-    <input type="checkbox" value="xx" /><span>New Language (xx)</span>
-  </label>
+  <label class="lang-check"> <input type="checkbox" value="xx" /><span>New Language (xx)</span> </label>
 </div>
 ```
 

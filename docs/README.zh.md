@@ -2,7 +2,7 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | [日本語](./README.ja.md) | 中文 | [Polski](./README.pl.md)
 
-在本地把视频变成多语言字幕。放入视频，用 whisper.cpp 生成 SRT，再用内置的 Hy-MT2 模型离线翻译，或使用免费/付费的在线引擎。
+在本地把视频变成多语言字幕。放入视频，用 whisper.cpp 生成 SRT，再用下载的 Hy-MT2 模型离线翻译，或使用免费/付费的在线引擎。
 
 > 本应用从视频音频生成新字幕(语音转文字)。不提取内嵌字幕轨道，也不读取画面文字(非 OCR)。
 
@@ -15,7 +15,7 @@
 ## 主要功能
 
 - 语音识别 100% 在本地运行。视频不离开你的电脑，无需账号，无需上传。
-- 用内置 Hy-MT2 模型离线翻译，或用自己的密钥使用在线引擎(MyMemory、DeepL、OpenAI、Gemini)。
+- 首次下载 Hy-MT2 模型后可离线翻译，或用自己的密钥使用在线引擎(MyMemory、DeepL、OpenAI、Gemini)。
 - 模型自动下载。无需安装 Python，无需手动配置。
 - 提供同步修复模型(large-v2 同步、同步轻量),用于普通模型字幕错位的视频。
 - 任务队列、实时进度、仅本地的任务历史。
@@ -24,7 +24,7 @@
 
 ### 用户
 
-从 [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases) 下载最新便携版，解压后运行 `WhisperSubTranslate.exe`。字幕提取在本机完全离线运行。翻译为可选。
+从 [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases) 下载最新便携版，解压后运行 `WhisperSubTranslate.exe`。所选语音模型下载完成后，字幕提取可在本机完全离线运行。翻译为可选。
 
 ### 开发者
 
@@ -33,9 +33,11 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 以上或 22.12 以上 (Electron 43 构建工具链)
+- Node.js 22.12.0 或更高版本 (参见 `package.json` 中的 `engines`，Electron 43 构建工具链)
 - whisper.cpp 在 `npm install` 时自动下载 (Windows 包含约700MB 的 CUDA 版本和约23MB 的 Vulkan 版本)
 - FFmpeg 通过 npm 自带；所选 GGML 模型在首次使用时下载
+
+应用代码位于 `src/main/` (Electron 主进程和服务)、`src/preload/` (渲染器桥接)、`src/renderer/` (UI)和 `src/shared/` (共享 IPC 通道)。
 
 ### Linux
 
@@ -47,36 +49,44 @@ npm start
 
 如需 CUDA 加速，请在 `npm install` 前安装 NVIDIA CUDA Toolkit。whisper.cpp 的手动构建步骤见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 
+- **Linux 密钥环**: API 密钥通过 Electron safeStorage (libsecret) 保存。没有密钥环守护进程时(无头 SSH 会话、最小桌面/WM)，保存会回退到使用硬编码密钥的旧版 AES，应用会记录明确的安全警告，并将该保存标记为 `insecure`。这种存储方式**并不安全**。请安装 `gnome-keyring`，或在运行密钥环的桌面会话中使用应用，以启用安全存储。
+
 ### Windows 构建
 
 ```bash
 npm run build-win   # 产物输出到 dist2/
 ```
 
+请在 Windows 上构建，以正常安装 Windows 依赖项。从 Linux 交叉构建时，npm 可能省略仅限 Windows 的可选包。构建工作区必须包含锁文件固定版本的 `@node-llama-cpp/win-x64`、`win-x64-cuda`、`win-x64-cuda-ext` 和 `win-x64-vulkan` 包，包括各自的 JS/JSON 元数据和原生二进制文件。仅构建成功并不能证明本地翻译后端能在 Windows 上加载。
+
 ## 翻译引擎
 
-用内置的 Tencent Hy-MT2 模型完全离线翻译，或用自己的 API 密钥使用免费/付费在线引擎。
+下载一次 Tencent Hy-MT2 模型即可离线翻译字幕，也可使用免费/付费在线引擎(适用时需要 API 密钥)。
 
 | 引擎                                       | 离线 | API 密钥 | 费用             | 备注                                                                     |
 | ------------------------------------------ | :--: | :------: | ---------------- | ------------------------------------------------------------------------ |
 | Hy-MT2 1.8B (本地，默认)                   |  是  |  不需要  | 免费             | 约1.13GB，显存 2GB / 内存 4GB，端侧                                      |
 | Hy-MT2 7B (本地)                           |  是  |  不需要  | 免费             | 约6.16GB，显存 8GB / 内存 12GB，更大模型                                 |
 | MyMemory                                   |  否  |  不需要  | 免费             | 每 IP 每天约5万字符                                                      |
-| DeepL                                      |  否  |   需要   | 每月50万字符免费 | 输出稳定                                                                 |
+| DeepL                                      |  否  |   需要   | 因套餐而异       | 新 API Developer: 总计100万字符；旧版 API Free: 每月50万字符               |
 | OpenAI GPT-5.x (可配置，默认 gpt-5.6-sol)  |  否  |   需要   | 付费             | 默认模型，上下文感知                                                     |
 | Gemini 3.x (可配置，默认 gemini-3.6-flash) |  否  |   需要   | 免费 / 低成本    | 推荐的低成本路线 ([获取密钥](https://aistudio.google.com/app/apikey))    |
 | Claude (可配置，默认 claude-opus-5)        |  否  |   需要   | 付费             | 上下文理解出色 ([获取密钥](https://console.anthropic.com/settings/keys)) |
 | 自定义 OpenAI 兼容提供商                   |  否  |   需要   | 各异             | 自带端点 (OpenRouter、Ollama、vLLM 等)                                   |
 
-只有本地 Hy-MT2 引擎无需 API 密钥、无需网络、无每次费用，台词不会离开你的电脑。
+本地 Hy-MT2 翻译在模型下载完成后无需 API 密钥或网络连接，也没有按次使用费用。使用此引擎时，字幕文本不会离开你的电脑。
+
+Hy-MT2 从固定的模型修订版本下载，并在安装前核对准确的文件大小和 SHA-256 摘要。现有模型也会在加载前接受哈希校验；应用会在当前会话中缓存未更改文件的成功校验结果。完整性校验失败不会删除现有模型。
+
+本地翻译会自动选择 GPU 后端。视后端可用情况而定，NVIDIA 硬件除 CUDA 外也可使用 Vulkan。此选择独立于 whisper.cpp 语音识别，CPU 模式也可用。
 
 ### 翻译质量 (离线引擎)
 
-WhisperSubTranslate 内置 Tencent Hy-MT2 模型(默认 1.8B，可选 7B)。在 Tencent 官方评测中，Hy-MT2 系列与主流商用翻译 API 具备竞争力，并在部分基准上取得领先结果。
+WhisperSubTranslate 支持下载 Tencent Hy-MT2 模型(默认 1.8B，可选 7B)。在 Tencent 官方评测中，Hy-MT2 系列与主流商用翻译 API 具备竞争力，并在部分基准上取得领先结果。
 
-![Tencent Hy-MT2 官方基准，WhisperSubTranslate 内置模型](../assets/hy-mt2-benchmark.zh.png)
+![Hy-MT2 翻译基准，Tencent 官方数据](../assets/hy-mt2-benchmark.zh.png)
 
-来源: Tencent 官方基准: [Hy-MT2 仓库](https://github.com/Tencent-Hunyuan/Hy-MT2), [技术报告](https://arxiv.org/pdf/2605.22064), [HuggingFace 模型](https://huggingface.co/tencent/Hy-MT2-1.8B)。上图重绘自 Tencent 官方 Figure 1，内置模型(1.8B/7B)数值已与论文表格核对。这些数据是在标准机器翻译基准(WildMTBench, WMT25, FLORES-200 等)上对模型本身的测量，并非对 WhisperSubTranslate 应用本身的重新基准测试。
+来源: Tencent 官方基准: [Hy-MT2 仓库](https://github.com/Tencent-Hunyuan/Hy-MT2), [技术报告](https://arxiv.org/pdf/2605.22064), [HuggingFace 模型](https://huggingface.co/tencent/Hy-MT2-1.8B)。上图重绘自 Tencent 官方 Figure 1，支持的模型(1.8B/7B)数值已与论文表格核对。这些数据是在标准机器翻译基准(WildMTBench, WMT25, FLORES-200 等)上对模型本身的测量，并非对 WhisperSubTranslate 应用本身的重新基准测试。
 
 对于长视频(1小时以上),MyMemory 的每日限制可能导致变慢。这时请改用 Gemini、DeepL 或已配置的 GPT 模型。
 

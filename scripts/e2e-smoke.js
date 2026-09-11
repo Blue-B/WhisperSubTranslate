@@ -10,8 +10,8 @@
  *   4. Renderer can reach the preload bridge (`window.electronAPI`).
  *
  * Does NOT exercise whisper-cli / network / translation backends — those are
- * environment-dependent. This catches the class of "main.js / preload.js /
- * renderer wiring is broken" bugs that the unit-level smoke-test.js misses.
+ * environment-dependent. This catches the class of "main / preload / renderer
+ * wiring is broken" bugs that the unit-level smoke-test.js misses.
  *
  * Usage: node scripts/e2e-smoke.js
  * Requires: playwright (devDependency). Falls back to graceful skip if missing.
@@ -65,7 +65,7 @@ async function run() {
 
   // 1. Preload bridge reachable.
   const hasAPI = await window.evaluate(() => typeof window.electronAPI === 'object' && window.electronAPI !== null);
-  if (!hasAPI) throw new Error('window.electronAPI not exposed by preload.js');
+  if (!hasAPI) throw new Error('window.electronAPI not exposed by the preload bridge');
 
   // 2. A no-side-effect IPC handler responds (get-current-version is pure).
   const version = await window.evaluate(async () => {

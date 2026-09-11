@@ -4,7 +4,7 @@
   "engines": {
     "node": ">=22.12.0"
   },
-  "main": "main.js",
+  "main": "src/main/index.js",
   "scripts": {
     "start": "node scripts/start.js",
     "build": "electron-builder --publish never",
@@ -14,12 +14,12 @@
     "i18n:check": "node scripts/build-i18n.js --check",
     "test": "node scripts/smoke-test.js",
     "test:e2e": "node scripts/e2e-smoke.js",
-    "lint": "eslint *.js locales/*.js scripts/*.js lib/**/*.js --fix",
-    "lint:check": "eslint *.js locales/*.js scripts/*.js lib/**/*.js",
+    "lint": "eslint src/**/*.js locales/*.js scripts/*.js --fix",
+    "lint:check": "eslint src/**/*.js locales/*.js scripts/*.js",
     "check": "npm run i18n:check && npm run lint:check && npm test",
     "check:full": "npm run lint:check && npm test && npm run test:e2e",
-    "format": "prettier --write \"*.js\" \"locales/*.json\" \"scripts/*.js\"",
-    "format:check": "prettier --check \"*.js\" \"locales/*.json\" \"scripts/*.js\"",
+    "format": "prettier --write \"src/**/*.{js,css,html}\" \"locales/*.json\" \"scripts/*.js\"",
+    "format:check": "prettier --check \"src/**/*.{js,css,html}\" \"locales/*.json\" \"scripts/*.js\"",
     "test:e2e:allmodels": "node scripts/e2e-allmodels.js",
     "test:e2e:interaction": "node scripts/e2e-interaction.js",
     "test:e2e:logvisual": "node scripts/e2e-log-visual.js",
@@ -37,23 +37,10 @@
       "output": "dist2"
     },
     "files": [
-      "main.js",
-      "verified-downloader.js",
-      "disk-space.js",
-      "file-safety.js",
-      "preload.js",
-      "index.html",
-      "styles.css",
+      "src/**",
       "build/icon.png",
       "assets/**",
       "locales/**",
-      "renderer.js",
-      "srt-cleanup.js",
-      "translator-enhanced.js",
-      "lib/**",
-      "local-translator.js",
-      "myMemoryTranslator.js",
-      "scripts/postinstall.js",
       "node_modules/**/*",
       "!node_modules/**/{*.md,*.markdown,LICENSE*,test,tests,__tests__,*.map}",
       "!node_modules/@node-llama-cpp/linux-*/**",
@@ -68,7 +55,7 @@
     ],
     "extraResources": [
       {
-        "from": "nya.wav",
+        "from": "assets/nya.wav",
         "to": "nya.wav"
       },
       {
@@ -98,7 +85,9 @@
           "to": "whisper-cpp",
           "filter": [
             "**/*",
-            "!install-failed.txt"
+            "!install-failed.txt",
+            "!**/*.so",
+            "!**/*.so.*"
           ]
         },
         {

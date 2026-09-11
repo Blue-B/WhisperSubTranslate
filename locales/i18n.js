@@ -182,7 +182,8 @@ const I18N = {
     translationEnabledHtml:
       '<strong>MyMemory 추천:</strong> 완전 무료, 안정적인 번역<br><strong>일일 5만글자</strong> 무료 (약 5시간 분량)',
     translationDisabledHtml: '번역을 사용하지 않습니다.',
-    translationDeeplHtml: '<strong>DeepL:</strong> 월 50만글자 무료, API키 필요<br><strong>고품질</strong> 번역 서비스',
+    translationDeeplHtml:
+      '<strong>DeepL:</strong> 신규 API Developer 계정은 총 100만 글자<br>기존 API Free 계정은 월 50만 글자',
     translationChatgptHtml: '<strong>OpenAI:</strong> 사용자 API 키 필요<br><strong>자연스러운</strong> 번역 가능',
     langAutoOption: '자동 감지 (각 파일별로 자동 판별)',
     deviceAuto: '자동 (GPU 있으면 GPU, 없으면 CPU)',
@@ -190,7 +191,7 @@ const I18N = {
     deviceCpu: 'CPU - 안정적 처리',
     trNone: '번역 안함',
     trMyMemory: 'MyMemory (일 5만글자 무료, 추천)',
-    trDeepL: 'DeepL (월 50만글자, API키 필요)',
+    trDeepL: 'DeepL (API 키 필요)',
     trChatGPT: 'OpenAI (사용자 API 키 필요)',
     trGemini: 'Gemini (무료: 일 약 250자막, 유료: 사용량 과금)',
     trLocal: 'Local · 오프라인 (Hy-MT2 1.8B/7B)',
@@ -248,9 +249,9 @@ const I18N = {
       'MyMemory는 API 키 없이 무료로 사용할 수 있습니다.<br>무료 한도는 대략 IP 기준 일일 약 5만 글자 수준이며 상황에 따라 변동될 수 있습니다.<br><br><strong>사용법 안내:</strong><br>• API 키를 입력한 후 "연결 테스트"로 즉시 확인 가능<br>• 또는 키를 먼저 저장한 후 테스트할 수도 있습니다<br>• 저장하지 않고도 입력된 키로 실시간 테스트 지원',
     openaiLinkText: 'OpenAI API 키 발급 받기',
     openaiHelpSuffix: ' (유료)',
-    deeplPlaceholder: 'DeepL API 키를 입력하세요 (무료 50만글자/월)',
+    deeplPlaceholder: 'DeepL API 키를 입력하세요',
     deeplHelpHtml:
-      '<a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 무료로 발급받을 수 있습니다. (월 50만글자 무료)',
+      '<a href="https://www.deepl.com/ko/pro-api" target="_blank">DeepL API 페이지</a>에서 키를 발급받을 수 있습니다.<br>신규 API Developer 계정: 총 100만 글자. 기존 API Free 계정: 월 50만 글자.',
     openaiPlaceholder: 'OpenAI API 키를 입력하세요',
     openaiHelpHtml:
       '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API 키 발급받기</a><br>(GPT-5.6 Sol, 유료 - 입력 $5 / 출력 $30 per 1M 토큰)',
@@ -592,7 +593,7 @@ const I18N = {
       '<strong>Recommended:</strong> MyMemory is free and stable<br><strong>~50K chars/day</strong> free (approx.)',
     translationDisabledHtml: 'Translation is disabled.',
     translationDeeplHtml:
-      '<strong>DeepL:</strong> 500K chars/month free, API key required<br><strong>High quality</strong> translation service',
+      '<strong>DeepL:</strong> New API Developer accounts include 1M chars total<br>Legacy API Free accounts include 500K chars/month',
     translationChatgptHtml:
       '<strong>OpenAI:</strong> User API key required<br><strong>Natural</strong> translation possible',
     langAutoOption: 'Auto-detect (per file)',
@@ -601,7 +602,7 @@ const I18N = {
     deviceCpu: 'CPU - Stable',
     trNone: 'No translation',
     trMyMemory: 'MyMemory (Free ~50K/day)',
-    trDeepL: 'DeepL (Free 500K/month with API key)',
+    trDeepL: 'DeepL (API key required)',
     trChatGPT: 'OpenAI (Requires API key)',
     trGemini: 'Gemini (Free: ~250 subs/day, Paid: pay-as-you-go)',
     trLocal: 'Local · Offline (Hy-MT2 1.8B/7B)',
@@ -659,9 +660,9 @@ const I18N = {
       'MyMemory can be used for free without an API key.<br>Daily quota is roughly ~50K characters per IP (subject to change).<br><br><strong>Usage Guide:</strong><br>• Enter API keys and test immediately with "Test Connection"<br>• Or save keys first, then test saved keys<br>• Real-time testing supported without saving',
     openaiLinkText: 'Get OpenAI API Key',
     openaiHelpSuffix: ' (paid, low cost)',
-    deeplPlaceholder: 'Enter DeepL API key (Free 500K chars/month)',
+    deeplPlaceholder: 'Enter DeepL API key',
     deeplHelpHtml:
-      'Get a free key from <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a>. (500K chars/month free)',
+      'Get a key from the <a href="https://www.deepl.com/pro-api" target="_blank">DeepL API page</a>.<br>New API Developer accounts: 1M chars total. Legacy API Free accounts: 500K chars/month.',
     openaiPlaceholder: 'Enter OpenAI API key',
     openaiHelpHtml:
       '<a href="https://platform.openai.com/api-keys" target="_blank">Get OpenAI API Key</a><br>(GPT-5.6 Sol, paid - $5 input / $30 output per 1M tokens)',
@@ -1006,7 +1007,8 @@ const I18N = {
     translationEnabledHtml:
       '<strong>おすすめ:</strong> MyMemory は無料で安定した翻訳<br><strong>1日約5万文字</strong>（目安）',
     translationDisabledHtml: '翻訳は使用しません。',
-    translationDeeplHtml: '<strong>DeepL:</strong> 月50万文字無料、APIキー必要<br><strong>高品質</strong>翻訳サービス',
+    translationDeeplHtml:
+      '<strong>DeepL:</strong> 新規 API Developer アカウントは合計100万文字<br>従来の API Free アカウントは月50万文字',
     translationChatgptHtml: '<strong>OpenAI:</strong> ユーザーAPIキー必要<br><strong>自然な</strong>翻訳が可能',
     langAutoOption: '自動検出（ファイルごと）',
     deviceAuto: '自動（GPUがあればGPU、なければCPU）',
@@ -1014,7 +1016,7 @@ const I18N = {
     deviceCpu: 'CPU - 安定',
     trNone: '翻訳しない',
     trMyMemory: 'MyMemory（無料 約5万/日）',
-    trDeepL: 'DeepL（月50万/無料APIキー）',
+    trDeepL: 'DeepL（APIキー必要）',
     trChatGPT: 'OpenAI（APIキー必要）',
     trGemini: 'Gemini（無料: 1日約250字幕、有料: 従量課金）',
     trLocal: 'Local・オフライン (Hy-MT2 1.8B/7B)',
@@ -1072,9 +1074,9 @@ const I18N = {
       'MyMemory は API キー不要で無料利用できます。<br>1 日あたり約 5 万文字（IP 単位、変動あり）。<br><br><strong>使用方法：</strong><br>• API キーを入力後「接続テスト」で即座に確認可能<br>• または先にキーを保存してからテストすることも可能<br>• 保存せずに入力したキーでリアルタイムテスト対応',
     openaiLinkText: 'OpenAI API キーを取得',
     openaiHelpSuffix: '（有料・低コスト）',
-    deeplPlaceholder: 'DeepL API キーを入力（無料 50万文字/月）',
+    deeplPlaceholder: 'DeepL API キーを入力',
     deeplHelpHtml:
-      '<a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>から無料で取得できます。（月50万文字無料）',
+      '<a href="https://www.deepl.com/ja/pro-api" target="_blank">DeepL API ページ</a>でキーを取得できます。<br>新規 API Developer アカウント：合計100万文字。従来の API Free アカウント：月50万文字。',
     openaiPlaceholder: 'OpenAI API キーを入力',
     openaiHelpHtml:
       '<a href="https://platform.openai.com/api-keys" target="_blank">OpenAI API キーを取得</a><br>（GPT-5.6 Sol、有料 - 入力 $5 / 出力 $30 per 1Mトークン）',
@@ -1411,7 +1413,7 @@ const I18N = {
       '<strong>推荐 GPU:</strong> NVIDIA 使用 CUDA，兼容 GPU 使用 Vulkan 加速<br><strong>CPU:</strong> 无 GPU 或内存不足时更稳定',
     translationEnabledHtml: '<strong>推荐:</strong> MyMemory 免费且稳定<br><strong>约5万字/天</strong>（参考）',
     translationDisabledHtml: '不使用翻译。',
-    translationDeeplHtml: '<strong>DeepL:</strong> 每月50万字免费，需API密钥<br><strong>高质量</strong>翻译服务',
+    translationDeeplHtml: '<strong>DeepL:</strong> 新 API Developer 账户共100万字符<br>原 API Free 账户每月50万字符',
     translationChatgptHtml: '<strong>OpenAI:</strong> 需用户API密钥<br><strong>自然</strong>翻译效果',
     langAutoOption: '自动检测（每个文件）',
     deviceAuto: '自动（有 GPU 用 GPU，否则 CPU）',
@@ -1419,7 +1421,7 @@ const I18N = {
     deviceCpu: 'CPU - 稳定',
     trNone: '不翻译',
     trMyMemory: 'MyMemory（免费 约5万/天）',
-    trDeepL: 'DeepL（每月50万/需API密钥）',
+    trDeepL: 'DeepL（需要 API 密钥）',
     trChatGPT: 'OpenAI（需API密钥）',
     trGemini: 'Gemini（免费: 每日约250字幕，付费: 按用量计费）',
     trLocal: 'Local · 离线（Hy-MT2 1.8B/7B）',
@@ -1477,9 +1479,9 @@ const I18N = {
       'MyMemory 可无需 API 密钥免费使用。<br>每日配额约 5 万字符（按 IP，可能变化）。<br><br><strong>使用说明：</strong><br>• 输入 API 密钥后可通过"测试连接"立即验证<br>• 或者先保存密钥再进行测试<br>• 支持不保存直接用输入的密钥实时测试',
     openaiLinkText: '获取 OpenAI API 密钥',
     openaiHelpSuffix: '（付费，成本低）',
-    deeplPlaceholder: '输入 DeepL API 密钥（每月免费 50万字符）',
+    deeplPlaceholder: '输入 DeepL API 密钥',
     deeplHelpHtml:
-      '可从 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a>免费获取。（每月50万字符免费）',
+      '可在 <a href="https://www.deepl.com/zh/pro-api" target="_blank">DeepL API 页面</a>获取密钥。<br>新 API Developer 账户：共100万字符。原 API Free 账户：每月50万字符。',
     openaiPlaceholder: '输入 OpenAI API 密钥',
     openaiHelpHtml:
       '<a href="https://platform.openai.com/api-keys" target="_blank">获取 OpenAI API 密钥</a><br>（GPT-5.6 Sol，付费 - 输入 $5 / 输出 $30 每1M令牌）',
@@ -1823,7 +1825,7 @@ const I18N = {
       '<strong>Zalecane:</strong> MyMemory jest darmowy i stabilny<br><strong>~50K znaków/dzień</strong> za darmo (w przybliżeniu)',
     translationDisabledHtml: 'Tłumaczenie wyłączone.',
     translationDeeplHtml:
-      '<strong>DeepL:</strong> 500K znaków/miesiąc za darmo, wymagany klucz API<br><strong>Wysoka jakość</strong> tłumaczenia',
+      '<strong>DeepL:</strong> Nowe konta API Developer mają łącznie 1 mln znaków<br>Starsze konta API Free mają 500 tys. znaków/miesiąc',
     translationChatgptHtml:
       '<strong>OpenAI:</strong> Wymagany klucz API użytkownika<br><strong>Naturalne</strong> tłumaczenie',
     langAutoOption: 'Automatyczne wykrywanie (dla każdego pliku)',
@@ -1832,7 +1834,7 @@ const I18N = {
     deviceCpu: 'CPU - Stabilny',
     trNone: 'Bez tłumaczenia',
     trMyMemory: 'MyMemory (Darmowy ~50K/dzień)',
-    trDeepL: 'DeepL (Darmowy 500K/miesiąc z kluczem API)',
+    trDeepL: 'DeepL (wymagany klucz API)',
     trChatGPT: 'OpenAI (Wymagany klucz API)',
     trGemini: 'Gemini (Darmowy: ~250 napisów/dzień, Płatny: opłata za użycie)',
     trLocal: 'Local · Offline (Hy-MT2 1.8B/7B)',
@@ -1890,9 +1892,9 @@ const I18N = {
       'MyMemory można używać za darmo bez klucza API.<br>Dzienny limit to około ~50K znaków na IP (może się zmieniać).<br><br><strong>Instrukcja:</strong><br>• Wprowadź klucze API i przetestuj natychmiast przez "Test połączenia"<br>• Lub najpierw zapisz klucze, potem przetestuj<br>• Obsługiwane testowanie w czasie rzeczywistym bez zapisywania',
     openaiLinkText: 'Uzyskaj klucz API OpenAI',
     openaiHelpSuffix: ' (płatny, niski koszt)',
-    deeplPlaceholder: 'Wprowadź klucz API DeepL (Darmowy 500K znaków/miesiąc)',
+    deeplPlaceholder: 'Wprowadź klucz API DeepL',
     deeplHelpHtml:
-      'Uzyskaj darmowy klucz z <a href="https://www.deepl.com/pro-api" target="_blank">strony API DeepL</a>. (500K znaków/miesiąc za darmo)',
+      'Uzyskaj klucz na <a href="https://www.deepl.com/pro-api" target="_blank">stronie API DeepL</a>.<br>Nowe konta API Developer: łącznie 1 mln znaków. Starsze konta API Free: 500 tys. znaków/miesiąc.',
     openaiPlaceholder: 'Wprowadź klucz API OpenAI',
     openaiHelpHtml:
       '<a href="https://platform.openai.com/api-keys" target="_blank">Uzyskaj klucz API OpenAI</a><br>(GPT-5.6 Sol, płatny - $5 wejście / $30 wyjście na 1M tokenów)',

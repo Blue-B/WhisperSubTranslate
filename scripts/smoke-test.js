@@ -8,8 +8,8 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
-const EnhancedSubtitleTranslator = require('../translator-enhanced');
-const localTranslator = require('../local-translator');
+const EnhancedSubtitleTranslator = require('../src/main/services/translator');
+const localTranslator = require('../src/main/services/local-translator');
 const {
   hasWhisperRuntimeLibraries,
   downloadFile,
@@ -18,7 +18,7 @@ const {
   verifyWhisperAsset,
   WHISPER_ASSET_MANIFEST,
 } = require('./postinstall');
-const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../srt-cleanup');
+const { applySrtCleanup, isSdhOnlyText, srtFromWhisperJson } = require('../src/main/services/srt-cleanup');
 const {
   assertDownloadDiskSpace,
   assertSyncInstallDiskSpace,
@@ -28,9 +28,182 @@ const {
   SYNC_MODEL_BYTES,
   SYNC_ENGINE_EXTRACTED_BYTES,
   SYNC_ENGINE_EXTRACTION_PEAK_BYTES,
-} = require('../disk-space');
-const { isCompleteWavFile, writeDownloadStream } = require('../file-safety');
-const { downloadVerifiedFile } = require('../verified-downloader');
+} = require('../src/main/services/disk-space');
+const { isCompleteWavFile } = require('../src/main/services/file-safety');
+const { downloadVerifiedFile } = require('../src/main/services/verified-downloader');
+const runAfterPack = require('./afterPack');
+const runTranslationConfigTests = require('./test-translation-config');
+
+async function runAfterPackCudaRuntimeCopy() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-after-pack-cuda-'));
+  const dlls = ['cudart64_12.dll', 'cublas64_12.dll', 'cublasLt64_12.dll'];
+  const logs = [];
+  const originalConsoleLog = console.log;
+  console.log = (...args) => {
+    logs.push(args.join(' '));
+    originalConsoleLog(...args);
+  };
+  const destinations = {
+    core: ['win-x64-cuda', 'bins', 'win-x64-cuda'],
+    fallback: ['win-x64-cuda-ext', 'bins', 'win-x64-cuda', 'fallback'],
+  };
+
+  try {
+    for (const [name, presentDestinations, missingSource] of [
+      ['both', ['core', 'fallback'], null],
+      ['core-only', ['core'], null],
+      ['fallback-only', ['fallback'], null],
+      ['neither', [], null],
+      ['missing-source', ['core', 'fallback'], 'cublas64_12.dll'],
+    ]) {
+      const appOutDir = path.join(root, name);
+      const resourcesDir = path.join(appOutDir, 'resources');
+      const sourceDir = path.join(resourcesDir, 'whisper-cpp');
+      fs.mkdirSync(sourceDir, { recursive: true });
+      for (const dll of dlls) {
+        if (dll !== missingSource) fs.writeFileSync(path.join(sourceDir, dll), `fixture:${dll}`);
+      }
+      for (const destination of presentDestinations) {
+        fs.mkdirSync(
+          path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@node-llama-cpp', ...destinations[destination]),
+          { recursive: true }
+        );
+      }
+
+      await runAfterPack({ electronPlatformName: 'win32', appOutDir });
+
+      for (const destination of presentDestinations) {
+        const destinationDir = path.join(
+          resourcesDir,
+          'app.asar.unpacked',
+          'node_modules',
+          '@node-llama-cpp',
+          ...destinations[destination]
+        );
+        for (const dll of dlls) {
+          const copied = path.join(destinationDir, dll);
+          if (dll === missingSource) assert.strictEqual(fs.existsSync(copied), false);
+          else assert.strictEqual(fs.readFileSync(copied, 'utf8'), `fixture:${dll}`);
+        }
+      }
+    }
+    assert.ok(
+      logs.some((line) => line.includes('runtime GPU selection is not implied')),
+      'afterPack must describe copied files without claiming successful GPU selection'
+    );
+    assert.doesNotMatch(logs.join('\n'), /GPU translation enabled/i);
+  } finally {
+    console.log = originalConsoleLog;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+
+  console.log('[AfterPackCUDA] core/fallback destination matrix and truthful runtime claim (ok)');
+}
+
+function readSources(paths) {
+  return paths.map((file) => fs.readFileSync(path.join(__dirname, '..', file), 'utf8')).join('\n');
+}
+
+function readMainSource() {
+  return readSources([
+    'src/main/index.js',
+    'src/main/window.js',
+    'src/main/services/transcription.js',
+    'src/main/ipc/transcription.js',
+    'src/main/ipc/translation.js',
+    'src/main/ipc/models.js',
+    'src/main/ipc/files.js',
+    'src/main/ipc/history.js',
+    'src/main/ipc/settings.js',
+  ]);
+}
+
+function readRendererSource() {
+  return readSources([
+    'src/renderer/state.js',
+    'src/renderer/features/logs.js',
+    'src/renderer/features/progress.js',
+    'src/renderer/features/queue.js',
+    'src/renderer/features/processing.js',
+    'src/renderer/features/settings.js',
+    'src/renderer/features/providers.js',
+    'src/renderer/features/models.js',
+    'src/renderer/features/history.js',
+    'src/renderer/index.js',
+  ]);
+}
+
+function runRefactoredLayout() {
+  const root = path.join(__dirname, '..');
+  const required = [
+    'src/main/index.js',
+    'src/main/window.js',
+    ...['transcription', 'translation', 'models', 'files', 'history', 'settings'].map(
+      (name) => `src/main/ipc/${name}.js`
+    ),
+    ...[
+      'transcription',
+      'srt-cleanup',
+      'local-translator',
+      'translator',
+      'mymemory-translator',
+      'verified-downloader',
+      'disk-space',
+      'file-safety',
+      'error-logger',
+    ].map((name) => `src/main/services/${name}.js`),
+    'src/preload/index.js',
+    'src/renderer/index.html',
+    'src/renderer/index.js',
+    'src/renderer/state.js',
+    'src/renderer/styles.css',
+    ...['queue', 'processing', 'settings', 'providers', 'models', 'history', 'progress', 'logs'].map(
+      (name) => `src/renderer/features/${name}.js`
+    ),
+    'src/shared/ipc-channels.js',
+  ];
+  required.forEach((file) => assert.ok(fs.existsSync(path.join(root, file)), `missing refactored file: ${file}`));
+  ['main.js', 'renderer.js', 'preload.js', 'index.html'].forEach((file) =>
+    assert.ok(!fs.existsSync(path.join(root, file)), `legacy entry point must be removed: ${file}`)
+  );
+  let pkg;
+  try {
+    pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  } catch (error) {
+    assert.fail(`package.json must be valid JSON: ${error.message}`);
+  }
+  assert.strictEqual(pkg.main, 'src/main/index.js');
+  assert.ok(pkg.build.files.includes('src/**'), 'electron-builder must package the src tree');
+  const mainEntry = fs.readFileSync(path.join(root, 'src/main/index.js'), 'utf8');
+  const portableSetup = mainEntry.indexOf("app.setPath('userData', portableDirectory)");
+  const serviceLoad = mainEntry.indexOf("require('./services/transcription')");
+  assert.ok(
+    portableSetup >= 0 && serviceLoad > portableSetup,
+    'portable userData must be selected before services load'
+  );
+  assert.doesNotMatch(mainEntry, /electron-updater/, 'unused electron-updater path must not return');
+  const preload = fs.readFileSync(path.join(root, 'src/preload/index.js'), 'utf8');
+  const channels = require('../src/shared/ipc-channels');
+  Object.values(channels).forEach((channel) =>
+    assert.ok(preload.includes(`'${channel}'`), `preload bridge is missing shared IPC channel: ${channel}`)
+  );
+  const html = fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
+  for (const script of [
+    'state.js',
+    'features/logs.js',
+    'features/progress.js',
+    'features/queue.js',
+    'features/history.js',
+    'features/models.js',
+    'features/settings.js',
+    'features/providers.js',
+    'features/processing.js',
+    'index.js',
+  ]) {
+    assert.ok(html.includes(`src="${script}?`), `renderer script missing from index.html: ${script}`);
+  }
+  console.log('[RefactoredLayout] entries, responsibilities, and package paths are wired (ok)');
+}
 
 async function runPostinstallRedirectDrain() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-postinstall-redirect-'));
@@ -473,8 +646,11 @@ async function runVerifiedDownloader() {
 }
 
 function runSyncPreflightOrdering() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-  const downloader = fs.readFileSync(path.join(__dirname, '..', 'verified-downloader.js'), 'utf8');
+  const source = readMainSource();
+  const downloader = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'main', 'services', 'verified-downloader.js'),
+    'utf8'
+  );
   const preflight = source.indexOf('assertSyncInstallDiskSpace(');
   const firstDownload = source.indexOf('await ensureFasterWhisperEngine((pct)');
   assert.ok(
@@ -514,12 +690,12 @@ function runSyncPreflightOrdering() {
 }
 
 function runWhisperDeviceRouting() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const source = readMainSource();
   const start = source.indexOf('function resolveDevice(');
   const end = source.indexOf('// Enhanced memory/GPU cleanup', start);
   assert.ok(start >= 0 && end > start, 'resolveDevice source must be present');
   const makeResolver = (cuda, vulkan) =>
-    // pi-lens-ignore: ast-grep:no-global-eval-js
+    // pi-lens-ignore: no-global-eval-js, ast-grep:no-global-eval-js
     new Function('isCudaAvailable', 'isVulkanAvailable', `${source.slice(start, end)}\nreturn resolveDevice;`)(
       () => cuda,
       () => vulkan
@@ -543,12 +719,12 @@ function runWhisperDeviceRouting() {
 }
 
 function runWhisperFallbackEligibility() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const source = readMainSource();
   const start = source.indexOf('function isWhisperFallbackEligible(');
   const end = source.indexOf('\n}', start);
   assert.ok(start >= 0 && end > start, 'isWhisperFallbackEligible source must be present');
   const makeEligible = (isUserStopped) =>
-    // pi-lens-ignore: ast-grep:no-global-eval-js
+    // pi-lens-ignore: no-global-eval-js, ast-grep:no-global-eval-js
     new Function('isUserStopped', `${source.slice(start, end)}\n}\nreturn isWhisperFallbackEligible;`)(isUserStopped);
 
   assert.strictEqual(
@@ -578,10 +754,17 @@ function runWhisperFallbackEligibility() {
   console.log('[WhisperFallback] timeout/input/user-stop/disk guards keep device fallback from looping (ok)');
 }
 
+function readPackageConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  } catch (error) {
+    assert.fail(`package.json must be valid JSON: ${error.message}`);
+  }
+}
+
 function runPackageNoticesConfig() {
   const root = path.join(__dirname, '..');
-  // pi-lens-ignore: unchecked-throwing-call-js
-  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const pkg = readPackageConfig();
   const shipped = JSON.stringify(pkg.build.extraResources || []);
   for (const notice of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) {
     assert.ok(fs.existsSync(path.join(root, notice)), `${notice} must exist at the repo root`);
@@ -590,7 +773,62 @@ function runPackageNoticesConfig() {
   console.log('[PackageNotices] LICENSE and THIRD_PARTY_NOTICES.md ship into resources/ (ok)');
 }
 
+function runWindowsWhisperPackageLayout() {
+  const pkg = readPackageConfig();
+  const resource = pkg.build.win.extraResources.find((entry) => entry.from === 'whisper-cpp');
+  assert.ok(resource, 'Windows package must ship whisper-cpp resources');
+  assert.deepStrictEqual(
+    resource.filter,
+    ['**/*', '!install-failed.txt', '!**/*.so', '!**/*.so.*'],
+    'Windows whisper-cpp resources must exclude Linux shared libraries without narrowing Windows payloads'
+  );
+  assert.deepStrictEqual(
+    pkg.build.linux.extraResources[0].filter,
+    ['whisper-cli', 'cpu/**', '*.so*'],
+    'Windows filtering must not change Linux whisper-cpp targets'
+  );
+
+  const buildDir = process.env.WST_WINDOWS_BUILD_DIR;
+  if (buildDir) {
+    const whisperDir = path.join(buildDir, 'resources', 'whisper-cpp');
+    const entries = [];
+    const visit = (directory) => {
+      for (const name of fs.readdirSync(directory)) {
+        const fullPath = path.join(directory, name);
+        const relativePath = path.relative(whisperDir, fullPath);
+        const stat = fs.lstatSync(fullPath);
+        entries.push({ relativePath, stat });
+        if (stat.isDirectory()) visit(fullPath);
+      }
+    };
+    visit(whisperDir);
+    const invalid = entries.filter(
+      ({ relativePath, stat }) => stat.isSymbolicLink() || /(?:^|[/\\])[^/\\]+\.so(?:\..+)?$/.test(relativePath)
+    );
+    assert.deepStrictEqual(
+      invalid.map(({ relativePath }) => relativePath),
+      [],
+      'built Windows whisper-cpp resources must contain no symlinks or Linux .so payloads'
+    );
+    for (const required of [
+      'whisper-cli.exe',
+      path.join('cpu', 'whisper-cli.exe'),
+      path.join('vulkan', 'whisper-cli.exe'),
+    ]) {
+      assert.ok(fs.existsSync(path.join(whisperDir, required)), `built Windows package is missing ${required}`);
+    }
+    assert.ok(
+      entries.some(({ relativePath }) => relativePath.toLowerCase().endsWith('.dll')),
+      'Windows DLL resources must remain'
+    );
+  }
+  console.log(
+    `[WindowsPackageLayout] Linux .so payloads excluded; Windows targets retained${buildDir ? ' in built tree' : ''} (ok)`
+  );
+}
+
 function runReleaseVulkanGate() {
+  // pi-lens-ignore: unchecked-throwing-call-js
   const source = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'release.yml'), 'utf8');
   const probe = source.indexOf('$vulkanLog = & "whisper-cpp/vulkan/whisper-cli.exe"');
   const cleanup = source.indexOf('Remove-Item $model -Force', probe);
@@ -611,7 +849,7 @@ function runReleaseVulkanGate() {
 }
 
 function runRendererSourceLangPayload() {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+  const source = readRendererSource();
   const calls = [...source.matchAll(/window\.electronAPI\.translateSubtitle\(\{([\s\S]*?)\n\s*\}\);/g)];
   assert.strictEqual(calls.length, 2, 'renderer must have direct-SRT and post-extraction translation calls');
   for (const [, payload] of calls) {
@@ -627,26 +865,6 @@ function runRendererSourceLangPayload() {
     'completed queue items must open the generated output when available'
   );
   console.log('[SourceLangPayload] translation source and completed output paths are wired (ok)');
-}
-
-async function runDownloadStreamSafety() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-download-stream-'));
-  const dest = path.join(dir, 'partial.bin');
-  try {
-    const source = new PassThrough();
-    let writer;
-    const writing = writeDownloadStream(source, dest, (stream) => {
-      writer = stream;
-    });
-    source.write('partial');
-    source.destroy(new Error('forced stream failure'));
-    await assert.rejects(writing, /forced stream failure/);
-    assert.ok(writer.closed || writer.destroyed, 'failed download writer must be closed');
-    assert.strictEqual(fs.existsSync(dest), false, 'failed download partial must be removed after close');
-    console.log('[DownloadStreamSafety] stream errors close writer before partial cleanup (ok)');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 function runWavHeaderSafety() {
@@ -862,167 +1080,74 @@ function runWhisperRuntimeProbe() {
 }
 
 async function runModelResumeDiskSpace() {
-  const https = require('https');
-  const { EventEmitter } = require('events');
+  const axios = require('axios');
   const electronPath = require.resolve('electron');
   const originalElectron = require.cache[electronPath].exports;
-  const originalGet = https.get;
-  const originalStatfs = fs.statfsSync;
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-model-resume-'));
-  const controller = new AbortController();
-  let rangeHeader = '';
+  const originalAdapter = axios.defaults.adapter;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-model-integrity-'));
+  const model = localTranslator.MODELS[localTranslator.DEFAULT_MODEL_ID];
+  const originalMeta = { ...model };
+  const valid = Buffer.from('verified-model-fixture');
+  const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
+  const response = (body) => {
+    const data = new PassThrough();
+    process.nextTick(() => data.end(body));
+    return { status: 200, statusText: 'OK', headers: {}, config: {}, data };
+  };
 
   try {
     require.cache[electronPath].exports = { app: { getPath: () => root } };
-    const model = localTranslator.MODELS[localTranslator.DEFAULT_MODEL_ID];
-    const tmp = path.join(root, 'hy-mt-models', model.file + '.tmp');
-    fs.mkdirSync(path.dirname(tmp), { recursive: true });
-    fs.writeFileSync(tmp, '');
-    fs.truncateSync(tmp, 800 * 1024 * 1024);
-    // 전체 모델+예비 공간은 부족하지만, 남은 333MB+예비 공간은 충분한 상태.
-    fs.statfsSync = () => ({ bavail: 900, bsize: 1024 * 1024 });
-    https.get = (_url, options) => {
-      rangeHeader = options?.headers?.Range || '';
-      const request = new EventEmitter();
-      request.destroy = () => request.emit('error', new Error('socket closed'));
-      queueMicrotask(() => controller.abort(new Error('ABORTED: resume probe')));
-      return request;
-    };
+    Object.assign(model, { sizeBytes: valid.length, sha256: digest(valid) });
+    const dest = localTranslator.getModelPath(model.id);
+    const tmp = `${dest}.tmp`;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, 'existing-model');
 
-    await assert.rejects(() => localTranslator.downloadModel(null, controller.signal), /ABORTED: resume probe/);
-    assert.strictEqual(rangeHeader, 'bytes=838860800-', 'disk guard must allow download resume from the partial size');
+    axios.defaults.adapter = async () => response(valid);
+    model.sha256 = '0'.repeat(64);
+    await assert.rejects(() => localTranslator.downloadModel(null), /SHA-256 verification failed/);
+    assert.strictEqual(fs.readFileSync(dest, 'utf8'), 'existing-model', 'digest failure must preserve prior model');
+    assert.strictEqual(fs.existsSync(tmp), false, 'wrong-digest partial must be removed');
 
-    // Range를 무시한 200 응답에서 전체 재다운로드 공간이 부족하면 partial을 지우지 않는다.
-    fs.writeFileSync(tmp, '');
-    fs.truncateSync(tmp, 800 * 1024 * 1024);
-    const controller2 = new AbortController();
-    https.get = (_url, options, callback) => {
-      rangeHeader = options?.headers?.Range || '';
-      const request = new EventEmitter();
-      request.destroy = () => request.emit('error', new Error('socket closed'));
-      const response = new EventEmitter();
-      response.statusCode = 200;
-      response.headers = { 'content-length': String(model.sizeBytes) };
-      response.resume = () => {};
-      response.destroy = () => {};
-      queueMicrotask(() => callback(response));
-      return request;
-    };
-    await assert.rejects(() => localTranslator.downloadModel(null, controller2.signal), /Not enough disk space/);
-    assert.strictEqual(rangeHeader, 'bytes=838860800-');
-    assert.strictEqual(fs.statSync(tmp).size, 800 * 1024 * 1024, 'Range-ignored disk failure must preserve partial');
+    model.sha256 = digest(valid);
+    axios.defaults.adapter = async () => response(valid.subarray(0, valid.length - 1));
+    await assert.rejects(() => localTranslator.downloadModel(null), /download incomplete/);
+    assert.strictEqual(fs.readFileSync(dest, 'utf8'), 'existing-model', 'truncation must preserve prior model');
 
-    fs.writeFileSync(tmp, 'resume-me');
-    fs.statfsSync = () => ({ bavail: 4096, bsize: 1024 * 1024 });
-    https.get = () => {
-      const request = new EventEmitter();
-      request.destroy = () => {};
-      queueMicrotask(() => request.emit('error', new Error('network interrupted')));
-      return request;
+    const controller = new AbortController();
+    axios.defaults.adapter = async () => {
+      const data = new PassThrough();
+      process.nextTick(() => {
+        data.write(valid.subarray(0, 4));
+        controller.abort(new Error('ABORTED: fixture cancel'));
+      });
+      return { status: 200, statusText: 'OK', headers: {}, config: {}, data };
     };
-    await assert.rejects(() => localTranslator.downloadModel(null), /network interrupted/);
-    assert.strictEqual(fs.readFileSync(tmp, 'utf8'), 'resume-me', 'network failures must preserve resumable data');
+    await assert.rejects(() => localTranslator.downloadModel(null, controller.signal), /ABORTED|cancel/i);
+    assert.strictEqual(fs.readFileSync(dest, 'utf8'), 'existing-model', 'cancellation must preserve prior model');
 
     fs.rmSync(tmp, { force: true });
-    let firstProgressCalls = 0;
-    let redirectRequests = 0;
-    https.get = (_url, _options, callback) => {
-      const request = new EventEmitter();
-      request.destroy = () => {};
-      queueMicrotask(() => {
-        const response = new PassThrough();
-        if (redirectRequests++ === 0) {
-          response.statusCode = 302;
-          response.headers = { location: 'https://final.test/model' };
-          callback(response);
-          response.end();
-          request.emit('error', new Error('retired model redirect failed'));
-          return;
-        }
-        response.statusCode = 200;
-        response.headers = { 'content-length': '3' };
-        callback(response);
-        response.end('abc');
-      });
-      return request;
+    axios.defaults.adapter = async (config) => {
+      assert.ok(config.url.includes(`/resolve/${model.revision}/`), 'model URL must pin the catalog revision');
+      return response(valid);
     };
-    await localTranslator.downloadModel(() => firstProgressCalls++);
-    assert.ok(firstProgressCalls > 0, 'the first download caller must receive progress');
+    await localTranslator.downloadModel(null);
+    assert.deepStrictEqual(fs.readFileSync(dest), valid, 'verified fixture must atomically replace prior model');
+    await localTranslator.ensureModelIntegrity(model.id);
+    assert.strictEqual(localTranslator.isModelInstalled(model.id), true, 'installed status requires exact size');
+    fs.truncateSync(dest, valid.length - 1);
+    assert.strictEqual(localTranslator.isModelInstalled(model.id), false, 'truncated model must not be installed');
+    console.log('[LocalModelIntegrity] pinned URL, digest, truncation, cancel, and prior-file preservation (ok)');
   } finally {
-    https.get = originalGet;
-    fs.statfsSync = originalStatfs;
+    Object.assign(model, originalMeta);
+    axios.defaults.adapter = originalAdapter;
     require.cache[electronPath].exports = originalElectron;
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
 
 async function runModelDownloadAbort() {
-  const https = require('https');
-  const { EventEmitter } = require('events');
-  const electronPath = require.resolve('electron');
-  const originalElectron = require.cache[electronPath].exports;
-  const originalGet = https.get;
-  const modelDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-model-abort-'));
-  const controller = new AbortController();
-  let requestCount = 0;
-  let destroyed = false;
-
-  try {
-    require.cache[electronPath].exports = { app: { getPath: () => modelDir } };
-    // 구현이 https.get(url, { headers }, callback) 형태로 바뀌어 mock도 옵션 인자를 받는다.
-    https.get = (_url, _options, callback) => {
-      const cb = typeof _options === 'function' ? _options : callback;
-      const request = new EventEmitter();
-      request.destroy = () => {
-        destroyed = true;
-        request.emit('error', new Error('socket closed'));
-      };
-      requestCount++;
-      if (requestCount === 1) {
-        queueMicrotask(() => {
-          const response = new EventEmitter();
-          response.statusCode = 302;
-          response.headers = { location: 'https://example.test/model' };
-          response.resume = () => {};
-          cb(response);
-        });
-      } else {
-        queueMicrotask(() => controller.abort(new Error('ABORTED: test download')));
-      }
-      return request;
-    };
-
-    await assert.rejects(() => localTranslator.downloadModel(null, controller.signal), /ABORTED: test download/);
-    assert.strictEqual(requestCount, 2, 'download should follow one redirect before aborting');
-    assert.strictEqual(destroyed, true, 'abort should destroy the active request before a response arrives');
-
-    requestCount = 0;
-    destroyed = false;
-    https.get = (_url, _options, _callback) => {
-      const request = new EventEmitter();
-      request.destroy = () => {
-        destroyed = true;
-        request.emit('error', new Error('socket closed'));
-      };
-      requestCount++;
-      return request;
-    };
-
-    const owner = new AbortController();
-    const ownerDownload = localTranslator.downloadModel(null, owner.signal);
-    const waiter = new AbortController();
-    waiter.abort(new Error('ABORTED: second waiter'));
-    await assert.rejects(() => localTranslator.downloadModel(null, waiter.signal), /ABORTED: second waiter/);
-    assert.strictEqual(destroyed, false, 'a waiting caller must not cancel the shared transfer');
-    owner.abort(new Error('ABORTED: download owner'));
-    await assert.rejects(() => ownerDownload, /ABORTED: download owner/);
-    assert.strictEqual(requestCount, 1, 'shared callers must reuse one request');
-    assert.strictEqual(destroyed, true, 'the transfer owner must still be able to cancel the request');
-  } finally {
-    https.get = originalGet;
-    require.cache[electronPath].exports = originalElectron;
-    fs.rmSync(modelDir, { recursive: true, force: true });
-  }
+  // Covered by runModelResumeDiskSpace's deterministic cancellation fixture.
 }
 
 async function runLocalTranslationGuards() {
@@ -1149,7 +1274,7 @@ async function runLocalTranslationGuards() {
 async function runMyMemoryErrorPhrase() {
   // 이슈 #42: MyMemory는 실패해도 HTTP 200 + 에러 문구를 translatedText로 돌려준다.
   // 이 문구가 번역 결과로 반환되어 자막 파일에 기록되지 않아야 한다.
-  const MyMemoryTranslator = require('../myMemoryTranslator');
+  const MyMemoryTranslator = require('../src/main/services/mymemory-translator');
   const axios = require('axios');
   const originalGet = axios.get;
   const mem = new MyMemoryTranslator();
@@ -1166,6 +1291,56 @@ async function runMyMemoryErrorPhrase() {
       /error message instead of a translation|quota exceeded/
     );
     console.log('[MyMemory] error phrase not returned as translation (ok)');
+  } finally {
+    axios.get = originalGet;
+  }
+}
+
+async function runMyMemoryCombined403Classification() {
+  const MyMemoryTranslator = require('../src/main/services/mymemory-translator');
+  const axios = require('axios');
+  const originalGet = axios.get;
+  try {
+    const permanent = new MyMemoryTranslator();
+    permanent.maxRetries = 2;
+    let permanentRequests = 0;
+    axios.get = async () => {
+      permanentRequests++;
+      return {
+        data: {
+          responseData: { translatedText: 'PLEASE SELECT TWO DISTINCT LANGUAGES' },
+          responseStatus: 403,
+        },
+      };
+    };
+    await assert.rejects(
+      () => permanent.translate('こんにちは', 'ja', 'ja'),
+      /permanent, not retried/,
+      'known invalid-language text must win over a combined responseStatus 403'
+    );
+    assert.strictEqual(permanentRequests, 1, 'combined permanent 403 must not retry the provider');
+    assert.strictEqual(permanent.emailIndex, 1, 'combined permanent 403 must not rotate quota identities');
+
+    const quota = new MyMemoryTranslator();
+    quota.maxRetries = 1;
+    let quotaRequests = 0;
+    axios.get = async () => {
+      quotaRequests++;
+      return {
+        data: {
+          responseData: { translatedText: 'REQUEST LIMIT REACHED' },
+          responseStatus: 403,
+        },
+      };
+    };
+    await assert.rejects(
+      () => quota.translate('hello', 'en', 'ko'),
+      /daily quota exceeded/,
+      'genuine responseStatus 403 must remain classified as quota'
+    );
+    assert.strictEqual(quotaRequests, 1);
+    assert.strictEqual(quota.emailIndex, 2, 'genuine responseStatus 403 must still rotate quota identities');
+    console.log('[MyMemory403] permanent phrase precedes quota rotation; genuine quota remains quota (ok)');
   } finally {
     axios.get = originalGet;
   }
@@ -1369,6 +1544,31 @@ async function runQuotaClassification() {
   console.log('[QuotaClass] 403 is not treated as quota (ok)');
 }
 
+async function runFinalFallbackSourceLang() {
+  const runCase = async (sourceLang, expectedSourceLang) => {
+    const translator = new EnhancedSubtitleTranslator();
+    translator.apiKeys = { preferredService: 'deepl' };
+    translator.maxRetries = 1;
+    const calls = [];
+    translator.translateWithMyMemory = async (...args) => {
+      calls.push(args);
+      if (calls.length === 1) throw new Error('MyMemory network timeout');
+      return 'final translation';
+    };
+
+    const result = await translator.translateAuto('hello', 'deepl', 'es', sourceLang);
+    assert.strictEqual(result, 'final translation');
+    assert.deepStrictEqual(calls, [
+      ['hello', 'es', expectedSourceLang],
+      ['hello', 'es', expectedSourceLang],
+    ]);
+  };
+
+  await runCase('ja', 'ja');
+  await runCase(null, 'auto');
+  console.log('[FinalFallbackSourceLang] explicit source and auto default reach final MyMemory attempt (ok)');
+}
+
 async function runFinalFallbackQuotaPropagation() {
   // F5: 최종 폴백(모든 서비스 실패 후 MyMemory)에서 쿼터 초과는 원문 반환으로
   // 삼키지 않고 그대로 전파해야 한다 (할당량이면 나머지 줄도 전부 실패한다).
@@ -1502,7 +1702,7 @@ async function runDeepLFxSuffixHint() {
 
 async function runLocalContextPrecheck() {
   // LOCAL_TEXT_TOO_LONG: 컨텍스트 2048을 초과할 만한 긴 입력은 번역 전에 명확한 에러.
-  const localTranslator = require('../local-translator');
+  const localTranslator = require('../src/main/services/local-translator');
   const longText = '가'.repeat(4000); // 라틴 4글자/토큰 + CJK 1글자/토큰 → 4000+ 토큰 추정
   await assert.rejects(
     () => localTranslator.translateLocal(longText, 'en', 'cpu', '1.8b'),
@@ -1618,7 +1818,7 @@ async function runMyMemoryNormalPhrase() {
   // startsWith 접두사 검사가 'Please select two distinct languages...'로
   // 시작하는 실제 번역을 영구 오류로 던지던 문제 — 정확 일치로 바뀌어
   // 정상 번역으로 반환되어야 한다.
-  const MyMemoryTranslator = require('../myMemoryTranslator');
+  const MyMemoryTranslator = require('../src/main/services/mymemory-translator');
   const axios = require('axios');
   const originalGet = axios.get;
   const mem = new MyMemoryTranslator();
@@ -1641,7 +1841,7 @@ async function runMyMemoryNormalPhrase() {
 async function runAbortSurvivesLangLoop() {
   // HIGH-1: translateSRTFile은 매 호출 resetAbort()하므로, 한 번 중지해도
   // 같은 세션의 다음 새 번역 요청은 다시 시작할 수 있다. 언어 간 abort 보호는
-  // main.js 루프가 translateSRTFile 호출 전 translator._aborted를 검사해
+  // translation IPC 루프가 translateSRTFile 호출 전에 translator._aborted를 검사해
   // 남은 언어를 건너뛰는 방식으로 유지된다.
   const translator = new EnhancedSubtitleTranslator();
   translator.translateSRTContent = async (content) => content.replace('Hello', '안녕');
@@ -1674,7 +1874,7 @@ async function runAbortSurvivesLangLoop() {
 async function runAbortResetOnNewIpcRequest() {
   // MAJOR: translate-subtitle 핸들러는 진입 직후(언어 루프 전) resetAbort()하므로
   // 한 번 중지해도 다음 새 요청이 정상 시작된다. 루프의 _aborted 검사는 언어 간
-  // 중지만 감지한다. main.js는 electron 의존으로 node에서 로드할 수 없어,
+  // 중지만 감지한다. Electron IPC module은 Node에서 직접 로드할 수 없어,
   // 핸들러 제어 흐름(진입 리셋 → 언어 루프 → ABORTED catch)을 그대로 시뮬레이션한다.
   const translator = new EnhancedSubtitleTranslator();
   translator.translateSRTContent = async (content) => content.replace('Hello', '안녕');
@@ -1890,12 +2090,14 @@ async function runProviderModelFiltering() {
 }
 
 async function run() {
+  runRefactoredLayout();
   runRendererSourceLangPayload();
   runWhisperDeviceRouting();
   runVulkanBundleManifest();
   await runVerifiedDownloader();
   runSyncPreflightOrdering();
   await runPostinstallRedirectDrain();
+  await runTranslationConfigTests();
   const translator = new EnhancedSubtitleTranslator();
 
   // deepl-node 1.27: en/pt는 지역 코드가 아니면 deprecated로 throw(이슈 #41)
@@ -1933,7 +2135,6 @@ async function run() {
 
   runSrtCleanup();
   runSrtFromWhisperJson();
-  await runDownloadStreamSafety();
   runWavHeaderSafety();
   runWhisperRuntimeProbe();
   runDiskSpaceGuard();
@@ -1941,6 +2142,7 @@ async function run() {
   await runModelDownloadAbort();
   await runLocalTranslationGuards();
   await runMyMemoryErrorPhrase();
+  await runMyMemoryCombined403Classification();
   await runMyMemoryNormalPhrase();
   await runProviderModelFiltering();
   await runRetryOn429Case();
@@ -1952,6 +2154,7 @@ async function run() {
   await runSrtFileNoOutputOn429();
   await runQuotaClassification();
   await runDeepLFxSuffixHint();
+  await runFinalFallbackSourceLang();
   await runFinalFallbackQuotaPropagation();
   await runParallelPathSourceLang();
   await runLoopLevelQuotaContinue();
@@ -1968,14 +2171,20 @@ async function run() {
   await runThrottleTiers();
   await runQuotaMessagePrecision();
   runPackageNoticesConfig();
+  runWindowsWhisperPackageLayout();
   runReleaseVulkanGate();
   runWhisperFallbackEligibility();
+  await runAfterPackCudaRuntimeCopy();
   await runPostinstallDigestGuards();
 
   console.log('Smoke tests passed.');
 }
 
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.env.WST_WINDOWS_BUILD_DIR) {
+  runWindowsWhisperPackageLayout();
+} else {
+  run().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

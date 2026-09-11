@@ -149,7 +149,7 @@ async function run() {
       return {
         dropHint: document.getElementById('dropHint1')?.textContent || '',
         diskError: getLocalizedError('Not enough disk space: need 2.00 GB, free 1.00 GB'),
-        // main.js가 보내는 세 가지 whisper 실행 실패 메시지 원본.
+        // main 프로세스가 보내는 세 가지 whisper 실행 실패 메시지 원본.
         whisperMissing: getLocalizedError('whisper-cli.exe is missing from C:\\app\\resources\\whisper-cpp.'),
         whisperBlocked: getLocalizedError(
           'whisper-cli.exe could not be launched even though the file exists at ' +
@@ -193,7 +193,32 @@ async function run() {
   }
 
   // -------------------------------------------------------------------------
-  // 6. Settings unsaved-change guard
+  // 6. Navigation and provider controls
+  // -------------------------------------------------------------------------
+  await w.locator('.rail-btn[data-view="history"]').click();
+  if (!(await w.locator('.main-container').getAttribute('data-view')).includes('history')) {
+    fail('History rail button did not switch the visible view');
+  }
+  await w.keyboard.press('1');
+  if ((await w.locator('.main-container').getAttribute('data-view')) !== null) {
+    fail('Workspace keyboard shortcut did not restore the workspace view');
+  }
+  await w.locator('#railSettingsBtn').click();
+  while ((await w.locator('#settingsModal').getAttribute('aria-busy')) === 'true') await w.waitForTimeout(20);
+  await w.locator('.provider-tab[data-panel="gemini"]').click();
+  const providerControls = await w.evaluate(() => ({
+    modalOpen: document.getElementById('settingsModal').classList.contains('active'),
+    geminiVisible: !document.querySelector('.provider-panel[data-panel="gemini"]').hidden,
+    deeplHidden: document.querySelector('.provider-panel[data-panel="deepl"]').hidden,
+  }));
+  if (!providerControls.modalOpen || !providerControls.geminiVisible || !providerControls.deeplHidden) {
+    fail(`Provider tab control failed: ${JSON.stringify(providerControls)}`);
+  }
+  await w.evaluate(() => hideSettingsModal());
+  ok('Navigation rail/keyboard and provider tab controls switch visible views');
+
+  // -------------------------------------------------------------------------
+  // 7. Settings unsaved-change guard
   // -------------------------------------------------------------------------
   const settingsGuard = await w.evaluate(async () => {
     showSettingsModal();
@@ -358,7 +383,7 @@ async function run() {
   ok('Settings model combo: wheel and scrollbar drag stay isolated, modal scrolling restores on close');
 
   // -------------------------------------------------------------------------
-  // 7. Empty queue
+  // 8. Empty queue
   // -------------------------------------------------------------------------
   await w.evaluate(() => {
     window.__E2E_HOOK__.setFileQueue([]);
@@ -387,7 +412,7 @@ async function run() {
   ok('Idle clear-queue: progress panel stays hidden');
 
   // -------------------------------------------------------------------------
-  // 8. Stress: rapid translation toggle (regression for the re-entrancy bug)
+  // 9. Stress: rapid translation toggle (regression for the re-entrancy bug)
   // -------------------------------------------------------------------------
   const stressBefore = pageErrors.length;
   await w.evaluate(() => {

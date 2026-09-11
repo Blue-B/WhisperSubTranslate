@@ -105,39 +105,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('translate-subtitle', data);
   },
 
-  // 레거시 호환 (복수형 메서드명 지원)
-  translateSubtitles: (data) => {
-    return ipcRenderer.invoke('translate-subtitle', data);
-  },
-
-  // 로그 디렉터리 경로 조회 (%APPDATA%\whispersubtranslate\logs)
-  getLogDir: () => {
-    return ipcRenderer.invoke('get-log-dir');
-  },
-
-  // 텍스트 번역 (테스트용)
-  translateText: (data) => {
-    return ipcRenderer.invoke('translate-text', data);
-  },
-
   // 외부 링크 열기 (기본 브라우저에서)
   openExternal: (url) => {
     return ipcRenderer.invoke('open-external', url);
   },
 
-  // 앱 경로 반환 (리소스 접근용)
-  getAppPath: () => {
-    return ipcRenderer.invoke('get-app-path');
-  },
-
   // 오디오 파일을 base64 data URL로 가져오기
   getAudioData: (filename) => {
     return ipcRenderer.invoke('get-audio-data', filename);
-  },
-
-  // 업데이트 체크
-  checkForUpdates: () => {
-    return ipcRenderer.invoke('check-for-updates');
   },
 
   // 현재 버전 가져오기
@@ -187,7 +162,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localModelDownload: (modelId) => ipcRenderer.invoke('local-model-download', modelId),
   localModelCancel: () => ipcRenderer.invoke('local-model-cancel'),
   localModelDelete: (modelId) => ipcRenderer.invoke('local-model-delete', modelId),
-  localTranslate: (data) => ipcRenderer.invoke('local-translate', data),
   onLocalModelProgress: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('local-model-progress', handler);
@@ -220,14 +194,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('update-available', handler);
     return () => ipcRenderer.removeListener('update-available', handler);
-  },
-
-  // 리스너 정리 (메모리 누수 방지)
-  removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('progress-update');
-    ipcRenderer.removeAllListeners('output-update');
-    ipcRenderer.removeAllListeners('translation-progress');
-    ipcRenderer.removeAllListeners('update-available');
-    ipcRenderer.removeAllListeners('local-model-progress');
   },
 });

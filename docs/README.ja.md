@@ -2,7 +2,7 @@
 
 [English](../README.md) | [한국어](./README.ko.md) | 日本語 | [中文](./README.zh.md) | [Polski](./README.pl.md)
 
-動画をローカルで多言語字幕にします。動画を入れると whisper.cpp で SRT を生成し、バンドルされた Hy-MT2 モデルでオフライン翻訳するか、無料/有料のオンラインエンジンで翻訳します。
+動画をローカルで多言語字幕にします。動画を入れると whisper.cpp で SRT を生成し、ダウンロードした Hy-MT2 モデルでオフライン翻訳するか、無料/有料のオンラインエンジンで翻訳します。
 
 > このアプリは動画の音声から新しい字幕を作成します(音声認識)。埋め込み字幕トラックの抽出や画面文字の読み取り(OCR)は行いません。
 
@@ -15,7 +15,7 @@
 ## 主な機能
 
 - 音声認識は 100% ローカルで動作。動画が PC の外に出ず、アカウントもアップロードも不要。
-- バンドルの Hy-MT2 モデルでオフライン翻訳、または自分のキーでオンラインエンジン(MyMemory, DeepL, OpenAI, Gemini)を利用。
+- Hy-MT2 モデルの初回ダウンロード後はオフライン翻訳、または自分のキーでオンラインエンジン(MyMemory, DeepL, OpenAI, Gemini)を利用。
 - モデル自動ダウンロード。Python のインストールや手動設定は不要。
 - 通常モデルで同期がずれる動画向けの同期補正モデル(large-v2 同期、同期ライト)を搭載。
 - キュー、リアルタイム進捗、ローカル専用の処理履歴。
@@ -24,7 +24,7 @@
 
 ### ユーザー
 
-[Releases](https://github.com/Blue-B/WhisperSubTranslate/releases) から最新のポータブル版をダウンロードし、展開して `WhisperSubTranslate.exe` を実行します。字幕抽出は PC 上で完全オフラインで動作します。翻訳は任意です。
+[Releases](https://github.com/Blue-B/WhisperSubTranslate/releases) から最新のポータブル版をダウンロードし、展開して `WhisperSubTranslate.exe` を実行します。選択した音声認識モデルのダウンロード後は、字幕抽出が PC 上で完全オフラインで動作します。翻訳は任意です。
 
 ### 開発者
 
@@ -33,9 +33,11 @@ npm install
 npm start
 ```
 
-- Node.js 20.19 以上または 22.12 以上 (Electron 43 ビルドツールチェーン)
+- Node.js 22.12.0 以上 (`package.json` の `engines` を参照、Electron 43 ビルドツールチェーン)
 - whisper.cpp は `npm install` 時に自動ダウンロード (Windows は CUDA ビルド約700MB と Vulkan ビルド約23MB)
 - FFmpeg は npm で同梱。選択した GGML モデルは初回使用時にダウンロード
+
+アプリケーションコードは `src/main/` (Electron のメインプロセスとサービス)、`src/preload/` (レンダラーブリッジ)、`src/renderer/` (UI)、`src/shared/` (共有 IPC チャンネル)で構成されています。
 
 ### Linux
 
@@ -47,36 +49,44 @@ npm start
 
 CUDA 高速化が必要な場合は `npm install` の前に NVIDIA CUDA Toolkit を入れてください。whisper.cpp の手動ビルド手順は [CONTRIBUTING.md](../CONTRIBUTING.md) にあります。
 
+- **Linux キーリング**: API キーは Electron safeStorage (libsecret) で保存されます。キーリングデーモンがない環境(ヘッドレス SSH セッション、最小構成のデスクトップ/WM)では、ハードコードされたキーを使う従来の AES 方式にフォールバックし、アプリは明示的なセキュリティ警告を記録して保存を `insecure` と表示します。この保存方式は **安全ではありません**。安全な保存を有効にするには `gnome-keyring` をインストールするか、キーリングが動作するデスクトップセッションで実行してください。
+
 ### Windows ビルド
 
 ```bash
 npm run build-win   # 成果物は dist2/ に出力されます
 ```
 
+通常の Windows 依存関係をインストールするには Windows 上でビルドしてください。Linux からクロスビルドすると、npm が Windows 専用の optional パッケージを省略する場合があります。ビルドワークスペースには、ロックファイルで固定された `@node-llama-cpp/win-x64`、`win-x64-cuda`、`win-x64-cuda-ext`、`win-x64-vulkan` の各パッケージと、その JS/JSON メタデータおよびネイティブバイナリがすべて必要です。ビルドが成功しただけでは、ローカル翻訳のバックエンドが Windows で読み込めることを確認できません。
+
 ## 翻訳エンジン
 
-バンドルの Tencent Hy-MT2 モデルで完全オフライン翻訳、または自分の API キーで無料/有料オンラインエンジンを使えます。
+Tencent Hy-MT2 モデルを一度ダウンロードして字幕をオフライン翻訳するか、必要に応じて API キーを使って無料/有料のオンラインエンジンを利用できます。
 
 | エンジン                                     | オフライン | API キー | 費用            | 備考                                                                     |
 | -------------------------------------------- | :--------: | :------: | --------------- | ------------------------------------------------------------------------ |
 | Hy-MT2 1.8B (ローカル、既定)                 |    はい    |   不要   | 無料            | 約1.13GB、VRAM 2GB / RAM 4GB、オンデバイス                               |
 | Hy-MT2 7B (ローカル)                         |    はい    |   不要   | 無料            | 約6.16GB、VRAM 8GB / RAM 12GB、大型モデル                                |
 | MyMemory                                     |   いいえ   |   不要   | 無料            | IP ごとに 1日 約5万文字                                                  |
-| DeepL                                        |   いいえ   |   必要   | 月50万文字 無料 | 出力が安定                                                               |
+| DeepL                                        |   いいえ   |   必要   | プランによる    | 新 API Developer: 合計100万文字、従来の API Free: 月50万文字              |
 | OpenAI GPT-5.x (設定可能、既定 gpt-5.6-sol)  |   いいえ   |   必要   | 有料            | 既定モデル、文脈認識                                                     |
 | Gemini 3.x (設定可能、既定 gemini-3.6-flash) |   いいえ   |   必要   | 無料 / 低コスト | 推奨の低コスト経路 ([キー取得](https://aistudio.google.com/app/apikey))  |
 | Claude (設定可能、既定 claude-opus-5)        |   いいえ   |   必要   | 有料            | 文脈理解に強い ([キー取得](https://console.anthropic.com/settings/keys)) |
 | カスタム OpenAI 互換プロバイダー             |   いいえ   |   必要   | 各種            | 自前エンドポイント (OpenRouter、Ollama、vLLM など)                       |
 
-ローカルの Hy-MT2 エンジンだけが API キーもネットワークも使用料も不要で、セリフが PC の外に出ません。
+ローカル Hy-MT2 翻訳は、モデルのダウンロード後は API キーもネットワーク接続も不要で、使用ごとの費用もかかりません。このエンジンを使う場合、字幕テキストは PC の外に出ません。
+
+Hy-MT2 は固定されたモデルリビジョンからダウンロードされ、インストール前に正確なファイルサイズと SHA-256 ダイジェストが検証されます。既存モデルも読み込み前にハッシュ検証され、アプリのセッション中に変更されていないファイルについては成功した検証結果がキャッシュされます。整合性チェックに失敗しても既存モデルは削除されません。
+
+ローカル翻訳は GPU バックエンドを自動選択します。バックエンドの利用状況に応じて、NVIDIA ハードウェアも CUDA だけでなく Vulkan を使用できます。この選択は whisper.cpp の音声認識とは別で、CPU モードも利用できます。
 
 ### 翻訳品質 (オフラインエンジン)
 
-WhisperSubTranslate は Tencent Hy-MT2 モデル(既定 1.8B、オプション 7B)を同梱しています。Tencent の公式評価では、Hy-MT2 ファミリーは主要な商用翻訳 API と競合し、一部のベンチマークでは上回る結果を示しています。
+WhisperSubTranslate は Tencent Hy-MT2 モデル(既定 1.8B、オプション 7B)のダウンロードに対応しています。Tencent の公式評価では、Hy-MT2 ファミリーは主要な商用翻訳 API と競合し、一部のベンチマークでは上回る結果を示しています。
 
-![Tencent Hy-MT2 公式ベンチマーク、WhisperSubTranslate 同梱モデル](../assets/hy-mt2-benchmark.ja.png)
+![Hy-MT2 翻訳ベンチマーク、Tencent 公式データ](../assets/hy-mt2-benchmark.ja.png)
 
-出典: Tencent の公式ベンチマーク: [Hy-MT2 リポジトリ](https://github.com/Tencent-Hunyuan/Hy-MT2), [技術レポート](https://arxiv.org/pdf/2605.22064), [HuggingFace モデル](https://huggingface.co/tencent/Hy-MT2-1.8B)。上のグラフは Tencent 公式 Figure 1 を再描画したもので、同梱モデル(1.8B/7B)の数値は論文の表と照合しています。これらの数値は標準的な機械翻訳ベンチマーク(WildMTBench, WMT25, FLORES-200 など)でモデル自体を測定した結果であり、WhisperSubTranslate アプリ自体を再測定したものではありません。
+出典: Tencent の公式ベンチマーク: [Hy-MT2 リポジトリ](https://github.com/Tencent-Hunyuan/Hy-MT2), [技術レポート](https://arxiv.org/pdf/2605.22064), [HuggingFace モデル](https://huggingface.co/tencent/Hy-MT2-1.8B)。上のグラフは Tencent 公式 Figure 1 を再描画したもので、対応モデル(1.8B/7B)の数値は論文の表と照合しています。これらの数値は標準的な機械翻訳ベンチマーク(WildMTBench, WMT25, FLORES-200 など)でモデル自体を測定した結果であり、WhisperSubTranslate アプリ自体を再測定したものではありません。
 
 長い動画(1時間以上)では MyMemory の1日制限で遅くなることがあります。その場合は Gemini、DeepL、設定済みの GPT モデルを使ってください。
 

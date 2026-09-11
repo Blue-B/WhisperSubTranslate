@@ -41,17 +41,21 @@ async function run() {
 
   const modelStatus = await w.evaluate(async () => await window.electronAPI.checkModelStatus());
   const installed = Object.keys(modelStatus || {}).filter((k) => modelStatus[k] === true || modelStatus[k]?.installed);
+  const unsupported =
+    process.platform === 'win32' ? [] : installed.filter((model) => model.startsWith('large-v2-sync'));
+  const runnable = installed.filter((model) => !unsupported.includes(model));
   ok(`installed models: ${installed.join(', ')}`);
-  if (installed.length === 0) {
-    console.log('no models installed, skip');
+  if (unsupported.length) ok(`platform-skipped models: ${unsupported.join(', ')}`);
+  if (runnable.length === 0) {
+    console.log('no supported models installed, skip');
     await app.close();
     return;
   }
 
-  const nya = path.join(ROOT, 'nya.wav');
+  const nya = path.join(ROOT, 'assets', 'nya.wav');
   const results = [];
 
-  for (const model of installed) {
+  for (const model of runnable) {
     const t0 = Date.now();
     let res, err;
     try {

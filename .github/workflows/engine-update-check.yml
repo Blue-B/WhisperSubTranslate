@@ -68,7 +68,7 @@ jobs:
             -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
           # whisper-cli는 진행 상황을 stderr로 쓴다 — Stop이면 정상 실행도 죽는다.
           $ErrorActionPreference = 'Continue'
-          & $cli -m ggml-tiny.bin -f nya.wav -osrt -of engine-check -l en 2>&1 | Out-Null
+          & $cli -m ggml-tiny.bin -f assets/nya.wav -osrt -of engine-check -l en 2>&1 | Out-Null
           $code = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
           $ok = ($code -eq 0) -and (Test-Path "engine-check.srt") -and `
