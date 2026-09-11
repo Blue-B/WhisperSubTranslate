@@ -2,6 +2,29 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.1] - Unreleased
+
+Maintenance release for local-model download integrity, translation error handling, and application packaging.
+
+### Fixed
+
+- **Local model integrity:** Hy-MT2 1.8B and 7B downloads now use pinned revisions, exact sizes, and SHA-256 digests. Existing files are checked before loading; integrity results are cached until the file's size or modification time changes.
+- **Local download recovery:** use the shared verified downloader for resume, retry, and mirror fallback. Preserve the previous model until a verified replacement is ready, restore it if installation fails, and wait for a cancelled transfer to settle before an immediate retry.
+- **MyMemory errors:** permanent input errors are no longer retried as quota failures when returned with status 403. The final MyMemory fallback now receives the requested source language.
+- **Windows packaging:** copy CUDA 12 runtime DLLs beside both installed node-llama-cpp CUDA backend locations. DLL placement alone does not imply that GPU translation is active.
+
+### Changed
+
+- Updated DeepL account-plan guidance in all five UI languages and READMEs. Clarified that speech and local translation models require an initial download before offline use.
+- Excluded Linux shared libraries from Windows packages and removed the installer-only `scripts/postinstall.js` from the app archive. The install script remains in the repository and still runs during dependency installation.
+
+### Internal
+
+- Split the application into `src/main/`, `src/preload/`, `src/renderer/`, and `src/shared/`. Centralized translation configuration and error logging, and removed unused preload methods.
+- Moved the sample audio to `assets/nya.wav` while retaining `resources/nya.wav` in packaged builds. Updated development tests and release checks for these paths.
+- Added regression coverage for configuration encryption and migration, failed saves, local-model integrity and cancellation, MyMemory fallback, CUDA DLL destinations, and UI navigation.
+- Kept whisper.cpp pinned to v1.9.1. No dependency versions were changed for this release.
+
 ## [2.5.0] - 2026-08-26
 
 Feature release adding Vulkan acceleration for compatible Windows GPUs, verified resumable downloads, and stronger release checks.
