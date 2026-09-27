@@ -8,3 +8,7 @@ artifacts/
 temp/
 ffprobe.exe
 RELEASE_BODY.md
+/translation-config*.json
+/portable-data/
+/_models/
+/hy-mt-models/

@@ -1,3 +1,40 @@
+// Both the terminal event and invoke result use the same state, regardless of arrival order.
+function applyTranslationResult(file, result) {
+  file.failedLangs = result.failedLangs || [];
+  file.partial = file.failedLangs.length > 0 && Object.keys({ ...file.outputs, ...result.outputs }).length > 0;
+  file.outputs = { ...file.outputs, ...result.outputs };
+  file.outputPaths = [...new Set([...(file.outputPaths || []), ...(result.outputPaths || [])])];
+  if (result.outputPath) file.outputPath = result.outputPath;
+  file.status = result.userStopped
+    ? 'stopped'
+    : result.success === false || result.stage === 'error' || file.failedLangs.length
+      ? 'error'
+      : result.skipped
+        ? 'skipped'
+        : 'completed';
+  file.progress = file.status === 'completed' || file.partial ? 100 : 0;
+  saveFileToHistory(file, result.error || result.errorMessage);
+}
+
+function translationRequest(file, input, method, language) {
+  const options =
+    file.retryTranslation && file.translationOptions
+      ? { ...file.translationOptions, targetLangs: [...file.failedLangs] }
+      : {
+          method,
+          targetLangs: getSelectedTargetLangs(),
+          sourceLang: language === 'auto' ? null : language,
+          device: document.getElementById('deviceSelect')?.value || 'auto',
+          localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
+          localProcessingMode: document.getElementById('localProcessingSelect')?.value || 'sequential',
+          outputOptions: getOutputOptions(),
+        };
+  file.translationInput = input;
+  file.translationOptions = options;
+  file.retryTranslation = false;
+  return { ...options, filePath: input, sessionId: _processingEpoch };
+}
+
 async function continueProcessing() {
   console.log('[continueProcessing] Called, isProcessing:', isProcessing);
   console.log(
@@ -46,6 +83,7 @@ async function continueProcessing() {
 
   // 처리할 파일이 없으면 완료
   if (!fileToProcess) {
+    if (retryFailedAutomatically()) return continueProcessing();
     isProcessing = false;
     shouldStop = false;
     currentProcessingIndex = -1;
@@ -94,10 +132,13 @@ async function continueProcessing() {
   const file = fileToProcess;
 
   // 현재 시작 시점의 번역 사용 여부를 캡쳐 (중간 변경과 무관하게 처리 일관성 확보)
-  const methodAtStart = document.getElementById('translationSelect')?.value || 'none';
+  const methodAtStart =
+    (file.retryTranslation ? file.translationOptions?.method : null) ||
+    document.getElementById('translationSelect')?.value ||
+    'none';
 
-  // SRT 파일 직접 번역 처리
-  if (isSrtFile(file.path)) {
+  // A retry reuses the extracted SRT and only sends the failed target languages.
+  if (isSrtFile(file.path) || file.retryTranslation) {
     const fileName = file.path.split('\\').pop() || file.path.split('/').pop();
 
     // SRT 파일은 번역만 수행 - 번역 방법이 선택되지 않으면 스킵
@@ -145,22 +186,16 @@ async function continueProcessing() {
       // 번역 방식에 따른 안내 메시지
       const translationInfo = getTranslationLabel(methodAtStart);
 
-      const targetLangs = getSelectedTargetLangs();
+      const targetLangs = file.retryTranslation ? file.failedLangs : getSelectedTargetLangs();
       // 시작 로그에 타깃 언어 표시 — 기본값(한국어)을 모르고 돌렸다가 끝나고 알아차리는 일 방지. 다중 선택 시 쉼표로 나열.
       const targetLangNames = targetLangs
         .map((lc) => (I18N[currentUiLang].langNames || I18N.ko.langNames)[lc] || lc)
         .join(', ');
       addOutput(`${I18N[currentUiLang].translationStarting2(`${translationInfo} → ${targetLangNames}`)}\n`);
 
-      const translationResult = await window.electronAPI.translateSubtitle({
-        filePath: file.path,
-        method: methodAtStart,
-        targetLangs: targetLangs,
-        sourceLang: language === 'auto' ? null : language,
-        device: document.getElementById('deviceSelect')?.value || 'auto',
-        localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
-        sessionId: _processingEpoch,
-      });
+      const translationResult = await window.electronAPI.translateSubtitle(
+        translationRequest(file, file.translationInput || file.path, methodAtStart, language)
+      );
 
       // 중지 후 재시작된 세션이면 이 결과를 반영하지 않는다 (stale 콜백 방지).
       if (srtEpoch !== _processingEpoch) {
@@ -177,13 +212,9 @@ async function continueProcessing() {
         }
         // 성공: 파일 상태만 갱신. 완료 토스트/사운드/allTasksComplete는
         // translation-progress 'completed' 이벤트 핸들러가 단독 처리 (중복 방지)
-        file.status = 'completed';
-        file.progress = 100;
-        if (translationResult.outputPath) file.outputPath = translationResult.outputPath;
-        saveFileToHistory(file);
+        applyTranslationResult(file, translationResult);
       } else {
-        file.status = 'error';
-        file.progress = 0;
+        applyTranslationResult(file, translationResult);
         translationSessionActive = false;
         addOutput(`${I18N[currentUiLang].translationFailed}${getLocalizedError(translationResult.error)}\n`);
         saveFileToHistory(file, translationResult.error);
@@ -339,6 +370,7 @@ async function continueProcessing() {
       language: language,
       device: device,
       cleanup: getCleanupOptions(),
+      outputOptions: getOutputOptions(),
       // 메이저장 안 key면 기본 ON (whisper 반복/환각 억제)
       reduceRepetition: localStorage.getItem('reduceRepetition') !== 'false',
       // 자연 문장 단위 전사는 항상 ON (main process 기본값). 별도 토글 없음.
@@ -356,6 +388,12 @@ async function continueProcessing() {
     // 추출 완료 시 해당 단계 최대값으로 설정
     setProgressTarget(extractionMaxProgress, I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName));
 
+    if (result.skipped) {
+      file.status = 'skipped';
+      updateQueueDisplay();
+      setTimeout(() => continueProcessing(), 100);
+      return;
+    }
     if (result.userStopped) {
       file.status = 'stopped';
       addOutput(`[${i + 1}/${fileQueue.length}] ${I18N[currentUiLang].errorStopped}: ${fileName}\n`);
@@ -430,15 +468,9 @@ async function continueProcessing() {
             throw new Error('SRT file path missing after extraction');
           }
 
-          const translationResult = await window.electronAPI.translateSubtitle({
-            filePath: srtPathFromResult,
-            method: translationMethod,
-            targetLangs: targetLangs,
-            sourceLang: language === 'auto' ? null : language,
-            device: document.getElementById('deviceSelect')?.value || 'auto',
-            localModelId: typeof getSelectedLocalModelId === 'function' ? getSelectedLocalModelId() : '1.8b',
-            sessionId: _processingEpoch,
-          });
+          const translationResult = await window.electronAPI.translateSubtitle(
+            translationRequest(file, srtPathFromResult, translationMethod, language)
+          );
           translationDelegated = true;
 
           // 중지 후 재시작된 세션이면 이 결과를 반영하지 않는다 (stale 콜백 방지).
@@ -462,8 +494,7 @@ async function continueProcessing() {
               addOutput(`${I18N[currentUiLang].translationDone(fileName, okLangs.join(', '))}\n`);
             }
             // 히스토리 조기 저장 (completed 이벤트 눌지거나 누락되는 경우 대비 안전망)
-            file.status = 'completed';
-            file.progress = 100;
+            applyTranslationResult(file, translationResult);
             // 영상 처리는 file.path 를 원본 영상으로 유지 (플레이어가 _ko.srt 자동 로드)
             // outputPath 는 기록만 함. saveFileToHistory 에서는 file.outputPath 가 있으면 우선되지만
             // 영상 처리란 걸 구분하기 위해 영상 파일입으로 유지함
@@ -505,6 +536,7 @@ async function continueProcessing() {
         console.log('[continueProcessing] No translation, marking as completed');
         file.status = 'completed';
         file.progress = 100;
+        file.outputPath = result.srtFile || result.results?.[0]?.srtPath;
         saveFileToHistory(file);
         // 추출만 하는 경우 진행률 100%로 설정
         setProgressTarget(100, I18N[currentUiLang].extractionComplete(i + 1, fileQueue.length, fileName));
@@ -568,19 +600,9 @@ async function continueProcessing() {
   } else {
     // 실패 항목 자동 재시도(옵션): 큐가 끝난 시점에 error 항목을 상한 회수까지 다시 태운다.
     // 사용자가 직접 중지한 경우(shouldStop/stopped)는 건드리지 않는다.
-    if (!shouldStop && localStorage.getItem('autoRetryFailed') === 'true') {
-      const retryables = fileQueue.filter((f) => f.status === 'error' && (f.autoRetryCount || 0) < AUTO_RETRY_MAX);
-      if (retryables.length > 0) {
-        retryables.forEach((f) => {
-          f.autoRetryCount = (f.autoRetryCount || 0) + 1;
-          f.status = 'pending';
-          f.progress = 0;
-        });
-        addOutput(`${I18N[currentUiLang].autoRetryingFailed(retryables.length)}\n\n`);
-        updateQueueDisplay();
-        await continueProcessing();
-        return;
-      }
+    if (retryFailedAutomatically()) {
+      await continueProcessing();
+      return;
     }
     // 모든 파일 처리 완료
     isProcessing = false;

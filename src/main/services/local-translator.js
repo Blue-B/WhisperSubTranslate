@@ -12,6 +12,31 @@ const axios = require('axios');
 const { assertDownloadDiskSpace } = require('./disk-space');
 const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
 
+// 사용자에게 보여줄 진행 로그를 보낼 창. transcription.setMainWindow가 전파한다.
+// 문구는 한국어로 보내고 렌더러의 LOG_I18N이 UI 언어로 번역한다.
+let uiWindow = null;
+
+function setMainWindow(window) {
+  uiWindow = window;
+}
+
+function notifyUser(message) {
+  try {
+    if (uiWindow && !uiWindow.isDestroyed()) uiWindow.webContents.send('output-update', `${message}\n`);
+  } catch (_e) {
+    /* 진행 로그는 실패해도 번역을 막지 않는다 */
+  }
+}
+
+function reportParallelFallback(error, modelId, stage, attemptedWorkers = _sessions.length) {
+  const message = isMemoryError(error)
+    ? '로컬 번역: 메모리가 부족해 같은 GPU에서 하나씩 번역으로 다시 시도합니다'
+    : '로컬 번역: 병렬 실행 준비에 실패해 같은 GPU에서 하나씩 번역으로 다시 시도합니다';
+  const details = `stage=${stage}, model=${modelId}, backend=${_llama.gpu || 'cpu'}, gpuLayers=${_model.gpuLayers}, workersBefore=${_sessions.length}, attemptedWorkers=${attemptedWorkers}, retryWorkers=1`;
+  require('./error-logger').logError('local:parallel-fallback', `${message} (${details})`, error);
+  notifyUser(message);
+}
+
 // 모델 카탈로그 — 새 모델 추가는 여기에만
 const MODELS = {
   '1.8b': {
@@ -170,10 +195,16 @@ function looksUntranslated(output, source, targetLang) {
 
 let _llama = null;
 let _model = null;
-let _context = null;
-let _session = null;
+let _contexts = [];
+let _sessions = [];
+// Short jobs avoid calibration; long jobs compare resource-admitted candidates.
+const LOCAL_MEMORY_RESERVE = 512 * 1024 ** 2;
+const _parallelUnavailableModels = new Set();
 let _currentGpuMode = null; // 'auto' | 'cpu'
 let _currentModelId = null; // '1.8b' | '7b'
+// GPU 시도가 실패한 모델을 기억해 같은 실패를 줄마다 반복하지 않는다.
+// 자막은 줄 단위로 번역되고, 모델 로드는 모델당 수십 초가 걸린다.
+const _gpuUnusableModels = new Set();
 let _downloadPromises = {}; // modelId → Promise
 let _loadPromise = null;
 let _translateMutex = Promise.resolve();
@@ -466,19 +497,32 @@ function deleteModel(modelId = DEFAULT_MODEL_ID) {
   } catch {}
 }
 
+function prepareBundledCudaRuntime() {
+  if (process.platform !== 'win32' || !process.resourcesPath) return;
+  const directory = path.join(process.resourcesPath, 'whisper-cpp');
+  const dlls = ['cudart64_12.dll', 'cublas64_12.dll', 'cublasLt64_12.dll'];
+  if (!dlls.every((name) => fs.existsSync(path.join(directory, name)))) return;
+  // node-llama-cpp's auto detector searches PATH, not its bundled backend directory.
+  const entries = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  if (!entries.includes(directory)) process.env.PATH = [...entries, directory].join(path.delimiter);
+}
+
 /**
  * Load model into memory.
  * @param {string} device - 'auto' (GPU 우선) 또는 'cpu'
  * @param {string} modelId - '1.8b' | '7b'
  */
 async function loadModelUnlocked(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = null) {
-  const desiredMode = device === 'cpu' ? 'cpu' : 'auto';
+  // 이 모델로 GPU 시도가 이미 실패했다면 같은 실패를 다시 반복하지 않는다.
+  // (자막은 줄 단위로 번역되므로 매 실패가 줄마다 누적된다)
+  const desiredMode = device === 'cpu' || _gpuUnusableModels.has(modelId) ? 'cpu' : 'auto';
   if (_model && _currentGpuMode === desiredMode && _currentModelId === modelId) return;
   await ensureModelIntegrity(modelId);
   if (_loadPromise) return _loadPromise;
   _loadPromise = (async () => {
     // translateLocal이 잡은 mutex 안에서 다시 unloadModel의 mutex를 기다리면 교착된다.
     if (_model || _llama) await disposeModel();
+    prepareBundledCudaRuntime();
     const { getLlama } = await import('node-llama-cpp');
     let mode = desiredMode;
     try {
@@ -493,7 +537,9 @@ async function loadModelUnlocked(device = 'auto', modelId = DEFAULT_MODEL_ID, si
         throw error;
       }
       console.warn(`[Local] GPU 로드 실패 → CPU로 폴백: ${error.message}`);
+      notifyUser(`로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다 (${error.message})`);
       await disposeModel();
+      _gpuUnusableModels.add(modelId);
       mode = 'cpu';
       _llama = await getLlama({ gpu: false });
       _model = await _llama.loadModel({ modelPath: getModelPath(modelId), loadSignal: signal });
@@ -531,22 +577,106 @@ async function loadModel(device = 'auto', modelId = DEFAULT_MODEL_ID, signal = n
  * @param {string} modelId - '1.8b' | '7b'
  */
 async function translateLocal(text, targetLang, device = 'auto', modelId = DEFAULT_MODEL_ID) {
-  // 락 대기 중에도 사용자 중지가 통하도록 컨트롤러를 먼저 등록한다.
+  for await (const result of translateLocalBatch([text], targetLang, device, modelId, 1)) {
+    if (result.error) throw result.error;
+    return result.translation;
+  }
+}
+
+function isMemoryError(error) {
+  return /out.?of.?memory|\boom\b|insufficient.*memory|not enough.*memory|vram|failed to alloc|memory allocation/i.test(
+    String(error?.message || error)
+  );
+}
+
+// ponytail: bounded windows preserve ordering without a background worker queue.
+// Each context owns its KV cache; only the read-only model weights are shared.
+async function* translateLocalBatch(texts, targetLang, device = 'auto', modelId = DEFAULT_MODEL_ID, concurrency) {
+  if (!texts.length) return;
   const controller = new AbortController();
+  const { signal } = controller;
   _activeAbortControllers.add(controller);
+  const started = Date.now();
+  let release;
   try {
-    const release = await acquireTranslateLock(controller.signal);
-    try {
-      return await _translateLocalImpl(text, targetLang, device, modelId, controller.signal);
-    } finally {
-      release();
+    release = await acquireTranslateLock(signal);
+    let ready = false;
+    const sampled = new Map();
+    for (let index = 0; index < texts.length; ) {
+      signal.throwIfAborted();
+      if (!texts[index]?.trim()) {
+        yield { index: index, translation: texts[index++] };
+        continue;
+      }
+      try {
+        checkedPrompt(texts[index].trim(), targetLang);
+      } catch (error) {
+        yield { index: index++, error };
+        continue;
+      }
+      if (!ready) {
+        if (concurrency === undefined) {
+          const translations = await selectLocalConcurrency(texts.slice(index), targetLang, device, modelId, signal);
+          for (const [offset, translation] of translations) sampled.set(index + offset, translation);
+        } else {
+          await prepareLocal(device, modelId, signal, Math.min(texts.length - index, concurrency));
+        }
+        if (texts.length > 1) {
+          notifyUser(
+            `로컬 번역: 실행 정보 (model=${modelId}, backend=${_llama.gpu || 'cpu'}, gpuLayers=${_model.gpuLayers}, workers=${_sessions.length})`
+          );
+        }
+        ready = true;
+      }
+      const batch = texts.slice(index, index + _sessions.length);
+      const results = await Promise.allSettled(
+        batch.map((text, slot) =>
+          sampled.has(index + slot)
+            ? sampled.get(index + slot)
+            : translateWithSession(text, targetLang, _sessions[slot], signal)
+        )
+      );
+      signal.throwIfAborted();
+      const fatal = results.find(
+        (result) =>
+          result.status === 'rejected' && !/LOCAL_UNTRANSLATED|LOCAL_TEXT_TOO_LONG/.test(String(result.reason?.message))
+      );
+      if (fatal) {
+        if (_sessions.length > 1 && isMemoryError(fatal.reason)) {
+          _parallelUnavailableModels.add(modelId);
+          // All native calls have settled before disposal. Retry on the same GPU,
+          // not on CPU, and do not repeat this parallel failure on every subtitle.
+          reportParallelFallback(fatal.reason, modelId, 'translation');
+          await disposeContexts();
+          ready = false;
+          continue;
+        }
+        throw fatal.reason;
+      }
+      for (const result of results) {
+        signal.throwIfAborted();
+        yield result.status === 'fulfilled'
+          ? { index: index++, translation: result.value }
+          : { index: index++, error: result.reason };
+      }
     }
+    signal.throwIfAborted();
+    if (texts.length > 1) {
+      notifyUser(
+        `로컬 번역: 처리 완료 (segments=${texts.length}, seconds=${((Date.now() - started) / 1000).toFixed(1)})`
+      );
+    }
+  } catch (error) {
+    // A cancelled waiter does not own the active job's contexts.
+    if (release) await disposeContexts();
+    throw error;
   } finally {
+    release?.();
     _activeAbortControllers.delete(controller);
   }
 }
 
-async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
+function checkedPrompt(text, targetLang) {
   // 컨텍스트 사전 체크: Hy-MT2는 contextSize 2048 고정이고 출력에 maxTokens 1024를
   // 쓰므로, 입력이 길면 조용히 잘리는 대신 명확한 에러로 알린다 (모델 로드/다운로드 전에).
   // 대략 토큰 수: 라틴 계열 ~4글자당 1토큰 + CJK 글자당 ~1토큰 (문자 수 상한 추정).
@@ -561,6 +691,142 @@ async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
     );
   }
 
+  return precheckPrompt;
+}
+
+// Compare identical length-stratified subtitles, not different consecutive windows.
+// ponytail: per-job sampling avoids stale device/model/workload caches. It is a
+// bounded estimate, not a guarantee of the globally fastest concurrency.
+async function selectLocalConcurrency(texts, targetLang, device, modelId, signal) {
+  const sampled = new Map();
+  const valid = texts
+    .map((text, index) => ({ text, index }))
+    .filter(({ text }) => {
+      if (!text?.trim()) return false;
+      try {
+        checkedPrompt(text.trim(), targetLang);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  await prepareLocal(device, modelId, signal, 1);
+  const sampleCount = Math.min(valid.length, 32, Math.max(8, Math.floor(valid.length / 64)));
+  // No point benchmarking when the sample would finish the entire job.
+  if (valid.length <= sampleCount) return sampled;
+  const limit = await getLocalConcurrencyLimit(sampleCount, modelId);
+  if (limit <= 1) return sampled;
+  const sorted = [...valid].sort((a, b) => a.text.length - b.text.length);
+  const samples = Array.from(
+    { length: sampleCount },
+    (_, i) => sorted[Math.floor(((i + 0.5) * sorted.length) / sampleCount)]
+  );
+  const started = performance.now();
+  const measure = async (keep = false) => {
+    const start = performance.now();
+    for (let i = 0; i < samples.length; i += _sessions.length) {
+      const results = await Promise.allSettled(
+        samples
+          .slice(i, i + _sessions.length)
+          .map(({ text }, slot) => translateWithSession(text, targetLang, _sessions[slot], signal))
+      );
+      signal.throwIfAborted();
+      const failure =
+        results.find(
+          (r) => r.status === 'rejected' && !/LOCAL_UNTRANSLATED|LOCAL_TEXT_TOO_LONG/.test(String(r.reason?.message))
+        ) || results.find((r) => r.status === 'rejected');
+      if (failure) throw failure.reason;
+      if (keep) results.forEach((result, slot) => sampled.set(samples[i + slot].index, result.value));
+    }
+    return Math.max(0.01, performance.now() - start);
+  };
+  let best = 1;
+  try {
+    // Warm first-use kernels before comparing. The warmup cost still counts below.
+    await translateWithSession(samples[0].text, targetLang, _sessions[0], signal);
+    const baseline = await measure(true);
+    const remaining = valid.length - sampled.size;
+    let bestTime = baseline;
+    let setupPerContext = 0;
+    for (let candidate = 2; candidate <= limit; candidate = Math.min(limit, candidate * 2)) {
+      // Start optimistically, then fit the scalable fraction to measured speedup.
+      // Weak scaling should not trigger another costly probe on a short job.
+      const scalable = best === 1 ? 1 : Math.min(1, Math.max(0, (1 - bestTime / baseline) / (1 - 1 / best)));
+      const predicted = baseline * (1 - scalable + scalable / candidate);
+      const probeCost = predicted + setupPerContext * (candidate - best);
+      if (((bestTime - predicted) * remaining) / sampleCount <= probeCost) break;
+      const before = performance.now();
+      await prepareLocal(device, modelId, signal, candidate);
+      if (_sessions.length < candidate) break;
+      const measured = await measure();
+      const setup = performance.now() - before - measured;
+      const gain = bestTime - measured;
+      const projectedSaving = (gain * remaining) / sampleCount;
+      console.log(
+        `[Local] Auto probe workers=${candidate}, sample=${sampleCount}, ms=${measured.toFixed(1)}, setupMs=${setup.toFixed(1)}`
+      );
+      // Prefer fewer contexts for marginal/noisy gains or unamortized setup.
+      if (gain < bestTime * 0.05 || projectedSaving <= setup + measured) break;
+      setupPerContext = Math.max(0, setup) / (candidate - best);
+      best = candidate;
+      bestTime = measured;
+      if (candidate === limit) break;
+    }
+    // Reuse baseline output. Probe costs are already spent: reverting a measured
+    // faster choice cannot recover them and would only slow the remaining work.
+    const overhead = performance.now() - started - baseline;
+    console.log(`[Local] Auto selection workers=${best}, overheadMs=${overhead.toFixed(1)}`);
+  } catch (error) {
+    signal.throwIfAborted();
+    if (isMemoryError(error)) {
+      _parallelUnavailableModels.add(modelId);
+      reportParallelFallback(error, modelId, 'calibration');
+      await disposeContexts(); // All sample calls settled; retire even the failing first context.
+      best = 1;
+    } else if (/LOCAL_UNTRANSLATED|LOCAL_TEXT_TOO_LONG/.test(String(error?.message))) {
+      best = 1; // Leave cue-level errors to the ordered, normal translation path.
+    } else {
+      throw error;
+    }
+  }
+  await prepareLocal(device, modelId, signal, best);
+  return sampled;
+}
+
+async function getLocalConcurrencyLimit(requested, modelId) {
+  const totalLayers = _model.fileInsights?.totalLayers;
+  if (
+    !Number.isFinite(requested) ||
+    !(requested > 1) ||
+    _llama.gpu !== 'cuda' ||
+    !(_model.gpuLayers > 0 && _model.gpuLayers >= totalLayers) ||
+    _parallelUnavailableModels.has(modelId)
+  )
+    return 1;
+  try {
+    const context = _contexts[0];
+    const { cpuRam, gpuVram } = _model.fileInsights.estimateContextResourceRequirements({
+      contextSize: 2048,
+      modelGpuLayers: _model.gpuLayers,
+      sequences: 1,
+      batchSize: context.batchSize,
+      flashAttention: context.flashAttention,
+    });
+    const { free } = await _llama.getVramState();
+    if (!Number.isFinite(gpuVram) || gpuVram <= 0 || !Number.isFinite(cpuRam) || cpuRam < 0 || !Number.isFinite(free))
+      return 1;
+    const ramSlots =
+      cpuRam > 0 ? Math.floor((require('os').freemem() - LOCAL_MEMORY_RESERVE) / cpuRam) : Math.floor(requested);
+    // Existing extra contexts already occupy memory. Count them back into the budget.
+    const extra = _contexts.length - 1 + Math.min(ramSlots, Math.floor((free - LOCAL_MEMORY_RESERVE) / gpuVram));
+    return Math.max(1, Math.min(Math.floor(requested), 1 + extra));
+  } catch (error) {
+    console.warn(`[Local] Resource estimate unavailable, using one context: ${error.message}`);
+    return 1;
+  }
+}
+
+async function prepareLocal(device, modelId, signal, concurrency) {
   _maybeCleanupLegacy();
   if (!isModelInstalled(modelId)) {
     console.log(`[Local] 모델 미설치 감지 (${modelId}) → 자동 다운로드 시작...`);
@@ -579,27 +845,65 @@ async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
     await withTimeout(
       async (operationSignal) => {
         await loadModelUnlocked(device, modelId, operationSignal);
-        if (!_context) {
-          _context = await _model.createContext({ contextSize: 2048, createSignal: operationSignal });
+        if (!_contexts.length) {
+          try {
+            _contexts.push(await _model.createContext({ contextSize: 2048, createSignal: operationSignal }));
+          } catch (error) {
+            // VRAM이 빠듯한 카드에서는 7B 모델의 부분 오프로드 로드가 성공하고
+            // 컨텍스트 생성에서만 VRAM 부족으로 실패한다. 이 단계가 폴백 밖에 있으면
+            // CPU로는 멀쩡히 돌아가는 번역이 그대로 실패한다.
+            if (operationSignal.aborted || _currentGpuMode !== 'auto' || !isGpuRelatedError(error)) throw error;
+            console.warn(`[Local] GPU 컨텍스트 생성 실패 → CPU로 폴백: ${error.message}`);
+            notifyUser(`로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다 (${error.message})`);
+            _gpuUnusableModels.add(modelId);
+            await disposeModel();
+            await loadModelUnlocked('cpu', modelId, operationSignal);
+            _contexts.push(await _model.createContext({ contextSize: 2048, createSignal: operationSignal }));
+          }
         }
       },
       LOCAL_LOAD_TIMEOUT_MS,
       signal
     );
     const { LlamaChatSession } = await import('node-llama-cpp');
-    if (!_session) {
-      _session = new LlamaChatSession({
-        contextSequence: _context.getSequence(),
-        chatWrapper: 'auto',
-      });
+    if (!_sessions.length) {
+      _sessions.push(new LlamaChatSession({ contextSequence: _contexts[0].getSequence(), chatWrapper: 'auto' }));
     }
-    _session.resetChatHistory();
+    const limit = await getLocalConcurrencyLimit(concurrency, modelId);
+    await disposeContexts(limit);
+    while (_contexts.length < limit) {
+      signal.throwIfAborted();
+      try {
+        const context = await withTimeout(
+          (operationSignal) => _model.createContext({ contextSize: 2048, createSignal: operationSignal }),
+          LOCAL_LOAD_TIMEOUT_MS,
+          signal
+        );
+        _contexts.push(context);
+        _sessions.push(new LlamaChatSession({ contextSequence: context.getSequence(), chatWrapper: 'auto' }));
+      } catch (error) {
+        // Native init can erase the allocation reason into this exact wrapper error.
+        if (signal.aborted || (!isMemoryError(error) && error.message !== 'Failed to create context')) throw error;
+        console.warn(`[Local] Additional context failed; keeping one context: ${error.message}`);
+        _parallelUnavailableModels.add(modelId);
+        reportParallelFallback(error, modelId, 'context-creation', limit);
+        await disposeContexts(1);
+        break;
+      }
+    }
+    console.log(`[Local] contexts=${_contexts.length}, backend=${_llama.gpu || 'cpu'}, gpuLayers=${_model.gpuLayers}`);
   } catch (error) {
     await disposeModel();
     throw error;
   }
+}
 
-  const prompt = buildTranslationPrompt(text, targetLang);
+async function translateWithSession(text, targetLang, session, signal) {
+  signal.throwIfAborted();
+  if (!text?.trim()) return text;
+  text = text.trim();
+  const prompt = checkedPrompt(text, targetLang);
+  session.resetChatHistory();
   const samplingBase = {
     topK: 20,
     topP: 0.6,
@@ -607,38 +911,25 @@ async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
     maxTokens: 1024, // App-side safety cap (not a Tencent recommendation)
   };
 
-  let response;
-  try {
-    // 1차: 결정적 샘플링(temp 0) — 자막 번역은 무작위성이 echo(원문 그대로 출력) 사고를 키운다
+  // Each prompt, including echo retries, stays inside its own context.
+  let response = (
+    await withTimeout(
+      (operationSignal) => session.prompt(prompt, { ...samplingBase, temperature: 0, signal: operationSignal }),
+      LOCAL_OPERATION_TIMEOUT_MS,
+      signal
+    )
+  ).trim();
+
+  if (looksUntranslated(response, text, targetLang)) {
+    console.warn(`[Local] 번역 결과가 원문 그대로임 → 재시도: "${text.substring(0, 40)}"`);
+    session.resetChatHistory();
     response = (
       await withTimeout(
-        (operationSignal) => _session.prompt(prompt, { ...samplingBase, temperature: 0, signal: operationSignal }),
+        (operationSignal) => session.prompt(prompt, { ...samplingBase, temperature: 0.7, signal: operationSignal }),
         LOCAL_OPERATION_TIMEOUT_MS,
         signal
       )
     ).trim();
-
-    // echo 감지 시 공식 권장 샘플링(temp 0.7)으로 1회 재시도
-    if (looksUntranslated(response, text, targetLang)) {
-      console.warn(`[Local] 번역 결과가 원문 그대로임 → 재시도: "${text.substring(0, 40)}"`);
-      _session.resetChatHistory();
-      response = (
-        await withTimeout(
-          (operationSignal) => _session.prompt(prompt, { ...samplingBase, temperature: 0.7, signal: operationSignal }),
-          LOCAL_OPERATION_TIMEOUT_MS,
-          signal
-        )
-      ).trim();
-    }
-  } catch (e) {
-    try {
-      _session = null;
-      _context && (await _context.dispose());
-      _context = null;
-    } catch (_e) {
-      /* ignore */
-    }
-    throw e;
   }
 
   if (looksUntranslated(response, text, targetLang)) {
@@ -649,12 +940,19 @@ async function _translateLocalImpl(text, targetLang, device, modelId, signal) {
   return response;
 }
 
-async function disposeModel() {
-  try {
-    if (_context) await _context.dispose();
-  } catch {
-    /* ignore */
+async function disposeContexts(keep = 0) {
+  _sessions.splice(keep);
+  for (const context of _contexts.splice(keep)) {
+    try {
+      await context.dispose();
+    } catch {
+      /* Preserve the original operation error during best-effort cleanup. */
+    }
   }
+}
+
+async function disposeModel() {
+  await disposeContexts();
   try {
     if (_model) await _model.dispose();
   } catch {
@@ -665,8 +963,6 @@ async function disposeModel() {
   } catch {
     /* ignore */
   }
-  _session = null;
-  _context = null;
   _model = null;
   _llama = null;
   _currentGpuMode = null;
@@ -676,6 +972,9 @@ async function disposeModel() {
 async function unloadModel() {
   const release = await acquireTranslateLock();
   try {
+    // 사용자가 명시적으로 해제했으면 다음 실행에서 GPU를 다시 시도한다.
+    _gpuUnusableModels.clear();
+    _parallelUnavailableModels.clear();
     await disposeModel();
   } finally {
     release();
@@ -685,15 +984,15 @@ async function unloadModel() {
 module.exports = {
   MODELS,
   DEFAULT_MODEL_ID,
+  setMainWindow,
   listModels,
   isModelInstalled,
   getModelPath,
-  getModelsDir,
   downloadModel,
   deleteModel,
   loadModel,
   translateLocal,
-  buildTranslationPrompt,
+  translateLocalBatch,
   isEffectivelySameText,
   hasProperNounOnlyPattern,
   looksUntranslated,
@@ -701,7 +1000,5 @@ module.exports = {
   abortTranslation,
   unloadModel,
   setDownloadProgressHandler,
-  cleanupLegacyModels,
   ensureModelIntegrity,
-  installVerifiedModelFile,
 };

@@ -301,7 +301,7 @@ async function refreshModelList(btn, { quiet } = {}) {
 
     menu.replaceChildren();
     res.models.forEach((model) => addComboOption(menu, model, input));
-    showToast(`${res.models.length}${d.modelsLoadedSuffix || '개 모델을 불러왔습니다.'}`);
+    showToast((d.modelsLoadedMessage || 'Models loaded: {count}').replace('{count}', String(res.models.length)));
   } catch (error) {
     console.error('[refreshModelList] Failed:', error);
     // 실패하면 기존 목록(알려진 모델 프리셋)을 복원해 선택지를 잃지 않게 한다.

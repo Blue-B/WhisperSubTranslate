@@ -428,6 +428,205 @@ async function run() {
     fail(`Stress: ${pageErrors.length - stressBefore} page errors from 50 rapid toggles`);
   ok('Stress: 50 rapid translation-method toggles, no recursion/error');
 
+  // Match the client area of the supported minimum Windows window (1000x760).
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    window.setMinimumSize(0, 0);
+    window.setContentSize(982, 713);
+  });
+  for (const lang of ['ko', 'en', 'ja', 'zh', 'pl']) {
+    for (const method of ['none', 'local']) {
+      await w.evaluate(
+        ({ lang, method }) => {
+          document.getElementById('modelSelect').value = 'large-v3-turbo';
+          window.__E2E_HOOK__.setUiLang(lang === 'ko' ? 'en' : 'ko');
+          const select = document.getElementById('translationSelect');
+          select.value = method;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          const uiLanguage = document.getElementById('uiLanguageSelect');
+          uiLanguage.value = lang;
+          uiLanguage.dispatchEvent(new Event('change', { bubbles: true }));
+          if (method === 'local') {
+            const note = document.getElementById('targetLangNote').textContent;
+            if (note !== I18N[lang].engineSupportNote.local) throw new Error(`Stale engine guidance in ${lang}`);
+          }
+        },
+        { lang, method }
+      );
+      await w.waitForTimeout(100);
+      const clipped = await w.evaluate(() => {
+        const zone = document.querySelector('.dropzone').getBoundingClientRect();
+        const clippedCards = [...document.querySelectorAll('.setting-card')].filter(
+          (card) => card.getClientRects().length && card.scrollHeight > card.clientHeight + 1
+        );
+        if (clippedCards.length) throw new Error('Minimum window clips setting card descriptions');
+        const cards = [...document.querySelectorAll('.settings-grid > .setting-card')];
+        for (let i = 2; i < cards.length; i++) {
+          if (!cards[i].getClientRects().length) continue;
+          const previous = cards[i - 2].getBoundingClientRect();
+          if (previous.bottom > cards[i].getBoundingClientRect().top + 1) {
+            throw new Error('Minimum window overlaps settings rows');
+          }
+        }
+        return ['.drop-title', '.drop-hint', '#selectFileBtn', '.drop-formats-row'].filter((selector) => {
+          const rect = document.querySelector(selector).getBoundingClientRect();
+          return rect.top < zone.top || rect.bottom > zone.bottom;
+        });
+      });
+      if (clipped.length) fail(`Minimum window clips ${lang}/${method}: ${clipped.join(', ')}`);
+    }
+  }
+  ok('Minimum Windows client area: drop instructions, file button and formats fit all five locales');
+
+  // Real main → preload → renderer → DOM path, including mixed output chunks.
+  for (const [lang, status] of [
+    ['ja', '翻訳を開始します...'],
+    ['zh', '开始翻译...'],
+  ]) {
+    await w.selectOption('#uiLanguageSelect', lang);
+    const subtitle = '[00:00:01.000 --> 00:00:03.000]   Starting translation... 오류가 발생했습니다';
+    const filename = 'Completed: /videos/Starting translation....mkv';
+    await app.evaluate(({ BrowserWindow }, text) => {
+      BrowserWindow.getAllWindows()[0].webContents.send('output-update', text);
+    }, `Starting translation...\n${subtitle}\n${filename}\n`);
+    await w.waitForFunction(
+      ({ status, subtitle, filename }) => {
+        const text = document.getElementById('output').textContent;
+        return text.includes(status) && text.includes(subtitle) && text.includes(filename);
+      },
+      { status, subtitle, filename }
+    );
+  }
+  ok('Real IPC log display: mixed status/subtitle chunks and English filename preserved in ja/zh');
+
+  // Model-list replies are stubbed at IPC, not the renderer: exercise the real
+  // button, provider handler, localization and toast without any API request.
+  const modelCounts = [0, 1, 2, 5, 12, 22];
+  await app.evaluate(({ ipcMain }, counts) => {
+    ipcMain.removeHandler('list-provider-models');
+    let next = 0;
+    ipcMain.handle('list-provider-models', () => {
+      const count = counts[next++ % counts.length];
+      return { success: true, models: Array.from({ length: count }, (_, i) => `test-model-${i}`) };
+    });
+  }, modelCounts);
+  for (const lang of ['ko', 'en', 'ja', 'zh', 'pl']) {
+    const strings = require(path.join(ROOT, 'locales', `${lang}.json`));
+    if (!strings.reduceRepetitionDesc.includes('large-v3')) fail(`Missing quiet-speech guidance: ${lang}`);
+    if (!strings.dropHint1.includes('SRT')) fail(`Missing SRT input guidance: ${lang}`);
+    await w.selectOption('#uiLanguageSelect', lang);
+    await w.locator('#railSettingsBtn').click();
+    await w.waitForFunction(() => document.getElementById('settingsModal').getAttribute('aria-busy') !== 'true');
+    const hint = w.locator('#reduceRepetitionDesc');
+    await hint.scrollIntoViewIfNeeded();
+    if ((await hint.textContent()).trim() !== strings.reduceRepetitionDesc) fail(`Stale settings help: ${lang}`);
+    const clipped = await hint.evaluate(
+      (element) => element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1
+    );
+    if (clipped) fail(`Clipped quiet-speech guidance: ${lang}`);
+    if (process.env.E2E_SCREENSHOT_DIR) {
+      fs.mkdirSync(process.env.E2E_SCREENSHOT_DIR, { recursive: true });
+      await w.screenshot({ path: path.join(process.env.E2E_SCREENSHOT_DIR, `settings-${lang}.png`) });
+    }
+    await w.locator('.provider-tab[data-panel="openai"]').click();
+    const refresh = w.locator('button[data-target="openaiModel"]');
+    for (const count of modelCounts) {
+      await w.evaluate(() => document.querySelectorAll('.toast-notification').forEach((toast) => toast.remove()));
+      await refresh.click();
+      const expected = strings.modelsLoadedMessage.replace('{count}', String(count));
+      await w.waitForFunction(
+        (text) => [...document.querySelectorAll('.toast-notification')].some((el) => el.textContent === text),
+        expected
+      );
+      await w.waitForFunction(() => !document.querySelector('button[data-target="openaiModel"]').disabled);
+    }
+    await w.evaluate(() => hideSettingsModal());
+    ok(`Locale '${lang}': full help visible; model counts 0/1/2/5/12/22 rendered via real button and IPC`);
+  }
+
+  // Output controls and diagnostics: real buttons/IPC, isolated file-picker response.
+  await w.selectOption('#uiLanguageSelect', 'en');
+  await app.evaluate(({ dialog }, directory) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [directory] });
+  }, userData);
+  await w.locator('#railSettingsBtn').click();
+  await w.waitForFunction(() => document.getElementById('settingsModal').getAttribute('aria-busy') !== 'true');
+  await w.locator('#chooseOutputDirectory').click();
+  await w.waitForFunction((dir) => document.getElementById('outputDirectory').value === dir, userData);
+  await w.selectOption('#outputPolicy', 'skip');
+  await w.evaluate(() => {
+    window.__diagnosticText = '';
+    navigator.clipboard.writeText = async (text) => {
+      window.__diagnosticText = text;
+    };
+  });
+  await w.locator('#copyDiagnostics').click();
+  await w.waitForFunction(() => !!window.__diagnosticText);
+  // Malformed diagnostic JSON must fail this test; run().catch reports the error.
+  // pi-lens-ignore: unchecked-throwing-call-js
+  const diagnosticKeys = await w.evaluate(() => Object.keys(JSON.parse(window.__diagnosticText)).sort());
+  const expectedKeys = [
+    'version',
+    'platform',
+    'arch',
+    'electron',
+    'whisper',
+    'cudaAvailable',
+    'vulkanAvailable',
+    'lastFailure',
+  ].sort();
+  if (JSON.stringify(diagnosticKeys) !== JSON.stringify(expectedKeys)) fail('Diagnostic payload leaked extra fields');
+  await w.evaluate(() => hideSettingsModal());
+  await w.locator('#railSettingsBtn').click();
+  await w.waitForFunction(() => document.getElementById('settingsModal').getAttribute('aria-busy') !== 'true');
+  if ((await w.inputValue('#outputPolicy')) !== 'skip') fail('Output policy did not persist');
+  await w.locator('#resetOutputDirectory').click();
+  await w.waitForFunction(() => document.getElementById('outputDirectory').value === '');
+  await w.selectOption('#outputPolicy', 'rename');
+  await w.evaluate(() => hideSettingsModal());
+  ok('Output folder/policy persist; reset and private diagnostic copy buttons work');
+
+  // Real translator + handler + UI. Only the network translation response is simulated.
+  const retryInput = path.join(userData, 'retry.srt');
+  fs.writeFileSync(retryInput, '1\n00:00:01,000 --> 00:00:02,000\nHello there\n');
+  await app.evaluate(({ app }, root) => {
+    const translator = process.mainModule.require(root + '/src/main/services/transcription').translator;
+    translator.supportsContextAware = () => false;
+    app.__translationCalls = [];
+    let failJapanese = true;
+    translator.translateBatch = async (_texts, _method, lang) => {
+      app.__translationCalls.push(lang);
+      if (lang === 'ja' && failJapanese) {
+        failJapanese = false;
+        throw new Error('synthetic retry failure');
+      }
+      return [lang === 'ko' ? '안녕하세요' : 'こんにちは'];
+    };
+  }, ROOT);
+  await w.evaluate((input) => {
+    localStorage.setItem('autoRetryFailed', 'false');
+    document.getElementById('translationSelect').value = 'mymemory';
+    document.getElementById('translationSelect').dispatchEvent(new Event('change', { bubbles: true }));
+    for (const checkbox of document.querySelectorAll('#targetLanguageList input')) {
+      checkbox.checked = ['ko', 'ja'].includes(checkbox.value);
+    }
+    clearQueue();
+    addToQueue(input);
+    updateQueueDisplayImmediate();
+  }, retryInput);
+  await w.locator('#runBtn').click();
+  await w.waitForFunction(() => !isProcessing && fileQueue[0]?.partial === true);
+  if (!(await w.locator('#queueList').textContent()).includes('Partial')) fail('Partial result missing from queue');
+  await w.locator('#queueList button[data-action="retry"]').click();
+  await w.locator('#runBtn').click();
+  await w.waitForFunction(() => !isProcessing && fileQueue[0]?.status === 'completed');
+  const calls = await app.evaluate(({ app }) => app.__translationCalls);
+  if (JSON.stringify(calls) !== JSON.stringify(['ko', 'ja', 'ja'])) fail(`Wrong retry languages: ${calls}`);
+  const historyResult = await w.evaluate(() => loadHistory().filter((item) => item.name === 'retry.srt'));
+  if (historyResult.length !== 1 || historyResult[0].status !== 'success') fail('Retry history not updated');
+  if (fs.existsSync(path.join(userData, 'retry_ko (1).srt'))) fail('Successful language was translated again');
+  ok('Partial queue result → Retry button → only failed language runs; one successful history entry');
+
   await app.close();
   fs.rmSync(userData, { recursive: true, force: true });
 

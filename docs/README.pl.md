@@ -15,7 +15,7 @@ Zamień dowolne wideo na napisy wielojęzyczne, lokalnie. Wrzuć wideo, wygeneru
 ## Funkcje
 
 - Rozpoznawanie mowy w 100% lokalnie. Twoje wideo nie opuszcza komputera, bez konta, bez wysyłania.
-- Tłumaczenie offline z Hy-MT2 po pierwszym pobraniu modelu lub silnikami online (MyMemory, DeepL, OpenAI, Gemini) z własnymi kluczami.
+- Tłumaczenie offline z Hy-MT2 po pierwszym pobraniu modelu lub silnikami online (MyMemory, DeepL, OpenAI, Gemini, Claude) z własnymi kluczami.
 - Automatyczne pobieranie modeli. Bez Pythona, bez ręcznej konfiguracji.
 - Modele naprawy synchronizacji (large-v2 Sync i Sync Lite) do wideo, gdzie zwykłe modele tracą synchronizację.
 - Kolejka, postęp na żywo i lokalna historia zadań.
@@ -29,12 +29,12 @@ Pobierz najnowsze archiwum przenośne z [Releases](https://github.com/Blue-B/Whi
 ### Programiści
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
-- Node.js >= 22.12.0 (zobacz `engines` w `package.json`; łańcuch narzędzi Electron 43)
-- whisper.cpp jest pobierany podczas `npm install` (Windows otrzymuje wersję CUDA ~700MB oraz wersję Vulkan ~23MB)
+- Node.js >= 22.12.0 (zobacz `engines` w `package.json`); używaj pliku blokady z repozytorium
+- Instalacja zależności przygotowuje też whisper.cpp (wersje CUDA i Vulkan w Windows); zapewnij kilka GB wolnego miejsca
 - FFmpeg jest dołączony przez npm; wybrany model GGML pobiera się przy pierwszym użyciu
 
 Kod aplikacji znajduje się w `src/main/` (główny proces Electron i usługi), `src/preload/` (most do renderera), `src/renderer/` (interfejs) oraz `src/shared/` (współdzielone kanały IPC).
@@ -43,18 +43,18 @@ Kod aplikacji znajduje się w `src/main/` (główny proces Electron i usługi), 
 
 ```bash
 sudo apt install cmake build-essential git ffmpeg   # Ubuntu/Debian
-npm install   # whisper.cpp budowany ze źródeł
+npm ci   # whisper.cpp budowany ze źródeł
 npm start
 ```
 
-Aby przyspieszyć przez CUDA, zainstaluj NVIDIA CUDA Toolkit przed `npm install`. Ręczne kroki budowania whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md).
+Aby przyspieszyć przez CUDA, zainstaluj NVIDIA CUDA Toolkit przed `npm ci`. Ręczne kroki budowania whisper.cpp są w [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 - **Pęk kluczy w Linuxie**: klucze API są przechowywane przez Electron safeStorage (libsecret). Bez demona pęku kluczy (sesja SSH bez interfejsu, minimalny pulpit/WM) zapis wraca do starszego AES z kluczem zapisanym na stałe. Aplikacja rejestruje wyraźne ostrzeżenie i oznacza zapis jako `insecure`. Taki zapis **nie jest bezpieczny**. Zainstaluj `gnome-keyring` lub uruchom aplikację w sesji pulpitu z pękiem kluczy, aby włączyć bezpieczne przechowywanie.
 
 ### Budowanie (Windows)
 
 ```bash
-npm run build-win   # wynik trafia do dist2/
+npm run build-win -- --publish never   # wynik trafia do dist2/
 ```
 
 Buduj w Windows, aby zależności Windows zostały zainstalowane normalnie. Przy budowaniu krzyżowym z Linuxa npm może pominąć opcjonalne pakiety tylko dla Windows. Obszar roboczy musi zawierać przypięte w pliku blokady pakiety `@node-llama-cpp/win-x64`, `win-x64-cuda`, `win-x64-cuda-ext` i `win-x64-vulkan`, w tym ich metadane JS/JSON oraz natywne pliki binarne. Sam udany build nie potwierdza, że lokalne tłumaczenie załaduje backend w Windows.
@@ -63,22 +63,24 @@ Buduj w Windows, aby zależności Windows zostały zainstalowane normalnie. Przy
 
 Pobierz raz model Tencent Hy-MT2, aby tłumaczyć napisy offline, albo użyj darmowych/płatnych silników online, z kluczami API tam, gdzie są wymagane.
 
-| Silnik                                                  | Offline | Klucz API | Koszt              | Uwagi                                                                                         |
-| ------------------------------------------------------- | :-----: | :-------: | ------------------ | --------------------------------------------------------------------------------------------- |
-| Hy-MT2 1.8B (lokalny, domyślny)                         |   Tak   |    Nie    | Darmowy            | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu                                                    |
-| Hy-MT2 7B (lokalny)                                     |   Tak   |    Nie    | Darmowy            | ~6,16GB, VRAM 8GB / RAM 12GB, większy model                                                   |
-| MyMemory                                                |   Nie   |    Nie    | Darmowy            | ~50K znaków/dzień na IP                                                                       |
-| DeepL                                                   |   Nie   |    Tak    | Zależny od planu   | Nowe API Developer: łącznie 1M; starsze API Free: 500K/mies.                                  |
-| OpenAI GPT-5.x (konfigurowalny, domyślnie gpt-5.6-sol)  |   Nie   |    Tak    | Płatny             | Domyślny model, świadomy kontekstu                                                            |
-| Gemini 3.x (konfigurowalny, domyślnie gemini-3.6-flash) |   Nie   |    Tak    | Darmowy / tani     | Zalecana tania ścieżka ([pobierz klucz](https://aistudio.google.com/app/apikey))              |
-| Claude (konfigurowalny, domyślnie claude-opus-5)        |   Nie   |    Tak    | Płatny             | Świetny w rozumieniu kontekstu ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
-| Niestandardowy dostawca zgodny z OpenAI                 |   Nie   |    Tak    | Różny              | Własny endpoint (OpenRouter, Ollama, vLLM, …)                                                 |
+| Silnik                                  | Offline | Klucz API | Koszt             | Uwagi                                                                                                 |
+| --------------------------------------- | :-----: | :-------: | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Hy-MT2 1.8B (lokalny, domyślny)         |   Tak   |    Nie    | Darmowy           | ~1,13GB, VRAM 2GB / RAM 4GB, na urządzeniu                                                            |
+| Hy-MT2 7B (lokalny)                     |   Tak   |    Nie    | Darmowy           | ~6,16GB, VRAM 8GB / RAM 12GB, większy model                                                           |
+| MyMemory                                |   Nie   |    Nie    | Darmowy           | Obowiązują limity dzienne                                                                             |
+| DeepL                                   |   Nie   |    Tak    | Zależny od planu  | Sprawdź aktualne limity API swojego konta                                                             |
+| OpenAI (wybór modelu)                   |   Nie   |    Tak    | Płatny            | Wybierz lub wpisz model w Ustawieniach                                                                |
+| Gemini (wybór modelu)                   |   Nie   |    Tak    | Zależny od modelu | Obowiązują limity konta ([pobierz klucz](https://aistudio.google.com/app/apikey))                     |
+| Claude (wybór modelu)                   |   Nie   |    Tak    | Płatny            | Wybierz lub wpisz model w Ustawieniach ([pobierz klucz](https://console.anthropic.com/settings/keys)) |
+| Niestandardowy dostawca zgodny z OpenAI |   Nie   |    Tak    | Różny             | Własny endpoint (OpenRouter, Ollama, vLLM, …)                                                         |
 
 Lokalne tłumaczenie Hy-MT2 po pobraniu modelu nie wymaga klucza API ani połączenia z siecią i nie ma opłat za użycie. Przy tym silniku tekst napisów nie opuszcza komputera.
 
 Modele Hy-MT2 są pobierane z przypiętych rewizji, a przed instalacją sprawdzane są dokładne rozmiary plików i skróty SHA-256. Istniejące modele także są sprawdzane przed załadowaniem. Wyniki udanych kontroli niezmienionych plików są zapisywane w pamięci podręcznej na czas sesji aplikacji. Nieudana kontrola integralności nie usuwa istniejącego modelu.
 
 Lokalne tłumaczenie automatycznie wybiera backend GPU. Zależnie od dostępności backendu sprzęt NVIDIA może używać Vulkan tak samo jak CUDA. Ten wybór jest niezależny od rozpoznawania mowy whisper.cpp. Dostępny jest też tryb CPU.
+
+Domyślny tryb **Tłumacz pojedynczo** również może korzystać z GPU. **Automatycznie** to opcjonalna funkcja eksperymentalna, która dobiera pracę równoległą, gdy cały model jest na GPU CUDA i wystarcza pamięci. Może być wolniejsza, zwłaszcza przy krótkich zadaniach. W razie problemów wybierz Tłumacz pojedynczo. Przy błędzie przygotowania pracy równoległej lub braku pamięci, który pozwala na ponowienie, aplikacja zapowiada próbę pojedynczego tłumaczenia na tym samym GPU i zapisuje przyczynę w `errors.log`. To nie to samo co ponowienie na CPU w trybie automatycznego wyboru urządzenia; sukces nie jest gwarantowany.
 
 ### Jakość tłumaczenia (silnik offline)
 
@@ -101,13 +103,13 @@ Modele pobierają się na żądanie do `_models/`. Karty NVIDIA używają CUDA, 
 | small                     | ~466MB  | ~1GB   | Średni     | Lepszy                                  |
 | medium                    | ~1,5GB  | ~2GB   | Średni     | Bardzo dobry                            |
 | large-v3                  | ~3GB    | ~4GB   | Wolny      | Najlepsza transkrypcja                  |
-| large-v3-turbo (domyślny) | ~809MB  | ~2GB   | Szybki     | Najlepszy ogólnie                       |
+| large-v3-turbo (domyślny) | ~1,62GB | ~2GB   | Szybki     | Najlepszy ogólnie                       |
 | large-v2 Sync             | ~4,4GB  | ~4,5GB | Wolny      | Osobny silnik, naprawa synchronizacji   |
 | large-v2 Sync Lite        | wspólny | ~3GB   | Wolny      | Ten sam plik co Sync, int8, niższy VRAM |
 
 Sync i Sync Lite używają osobnego silnika Faster-Whisper (pobieranego raz automatycznie; archiwum silnika ~1,4GB + plik modelu ~3GB, łącznie ~4,4GB) i współdzielą ten sam plik modelu, więc jedno pobranie obejmuje oba. Używaj ich tylko, gdy zwykłe modele tracą synchronizację. Są najdokładniejsze przy wideo nieangielskim (japoński, koreański, chiński). Angielski zwykle wystarczy z large-v3-turbo.
 
-VRAM modeli whisper.cpp podano dla optymalizacji GGML, znacznie niżej niż PyTorch Whisper (~10GB dla large). Wartości Sync pochodzą z benchmarku Faster-Whisper.
+Rozmiary i wymagania pamięci są przybliżone. Rzeczywiste użycie RAM/VRAM zależy od backendu, modelu i ustawień; rozmiar pobieranego pliku nie oznacza zużycia pamięci podczas pracy.
 
 ## Obsługa języków
 
@@ -117,7 +119,7 @@ VRAM modeli whisper.cpp podano dla optymalizacji GGML, znacznie niżej niż PyTo
 
 ## Przechowywanie danych
 
-Wszystko zostaje lokalnie w folderze użytkownika. Nic nie jest wysyłane.
+Ustawienia, pliki modeli, logi i historia są zapisywane lokalnie. Tłumaczenie online wysyła tekst napisów do wybranej usługi; lokalne tłumaczenie Hy-MT2 tego nie robi.
 
 | Dane                    | Lokalizacja                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -126,11 +128,15 @@ Wszystko zostaje lokalnie w folderze użytkownika. Nic nie jest wysyłane.
 | Logi błędów             | `%APPDATA%\whispersubtranslate\logs\errors.log`                                                                                                              |
 | Modele                  | `%APPDATA%\whispersubtranslate\_models` (folder danych użytkownika; konta Windows z nie-ASCII znakami używają `C:\Users\Public\WhisperSubTranslate\_models`) |
 
-Klucze API są przechowywane lokalnie w bezpiecznym magazynie systemu, a plik konfiguracji nigdy nie trafia do Git ani do builda. Historia zadań jest opcjonalna (przełącznik w Ustawieniach) i ograniczona do 200 wpisów.
+Modele tłumaczenia lokalnego znajdują się w `%APPDATA%\whispersubtranslate\hy-mt-models`. Powyższe ścieżki to domyślne lokalizacje Windows; tryb przenośny zmienia folder danych użytkownika.
+
+Kopiowanie diagnostyki w Ustawieniach pomija klucze API, ścieżki i treść napisów. Przycisk otwierania lokalizacji logu błędów wskazuje rzeczywisty folder, również w trybie przenośnym. Jeśli log jeszcze nie istnieje, otwiera tylko folder, bez tworzenia pustego pliku. Przed udostępnieniem surowego logu sprawdź, czy nie zawiera prywatnych ścieżek lub treści.
+
+Klucze API korzystają z bezpiecznego magazynu systemu, gdy jest dostępny (zobacz ostrzeżenie o pęku kluczy Linux powyżej). Nie dodawaj plików konfiguracji do Git ani do pakietu aplikacji. Historia zadań jest opcjonalna (przełącznik w Ustawieniach) i ograniczona do 200 wpisów.
 
 ### Przenośny układ danych
 
-Domyślnie modele, pamięć podręczna i ustawienia znajdują się w `%APPDATA%` (dysk systemowy). Aby trzymać wszystko na dysku USB / zewnętrznym, utwórz folder `portable-data/` obok pliku wykonywalnego (lub ustaw zmienną środowiskową `WHISPER_PORTABLE_DATA` na ścieżkę folderu) — aplikacja przekieruje tam swój `userData`.
+Domyślnie modele, pamięć podręczna i ustawienia znajdują się w `%APPDATA%` (dysk systemowy). Aby trzymać wszystko na dysku USB / zewnętrznym, utwórz folder `portable-data/` obok pliku wykonywalnego (lub ustaw zmienną środowiskową `WHISPER_PORTABLE_DATA` na ścieżkę folderu). Aplikacja przekieruje tam swój `userData`.
 
 ## Współtworzenie
 

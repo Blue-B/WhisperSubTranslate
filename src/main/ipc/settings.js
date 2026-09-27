@@ -47,6 +47,31 @@ async function checkForUpdates() {
 
 function registerSettingsHandlers(ipcMain, app, transcription) {
   const translator = transcription.translator;
+  ipcMain.handle(C.GET_DIAGNOSTICS, () => {
+    const gpu = transcription.getGpuStatus();
+    return {
+      version: CURRENT_VERSION,
+      platform: process.platform,
+      arch: process.arch,
+      electron: process.versions.electron,
+      whisper: 'v1.9.1',
+      cudaAvailable: !!(gpu.available && gpu.cudaCompatible),
+      vulkanAvailable: !!gpu.vulkanAvailable,
+      ...require('../services/error-logger').getDiagnosticSummary(),
+    };
+  });
+  ipcMain.handle(C.OPEN_ERROR_LOG_LOCATION, async () => {
+    try {
+      const { shell } = require('electron');
+      const logPath = require('../services/error-logger').getLogPath();
+      const exists = fs.existsSync(logPath);
+      if (exists) shell.showItemInFolder(logPath);
+      else if (await shell.openPath(path.dirname(logPath))) return { success: false };
+      return { success: true, exists };
+    } catch (_error) {
+      return { success: false };
+    }
+  });
   ipcMain.handle(C.SAVE_API_KEYS, (_event, keys) => {
     try {
       const result = translator.saveApiKeys(keys);

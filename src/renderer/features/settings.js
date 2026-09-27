@@ -352,9 +352,11 @@ function applyI18n(lang) {
 
   // 새로 추가된 i18n 요소
   setText('labelTargetLanguage', d.labelTargetLanguage);
-  // targetLangNote: only show generic hint when no method-specific message is active
   const tnote = document.getElementById('targetLangNote');
-  if (tnote && !tnote.dataset.methodOverride) tnote.textContent = d.targetLangNote;
+  if (tnote) {
+    const method = document.getElementById('translationSelect')?.value;
+    tnote.textContent = tnote.dataset.methodOverride ? d.engineSupportNote?.[method] || '' : d.targetLangNote;
+  }
 
   // Progress step labels (i18n)
   if (d.stepExtract) setText('stepLabelExtract', d.stepExtract);
@@ -756,6 +758,12 @@ function initTranslationSelect() {
       }
     });
   }
+  const localProcessingSelect = document.getElementById('localProcessingSelect');
+  localProcessingSelect?.addEventListener('change', () => {
+    window.electronAPI.saveApiKeys({ localProcessingMode: localProcessingSelect.value }).catch((error) => {
+      console.error('[Settings] Failed to save local processing mode:', error.message);
+    });
+  });
   // 다국어 체크박스: 패널 토글 배선 + 저장된 선택 복원 + 변경 시 저장·요약 갱신
   initLangMultiSelect();
   restoreTargetLangs();
@@ -836,6 +844,11 @@ async function loadSavedSettings() {
       }
     }
 
+    const localProcessingSelect = document.getElementById('localProcessingSelect');
+    if (localProcessingSelect) {
+      localProcessingSelect.value = keys.localProcessingMode === 'auto' ? 'auto' : 'sequential';
+    }
+
     // Sync custom dropdown display values after all native selects are set
     document.querySelectorAll('.setting-card .setting-select[data-customized]').forEach((sel) => {
       sel.dispatchEvent(new Event('change', { bubbles: false }));
@@ -848,8 +861,8 @@ async function loadSavedSettings() {
 // 설정 자동 저장 (select 변경 시)
 async function autoSaveSettings() {
   try {
-    const res = await window.electronAPI.loadApiKeys();
-    const keys = res?.keys || {};
+    // Main merges this patch with the latest config; a stale full snapshot can overwrite newer changes.
+    const keys = {};
 
     // 현재 선택값 저장
     const modelSelect = document.getElementById('modelSelect');
@@ -989,8 +1002,8 @@ function buildCustomSelect(selectEl) {
     const spaceAbove = rect.top - 8;
     const dropH = Math.min(dropdown.scrollHeight, 280);
     dropdown.style.width = dropW + 'px';
-    // Align to the setting-card's left edge if possible
-    const card = wrapper.closest('.setting-card');
+    // Local controls share a row; align each menu with its own field.
+    const card = wrapper.closest('.local-setting, .setting-card');
     const cardRect = card ? card.getBoundingClientRect() : rect;
     const leftEdge = cardRect.left;
     dropdown.style.left = Math.min(leftEdge, window.innerWidth - dropW - 8) + 'px';
@@ -1090,7 +1103,7 @@ function buildCustomSelect(selectEl) {
   trigger.addEventListener('blur', () => close());
 
   // 카드 클릭 위임은 initCustomSelects 내 본문 delegation으로 처리함. 여기서는 cursor만 설정.
-  const clickArea = wrapper.closest('#localModelGroup, .setting-card');
+  const clickArea = wrapper.closest('.local-setting, #localModelGroup, .setting-card');
   if (clickArea) {
     clickArea.style.cursor = 'pointer';
   }
@@ -1104,7 +1117,7 @@ function buildCustomSelect(selectEl) {
       'mousedown',
       (e) => {
         document.querySelectorAll('.custom-select-wrapper.open').forEach((w) => {
-          const area = w.closest('#localModelGroup, .setting-card');
+          const area = w.closest('.local-setting, #localModelGroup, .setting-card');
           if (!w.contains(e.target) && !(area && area.contains(e.target))) {
             if (typeof w.close === 'function') w.close();
             else w.classList.remove('open');
@@ -1136,10 +1149,11 @@ function initCustomSelects() {
   if (!document.body.dataset.cardDelegationBound) {
     document.body.dataset.cardDelegationBound = '1';
     document.body.addEventListener('click', (e) => {
-      const card = e.target.closest('.setting-card, #localModelGroup');
+      const card = e.target.closest('.local-setting, .setting-card, #localModelGroup');
       if (!card) return;
-      // 이미 interactive 요소 클릭이면 양보
-      if (e.target.closest('input, textarea, button, a, .custom-select-trigger, .custom-select-dropdown')) return;
+      // Help disclosure and form controls handle their own interaction.
+      if (e.target.closest('input, textarea, button, a, details, .custom-select-trigger, .custom-select-dropdown'))
+        return;
       // 그동안 이우어서 다른 wrapper를 직접 클릭한 경우도 양보
       if (e.target.closest('.custom-select-wrapper')) return;
       const wrappers = card.querySelectorAll(':scope > .custom-select-wrapper, :scope > * > .custom-select-wrapper');
@@ -1152,6 +1166,7 @@ function initCustomSelects() {
 }
 
 // Call after loadSavedSettings — fires change event so custom display syncs
+// pi-lens-ignore: no-unused-vars
 function syncCustomSelects() {
   document.querySelectorAll('.setting-card .setting-select[data-customized]').forEach((sel) => {
     sel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1159,6 +1174,7 @@ function syncCustomSelects() {
 }
 
 // ===== Settings Modal 초기화 =====
+// pi-lens-ignore: no-unused-vars
 function initSettingsModal() {
   // 실제 설정 진입점은 사이드바 railSettingsBtn (기존 우상단 settingsBtn은
   // display:none 데드 요소여서 제거됨).
@@ -1337,6 +1353,41 @@ function initSettingsModal() {
   });
 
   initProviderSettings();
+  document.getElementById('chooseOutputDirectory').addEventListener('click', async () => {
+    const result = await window.electronAPI.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
+    if (!result.canceled && result.filePaths?.[0]) {
+      localStorage.setItem('outputDirectory', result.filePaths[0]);
+      document.getElementById('outputDirectory').value = result.filePaths[0];
+    }
+  });
+  document.getElementById('resetOutputDirectory').addEventListener('click', () => {
+    localStorage.removeItem('outputDirectory');
+    document.getElementById('outputDirectory').value = '';
+  });
+  document.getElementById('outputPolicy').addEventListener('change', (event) => {
+    localStorage.setItem('outputPolicy', event.target.value);
+  });
+  document.getElementById('copyDiagnostics').addEventListener('click', async () => {
+    const d = I18N[currentUiLang];
+    try {
+      const diagnostics = await window.electronAPI.getDiagnostics();
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+      showToast(d.diagnosticsCopied);
+    } catch (_error) {
+      showToast(d.diagnosticsFailed);
+    }
+  });
+
+  document.getElementById('openErrorLogLocation').addEventListener('click', async () => {
+    const d = I18N[currentUiLang];
+    try {
+      const result = await window.electronAPI.openErrorLogLocation();
+      if (!result?.success) showToast(d.errorLogOpenFailed);
+      else if (!result.exists) showToast(d.errorLogMissing);
+    } catch (_error) {
+      showToast(d.errorLogOpenFailed);
+    }
+  });
 
   // 출력 정리(Output cleanup) 토글 — localStorage에 즉시 영구 저장
   const removeSpeakerTagsCheckbox = document.getElementById('removeSpeakerTagsCheckbox');
@@ -1371,6 +1422,13 @@ function initSettingsModal() {
       soundVolumeRow.classList.remove('disabled');
     }
   }
+}
+
+function getOutputOptions() {
+  return {
+    directory: localStorage.getItem('outputDirectory') || '',
+    policy: localStorage.getItem('outputPolicy') || 'rename',
+  };
 }
 
 function setProviderSettingsLoading(loading) {
@@ -1455,6 +1513,9 @@ function showSettingsModal(loadApiKeys = () => window.electronAPI.loadApiKeys())
     if (reduceRepetitionCheckbox)
       reduceRepetitionCheckbox.checked = localStorage.getItem('reduceRepetition') !== 'false';
     updateSyncModelUI();
+    const outputOptions = getOutputOptions();
+    document.getElementById('outputDirectory').value = outputOptions.directory;
+    document.getElementById('outputPolicy').value = outputOptions.policy;
     const autoRetryCheckbox = document.getElementById('autoRetryCheckbox');
     if (autoRetryCheckbox) autoRetryCheckbox.checked = localStorage.getItem('autoRetryFailed') === 'true';
     if (soundVolumeRow) {

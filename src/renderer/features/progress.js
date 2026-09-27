@@ -204,7 +204,7 @@ if (window?.electronAPI) {
           msg = `(${data.langIndex}/${data.langTotal} ${data.lang}) ${msg}`;
         }
       } else if (data?.stage === 'completed') {
-        msg = I18N[currentUiLang].translationCompleted;
+        msg = data.failedLangs?.length ? I18N[currentUiLang].qPartial : I18N[currentUiLang].translationCompleted;
       } else if (data?.stage === 'error') {
         msg = I18N[currentUiLang].translationFailed + getLocalizedError(data?.errorMessage || '');
       }
@@ -252,8 +252,7 @@ if (window?.electronAPI) {
         // 현재 처리 중인 파일을 completed로 마킹
         if (currentProcessingIndex >= 0 && currentProcessingIndex < fileQueue.length) {
           const _f = fileQueue[currentProcessingIndex];
-          _f.status = isErrorStage ? 'error' : 'completed';
-          _f.progress = isErrorStage ? 0 : 100;
+          applyTranslationResult(_f, data);
           console.log(
             `[onTranslationProgress] File status changed to ${isErrorStage ? 'error' : 'completed'}, index:`,
             currentProcessingIndex
@@ -291,6 +290,10 @@ if (window?.electronAPI) {
               // 다음 파일 처리 시작
               await continueProcessing();
             } else {
+              if (retryFailedAutomatically()) {
+                await continueProcessing();
+                return;
+              }
               // 모든 파일 완료 또는 중지됨
               isProcessing = false;
               currentProcessingIndex = -1;

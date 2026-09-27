@@ -550,7 +550,7 @@ async function renderModels() {
       try {
         btn.disabled = true;
         if (m.category === 'translation' && window.electronAPI?.localModelCancel) {
-          await window.electronAPI.localModelCancel();
+          await window.electronAPI.localModelCancel(m.id === 'hy-mt-7b' ? '7b' : '1.8b');
         } else if ((m.whisperKey || m.syncEngine) && window.electronAPI?.whisperModelCancel) {
           await window.electronAPI.whisperModelCancel();
         }

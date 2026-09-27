@@ -376,11 +376,25 @@ function retryQueueItem(index) {
   if (index >= 0 && index < fileQueue.length) {
     const file = fileQueue[index];
     if (file.status === 'stopped' || file.status === 'error') {
+      file.retryTranslation = !!(file.failedLangs?.length && file.translationInput);
       file.status = 'pending';
       file.progress = 0;
       updateQueueDisplay();
     }
   }
+}
+
+// eslint-disable-next-line no-unused-vars -- processing.js/progress.js batch completion
+function retryFailedAutomatically() {
+  if (shouldStop || localStorage.getItem('autoRetryFailed') !== 'true') return false;
+  let retried = false;
+  fileQueue.forEach((file, index) => {
+    if (file.status !== 'error' || (file.autoRetryCount || 0) >= AUTO_RETRY_MAX) return;
+    file.autoRetryCount = (file.autoRetryCount || 0) + 1;
+    retryQueueItem(index);
+    retried = true;
+  });
+  return retried;
 }
 
 function removeFromQueue(index) {
@@ -531,8 +545,9 @@ function copyToClipboard(text, type) {
 async function openOutputFolder() {
   if (fileQueue.length > 0) {
     const firstFile = fileQueue.find((f) => f.status === 'completed') || fileQueue[0];
-    const sep = firstFile.path.includes('/') ? '/' : '\\';
-    const folderPath = firstFile.path.substring(0, firstFile.path.lastIndexOf(sep));
+    const outputPath = firstFile.outputPath || firstFile.path;
+    const sep = outputPath.includes('/') ? '/' : '\\';
+    const folderPath = outputPath.substring(0, outputPath.lastIndexOf(sep));
     window.electronAPI.openFolder(folderPath);
   }
 }
@@ -655,7 +670,7 @@ function updateQueueDisplayImmediate() {
           statusText = d.qSkipped || 'Skipped';
           itemClass = 'queue-item skipped';
         } else if (file.status === 'error') {
-          statusText = d.qError;
+          statusText = file.partial ? `${d.qPartial} (${file.failedLangs.join(', ')})` : d.qError;
           itemClass = 'queue-item error';
         } else if (!isValid) {
           statusText = d.qUnsupported;
@@ -683,7 +698,7 @@ function updateQueueDisplayImmediate() {
           actionButtons = processingBadge;
         } else if (file.status === 'error' || file.status === 'stopped') {
           actionButtons =
-            `<button class="btn-warning btn-sm" style="margin-right:4px;" data-action="retry" data-index="${index}">${escAttr(d.btnRetry || 'Retry')}</button>` +
+            `<button class="btn-warning btn-sm" style="margin-right:4px;" data-action="retry" data-index="${index}">${escAttr(file.failedLangs?.length ? d.btnRetryFailedLanguages : d.btnRetry || 'Retry')}</button>` +
             `<button class="btn-danger btn-sm" data-action="remove" data-index="${index}">${escAttr(btnRemove)}</button>`;
         } else {
           actionButtons = `<button class="btn-danger btn-sm" data-action="remove" data-index="${index}">${escAttr(btnRemove)}</button>`;

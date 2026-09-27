@@ -115,6 +115,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('get-audio-data', filename);
   },
 
+  getDiagnostics: () => ipcRenderer.invoke('get-diagnostics'),
+  openErrorLogLocation: () => ipcRenderer.invoke('open-error-log-location'),
+
   // 현재 버전 가져오기
   getCurrentVersion: () => {
     return ipcRenderer.invoke('get-current-version');
@@ -160,7 +163,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localModelList: () => ipcRenderer.invoke('local-model-list'),
   localModelStatus: (modelId) => ipcRenderer.invoke('local-model-status', modelId),
   localModelDownload: (modelId) => ipcRenderer.invoke('local-model-download', modelId),
-  localModelCancel: () => ipcRenderer.invoke('local-model-cancel'),
+  localModelCancel: (modelId) => ipcRenderer.invoke('local-model-cancel', modelId),
   localModelDelete: (modelId) => ipcRenderer.invoke('local-model-delete', modelId),
   onLocalModelProgress: (callback) => {
     const handler = (_event, data) => callback(data);

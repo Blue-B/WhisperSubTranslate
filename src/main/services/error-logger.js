@@ -5,6 +5,10 @@ const fs = require('fs');
 const path = require('path');
 
 let _electronApp = null;
+let lastFailure = 'none';
+function getDiagnosticSummary() {
+  return { lastFailure };
+}
 function setElectronApp(app) {
   _electronApp = app;
 }
@@ -40,6 +44,21 @@ function cleanupIfLarge(logPath) {
 }
 
 function logError(scope, message, err) {
+  // Export only categories, never raw logs, filenames, subtitle text, or credentials.
+  const text = `${message || ''} ${err?.message || ''}`;
+  lastFailure = /ENOSPC|disk space/i.test(text)
+    ? 'disk-space'
+    : /EMPTY_TRANSLATION|PASSTHROUGH/.test(text)
+      ? 'translation-content'
+      : /quota|429/i.test(text)
+        ? 'quota'
+        : /timeout|timed out/i.test(text)
+          ? 'timeout'
+          : /GPU|CUDA|Vulkan|VRAM/i.test(text)
+            ? 'gpu'
+            : /401|403|api key/i.test(text)
+              ? 'authentication'
+              : 'processing';
   try {
     const logPath = getLogPath();
     cleanupIfLarge(logPath);
@@ -56,4 +75,4 @@ function logError(scope, message, err) {
   }
 }
 
-module.exports = { setElectronApp, getLogPath, logError };
+module.exports = { setElectronApp, getLogPath, logError, getDiagnosticSummary };

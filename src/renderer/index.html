@@ -183,8 +183,11 @@
               <span id="labelModel">모델</span>
             </label>
             <select id="modelSelect" class="setting-select"></select>
-            <div id="modelStatus" class="setting-hint" data-i18n="modelStatusInitial">모델 상태 확인 중...</div>
-            <div id="modelRequirements" class="setting-hint" style="margin-top: 4px; color: var(--text-muted)"></div>
+            <details class="setting-help">
+              <summary data-i18n="modelDetailsHelp">모델 설명 및 설치 안내</summary>
+              <div id="modelStatus" class="setting-hint" data-i18n="modelStatusInitial">모델 상태 확인 중...</div>
+              <div id="modelRequirements" class="setting-hint"></div>
+            </details>
           </div>
 
           <!-- Language Selection -->
@@ -272,21 +275,42 @@
               <option value="claude"></option>
             </select>
             <div id="translationStatus" class="setting-hint"></div>
-            <!-- Local model sub-selector (HY-MT 1.8B / 7B) -->
-            <div id="localModelGroup" class="local-model-sub" style="display: none; margin-top: 8px">
-              <label class="setting-label" style="font-size: 11px; opacity: 0.85">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M9 9h6v6H9z" />
-                </svg>
-                <span id="labelLocalModel">로컬 모델</span>
-              </label>
-              <select id="localModelSelect" class="setting-select">
-                <option value="1.8b" data-i18n="localModel18bOption">Hy-MT2 1.8B · 빠름 (권장)</option>
-                <option value="7b" data-i18n="localModel7bOption">Hy-MT2 7B · 고품질</option>
-              </select>
-              <div id="localModelRequirements" class="setting-hint" style="margin-top: 4px"></div>
+          </div>
+
+          <!-- Local controls share one row instead of stretching the device card. -->
+          <div id="localModelGroup" class="setting-card local-model-sub" style="display: none">
+            <div class="local-controls-grid">
+              <div class="local-setting">
+                <label for="localModelSelect" class="setting-label">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 9h6v6H9z" />
+                  </svg>
+                  <span id="labelLocalModel">로컬 모델</span>
+                </label>
+                <select id="localModelSelect" class="setting-select">
+                  <option value="1.8b" data-i18n="localModel18bOption">Hy-MT2 1.8B · 빠름 (권장)</option>
+                  <option value="7b" data-i18n="localModel7bOption">Hy-MT2 7B · 고품질</option>
+                </select>
+                <div id="localModelRequirements" class="setting-hint"></div>
+              </div>
+              <div class="local-setting">
+                <label for="localProcessingSelect" class="setting-label" data-i18n="localProcessingLabel">
+                  로컬 번역 처리
+                </label>
+                <select id="localProcessingSelect" class="setting-select">
+                  <option value="sequential" data-i18n="localProcessingSequential">하나씩 번역</option>
+                  <option value="auto" data-i18n="localProcessingAuto">자동 조절</option>
+                </select>
+              </div>
             </div>
+            <details class="local-processing-help">
+              <summary data-i18n="localProcessingHelp">자동 조절 안내 (실험 기능)</summary>
+              <div class="setting-hint" data-i18n="localProcessingHint">
+                여러 자막의 병렬 처리를 자동으로 조절하는 실험 기능입니다. 항상 가장 빠른 설정을 보장하지는 않습니다.
+                문제가 있으면 ‘하나씩 번역’을 선택하세요.
+              </div>
+            </details>
           </div>
 
           <!-- Target Language (shown when translation selected) -->
@@ -693,6 +717,66 @@
             </p>
           </div>
 
+          <div class="settings-section">
+            <h4 class="settings-section-title" data-i18n="outputSettingsTitle">Output files</h4>
+            <label class="form-label" for="outputDirectory" data-i18n="outputDirectoryLabel">Output folder</label>
+            <div class="output-folder-row">
+              <div class="output-folder-field">
+                <input
+                  id="outputDirectory"
+                  class="form-input"
+                  type="text"
+                  readonly
+                  data-i18n-placeholder="outputSameFolder"
+                />
+                <button
+                  id="chooseOutputDirectory"
+                  type="button"
+                  class="settings-action output-folder-picker"
+                  aria-labelledby="outputChooseLabel"
+                  data-i18n-title="outputChooseFolder"
+                >
+                  <span aria-hidden="true">…</span>
+                  <span id="outputChooseLabel" hidden data-i18n="outputChooseFolder">Choose folder</span>
+                </button>
+              </div>
+              <button id="resetOutputDirectory" type="button" class="settings-action" data-i18n="outputSameFolder">
+                Beside source file
+              </button>
+            </div>
+            <label class="form-label" for="outputPolicy" data-i18n="outputPolicyLabel">When a file exists</label>
+            <select id="outputPolicy" class="form-input">
+              <option value="rename" data-i18n="outputRename">Save with a new name</option>
+              <option value="skip" data-i18n="outputSkip">Skip</option>
+              <option value="overwrite" data-i18n="outputOverwrite">Replace after success</option>
+            </select>
+          </div>
+          <div class="settings-section">
+            <h4 class="settings-section-title" data-i18n="diagnosticsTitle">Troubleshooting</h4>
+            <p class="settings-hint" data-i18n="diagnosticsHint">
+              Copies version, backend availability and an error category only. No keys, paths or subtitle content.
+            </p>
+            <div class="diagnostics-actions">
+              <button id="copyDiagnostics" type="button" class="settings-action">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="8" y="8" width="12" height="13" />
+                  <path d="M16 8V3H4v13h4" />
+                </svg>
+                <span data-i18n="diagnosticsCopy">Copy diagnostics</span>
+              </button>
+              <button id="openErrorLogLocation" type="button" class="settings-action">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M3 7V4h6l3 3h9v13H3V7Z" />
+                </svg>
+                <span data-i18n="errorLogOpen">Show error log in folder</span>
+              </button>
+            </div>
+            <p class="settings-hint" data-i18n="errorLogHint">
+              Error logs may contain file paths and detailed error information. Check for private information before
+              attaching them to an issue.
+            </p>
+          </div>
+
           <!-- API Keys Section -->
           <div class="settings-section">
             <h4 id="apiSectionTitle" class="settings-section-title">
@@ -818,7 +902,7 @@
                       id="openaiModel"
                       class="form-input"
                       list="openaiModelList"
-                      placeholder="gpt-5.6-sol"
+                      placeholder="gpt-6-sol"
                       spellcheck="false"
                     />
                     <button
@@ -896,7 +980,7 @@
                       id="geminiModel"
                       class="form-input"
                       list="geminiModelList"
-                      placeholder="gemini-3.6-flash"
+                      placeholder="gemini-3.8-flash"
                       spellcheck="false"
                     />
                     <button
@@ -974,7 +1058,7 @@
                       id="claudeModel"
                       class="form-input"
                       list="claudeModelList"
-                      placeholder="claude-opus-5"
+                      placeholder="claude-opus-5-5"
                       spellcheck="false"
                     />
                     <button

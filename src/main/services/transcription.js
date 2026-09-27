@@ -3,9 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const { spawn, spawnSync, execFile, execSync, execFileSync } = require('child_process');
 const os = require('os');
+const readline = require('readline');
+const { randomUUID } = require('crypto');
 const axios = require('axios');
 const EnhancedSubtitleTranslator = require('./translator');
-const { applySrtCleanup, wrapCuesForDisplay, srtFromWhisperJson } = require('./srt-cleanup');
+const { srtFromWhisperJson } = require('./srt-cleanup');
 const { assertDownloadDiskSpace, assertSyncInstallDiskSpace, getReusablePartialSize } = require('./disk-space');
 const { downloadVerifiedFile, sha256File } = require('./verified-downloader');
 const { isCompleteWavFile } = require('./file-safety');
@@ -153,7 +155,7 @@ function cancelActiveDownloads() {
   // Only surface the cancellation message when there was actually an active download.
   if (hadActive) {
     try {
-      mainWindow?.webContents?.send('output-update', 'Model download cancelled\n');
+      sendToRenderer('output-update', 'Model download cancelled\n');
     } catch (error) {
       console.log('[Download] Failed to send cancellation message:', error.message);
     }
@@ -571,7 +573,7 @@ async function splitAudioToSegments(wavPath, duration) {
   }
 
   console.log(`[Split] Splitting ${(duration / 60).toFixed(1)} min audio into segments...`);
-  mainWindow.webContents.send('output-update', `Splitting long audio into segments for stable processing...\n`);
+  sendToRenderer('output-update', `Splitting long audio into segments for stable processing...\n`);
 
   const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
   let ffmpegPath = ffmpegStaticPath || 'ffmpeg';
@@ -643,7 +645,7 @@ async function splitAudioToSegments(wavPath, duration) {
       });
 
       console.log(`[Split] Created segment ${segmentIndex + 1}: ${currentStart}s - ${currentStart + segmentDuration}s`);
-      mainWindow.webContents.send(
+      sendToRenderer(
         'output-update',
         `Created segment ${segmentIndex + 1}/${Math.ceil(duration / SEGMENT_DURATION)}\n`
       );
@@ -934,8 +936,8 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       extractionTimeoutMs(SEGMENT_DURATION, device)
     );
 
-    proc.stdout.on('data', (data) => {
-      mainWindow.webContents.send('output-update', data.toString('utf8'));
+    readline.createInterface({ input: proc.stdout, crlfDelay: Infinity }).on('line', (line) => {
+      sendToRenderer('output-update', line + '\n');
     });
 
     proc.stderr.on('data', (data) => {
@@ -945,9 +947,9 @@ function processSegment(segmentPath, modelPath, device, language, whisperDir, ex
       const cleaned = stripProgressLines(output);
       if (!cleaned.trim()) return; // 진행률 라인만 있던 청크는 로그에 미표시
       if (cleaned.includes('error') || cleaned.includes('Error')) {
-        mainWindow.webContents.send('output-update', '[ERROR] ' + cleaned);
+        sendToRenderer('output-update', '[ERROR] ' + cleaned);
       } else {
-        mainWindow.webContents.send('output-update', cleaned);
+        sendToRenderer('output-update', cleaned);
       }
     });
 
@@ -1109,7 +1111,7 @@ function convertToWav(inputPath) {
     }
 
     console.log(`[Audio] Converting to WAV: ${path.basename(inputPath)}`);
-    mainWindow.webContents.send('output-update', `Converting audio to WAV format...\n`);
+    sendToRenderer('output-update', `Converting audio to WAV format...\n`);
 
     // ffmpeg 경로 설정 (우선순위: ffmpeg-static > 로컬 파일 > 시스템 PATH)
     const basePath = app.isPackaged ? process.resourcesPath : SOURCE_ROOT;
@@ -1173,7 +1175,7 @@ function convertToWav(inputPath) {
       if (output.includes('time=')) {
         const timeMatch = output.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/);
         if (timeMatch) {
-          mainWindow.webContents.send('output-update', `Audio conversion: ${timeMatch[1]}\r`);
+          sendToRenderer('output-update', `Audio conversion: ${timeMatch[1]}\r`);
         }
       }
     });
@@ -1197,7 +1199,7 @@ function convertToWav(inputPath) {
       }
       if (code === 0 && fs.existsSync(wavPath)) {
         console.log(`[Audio] WAV conversion successful: ${path.basename(wavPath)}`);
-        mainWindow.webContents.send('output-update', `Audio conversion completed.\n`);
+        sendToRenderer('output-update', `Audio conversion completed.\n`);
         resolve({ wavPath, usingSafeTemp, originalWavPath, reused: false });
       } else {
         // 실패/중지/타임아웃 모든 경로에서 잘린 WAV를 삭제한다.
@@ -1343,7 +1345,7 @@ function parseWhisperProgress(text) {
 // 추출 전체 진행률(0~100)을 렌더러로 전송. 렌더러가 추출 구간 범위(0..max)로 매핑.
 function sendExtractionProgress(percent) {
   try {
-    mainWindow?.webContents?.send('progress-update', {
+    sendToRenderer('progress-update', {
       stage: 'extracting',
       percent: Math.max(0, Math.min(100, Math.round(percent))),
     });
@@ -1544,7 +1546,7 @@ async function downloadFileWithProgress(url, destPath, label, onPercent, manifes
     sha256,
     onProgress: (percent, received, total) => {
       try {
-        mainWindow?.webContents?.send('output-update', `${label} ${percent}%\n`);
+        sendToRenderer('output-update', `${label} ${percent}%\n`);
       } catch (_e) {}
       onPercent?.(percent, received, total);
     },
@@ -1584,9 +1586,9 @@ async function ensureFasterWhisperEngine(onPercent, archiveReady = false) {
   if (!archiveReady) archiveReady = await hasVerifiedFasterWhisperArchive(archivePath);
 
   if (archiveReady) {
-    mainWindow?.webContents?.send('output-update', 'Reusing the verified sync engine archive already downloaded.\n');
+    sendToRenderer('output-update', 'Reusing the verified sync engine archive already downloaded.\n');
   } else {
-    mainWindow?.webContents?.send(
+    sendToRenderer(
       'output-update',
       'Preparing GPU sync engine (Faster-Whisper-XXL, ~1.4GB). This first-time download can take a while...\n'
     );
@@ -1597,7 +1599,7 @@ async function ensureFasterWhisperEngine(onPercent, archiveReady = false) {
     fs.renameSync(partialPath, archivePath);
   }
 
-  mainWindow?.webContents?.send('output-update', 'Extracting GPU sync engine (this can take a minute)...\n');
+  sendToRenderer('output-update', 'Extracting GPU sync engine (this can take a minute)...\n');
   // 압축 파일과 추출 결과가 동시에 존재한다. 실제 압축률을 알 수 없으므로
   // 아카이브 크기의 3배를 추출 여유 공간으로 보수적으로 확보한다.
   assertDownloadDiskSpace(path.join(engineDir, '.extracting'), fs.statSync(archivePath).size * 3);
@@ -1611,7 +1613,7 @@ async function ensureFasterWhisperEngine(onPercent, archiveReady = false) {
   if (!exePath || !fs.existsSync(exePath)) {
     throw new Error(`Faster-Whisper-XXL engine extraction failed (exe not found under ${engineDir})`);
   }
-  mainWindow?.webContents?.send('output-update', 'GPU sync engine ready.\n');
+  sendToRenderer('output-update', 'GPU sync engine ready.\n');
   return exePath;
 }
 
@@ -1789,7 +1791,7 @@ async function runFasterWhisperExtraction(
         ? gpuAttempts
         : [...gpuAttempts, { useGpu: false, computeType: 'int8' }];
   if (requestedDevice !== 'cpu' && !cudaAvailable) {
-    mainWindow?.webContents?.send(
+    sendToRenderer(
       'output-update',
       'Sync engine supports CUDA or CPU only. CUDA is unavailable, so this run will use CPU. Vulkan is not used by Sync.\n'
     );
@@ -1799,7 +1801,7 @@ async function runFasterWhisperExtraction(
     new Promise((resolve, reject) => {
       const useGpu = attempt.useGpu;
       const args = buildFasterWhisperArgs(wavPath, outputDir, language, useGpu, lite, attempt.computeType);
-      mainWindow?.webContents?.send(
+      sendToRenderer(
         'output-update',
         `Starting sync repair extraction (${modeLabel}, ${useGpu ? 'GPU ' + attempt.computeType : 'CPU'}). This mode is for subtitles that do not sync with normal models; English is usually faster with large-v3-turbo. First run may download the model (~3GB).\n`
       );
@@ -1843,10 +1845,7 @@ async function runFasterWhisperExtraction(
             lastLoggedPct = pct;
             lastProgressLogAt = now;
             const where = useGpu ? 'GPU' : 'CPU';
-            mainWindow?.webContents?.send(
-              'output-update',
-              `Transcribing (sync-first ${modeLabel}, ${where})... ${pct}%\n`
-            );
+            sendToRenderer('output-update', `Transcribing (sync-first ${modeLabel}, ${where})... ${pct}%\n`);
           }
         }
         // tqdm progress chunks contain carriage returns and can spam the log. Keep meaningful lines.
@@ -1854,10 +1853,12 @@ async function runFasterWhisperExtraction(
           .replace(/\r[^\n]*\|[^\n]*/g, '')
           .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
           .trim();
-        if (cleaned) mainWindow?.webContents?.send('output-update', cleaned + '\n');
+        if (cleaned) sendToRenderer('output-update', cleaned + '\n');
       };
 
-      proc.stdout.on('data', handleOutput);
+      readline
+        .createInterface({ input: proc.stdout, crlfDelay: Infinity })
+        .on('line', (line) => handleOutput(line + '\n'));
       proc.stderr.on('data', handleOutput);
 
       proc.on('close', (code) => {
@@ -1894,10 +1895,7 @@ async function runFasterWhisperExtraction(
       if (ai < attempts.length - 1) {
         const next = attempts[ai + 1];
         const nextLabel = next.useGpu ? `GPU (${next.computeType})` : 'CPU (slower)';
-        mainWindow?.webContents?.send(
-          'output-update',
-          `GPU run failed (${e.message}). Falling back to ${nextLabel}...\n`
-        );
+        sendToRenderer('output-update', `GPU run failed (${e.message}). Falling back to ${nextLabel}...\n`);
         try {
           fs.rmSync(outputSrt, { force: true });
         } catch (_e) {}
@@ -1912,7 +1910,7 @@ async function runFasterWhisperExtraction(
   try {
     fs.rmSync(outputDir, { recursive: true, force: true });
   } catch (_e) {}
-  mainWindow?.webContents?.send('output-update', `Sync-first SRT saved: ${finalSrtPath}\n`);
+  sendToRenderer('output-update', `Sync-first SRT saved: ${finalSrtPath}\n`);
   return finalSrtPath;
 }
 
@@ -1966,7 +1964,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         _gpuWarningShown = true;
         const warn = `[GPU] ${gpuInfo.name} (Compute ${gpuInfo.computeCap}) - CUDA 12 requires Compute 5.0+. Auto CPU mode.`;
         console.log(warn);
-        mainWindow.webContents.send('output-update', warn + '\n');
+        sendToRenderer('output-update', warn + '\n');
       }
 
       // whisper.cpp 실행 파일 경로
@@ -2118,7 +2116,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
             }
 
             const segment = segments[i];
-            mainWindow.webContents.send('output-update', `\n=== Processing segment ${i + 1}/${segments.length} ===\n`);
+            sendToRenderer('output-update', `\n=== Processing segment ${i + 1}/${segments.length} ===\n`);
 
             // 각 세그먼트에 대해 whisper.cpp 실행
             const segmentSrt = await processSegment(
@@ -2149,20 +2147,20 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
 
             // GPU 모드면 잠시 대기
             if (chosenDevice === 'cuda' && i < segments.length - 1) {
-              mainWindow.webContents.send('output-update', `Cleaning memory before next segment...\n`);
+              sendToRenderer('output-update', `Cleaning memory before next segment...\n`);
               await new Promise((r) => setTimeout(r, 5000));
             }
           }
 
           // SRT 합치기
-          mainWindow.webContents.send('output-update', `\nMerging ${segments.length} subtitle segments...\n`);
+          sendToRenderer('output-update', `\nMerging ${segments.length} subtitle segments...\n`);
           const mergedSrt = mergeSrtFiles(srtContents, startTimes);
 
           // 최종 SRT 파일 저장 (확장자 없는 입력도 원본을 덮어쓰지 않게)
           const originalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
           fs.writeFileSync(originalSrtPath, mergedSrt, 'utf-8');
           console.log(`[Split] Merged SRT saved: ${originalSrtPath}`);
-          mainWindow.webContents.send('output-update', `Subtitle merge completed!\n`);
+          sendToRenderer('output-update', `Subtitle merge completed!\n`);
 
           // WAV 임시 파일 정리 (재사용된 형제 WAV는 삭제하지 않는다 — F3)
           if (wavPath !== filePath && !wavReused && fs.existsSync(wavPath)) {
@@ -2177,7 +2175,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         } catch (segErr) {
           // 분할 처리 실패 시 원본 방식으로 재시도
           console.error('[Split] Segmented processing failed:', segErr.message);
-          mainWindow.webContents.send('output-update', `Segmented processing failed, trying standard method...\n`);
+          sendToRenderer('output-update', `Segmented processing failed, trying standard method...\n`);
           // 세그먼트 임시 파일 정리
           for (const seg of segments) {
             if (!seg.isOriginal && fs.existsSync(seg.path)) {
@@ -2197,19 +2195,14 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
       const originalSrtPath = srtOutputOverride || srtOutputPathFor(filePath);
       let srtPath, outputBase;
 
-      if (usingSafeTemp) {
-        // Safe temp 경로에 SRT 생성
+      {
+        // Always isolate native output, including GPU retries and ASCII input paths.
         const safeTempDir = getSafeTempDir();
-        const tempBaseName = `whisper_${Date.now()}`;
+        const tempBaseName = `whisper_${randomUUID()}`;
         outputBase = path.join(safeTempDir, tempBaseName);
         srtPath = outputBase + '.srt';
         console.log(`[Unicode] SRT will be generated at: ${srtPath}`);
         console.log(`[Unicode] Will copy to: ${originalSrtPath}`);
-      } else {
-        // 원본 경로가 ASCII면 직접 생성
-        srtPath = originalSrtPath;
-        // 충돌 오버라이드가 있으면 whisper -of 베이스도 오버라이드 기준으로 맞춘다
-        outputBase = srtOutputOverride ? withoutExt(srtOutputOverride) : withoutExt(filePath);
       }
 
       // whisper.cpp 인자 구성
@@ -2249,13 +2242,13 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
       }
 
       if (chosenDevice === 'cuda') {
-        mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CUDA, flash-attn)...\n');
+        sendToRenderer('output-update', 'Starting extraction with whisper.cpp (CUDA, flash-attn)...\n');
         console.log('[GPU Config] whisper.cpp with CUDA acceleration');
       } else if (chosenDevice === 'vulkan') {
-        mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (Vulkan)...\n');
+        sendToRenderer('output-update', 'Starting extraction with whisper.cpp (Vulkan)...\n');
         console.log('[GPU Config] whisper.cpp with Vulkan acceleration');
       } else {
-        mainWindow.webContents.send('output-update', 'Starting extraction with whisper.cpp (CPU mode)...\n');
+        sendToRenderer('output-update', 'Starting extraction with whisper.cpp (CPU mode)...\n');
       }
 
       const mainSpawnEnv = getWhisperSpawnEnv(chosenDevice, exeCwd);
@@ -2266,9 +2259,10 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         cwd: exeCwd,
         ...(mainSpawnEnv ? { env: mainSpawnEnv } : {}),
       });
-      if (currentProcess?.pid) childProcessIds.add(currentProcess.pid);
-      currentProcess.once('close', () => childProcessIds.delete(currentProcess.pid));
-      currentProcess.once('error', () => childProcessIds.delete(currentProcess.pid));
+      const spawnedProcess = currentProcess;
+      if (spawnedProcess?.pid) childProcessIds.add(spawnedProcess.pid);
+      spawnedProcess.once('close', () => childProcessIds.delete(spawnedProcess.pid));
+      spawnedProcess.once('error', () => childProcessIds.delete(spawnedProcess.pid));
 
       // Process timeout handling — 실제 미디어 길이 × 실시간 계수로 스케일링
       // (기존 30분 고정은 CPU+large 모델이 걸린 작업을 무조건 죽이던 문제가 있었다)
@@ -2282,9 +2276,10 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         }
       }, processTimeoutMs);
 
-      currentProcess.stdout.on('data', (data) => {
-        const output = data.toString('utf8');
-        mainWindow.webContents.send('output-update', output);
+      // stdout 청크는 자막 중간이나 UTF-8 문자 중간에서 끊길 수 있다.
+      // 완성된 줄만 전달해야 자막 뒷부분이 상태 메시지로 잘못 번역되지 않는다.
+      readline.createInterface({ input: currentProcess.stdout, crlfDelay: Infinity }).on('line', (line) => {
+        sendToRenderer('output-update', line + '\n');
       });
 
       currentProcess.stderr.on('data', (data) => {
@@ -2297,10 +2292,10 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         if (!cleaned.trim()) return; // 진행률 라인만 있던 청크는 로그에 미표시
         // whisper.cpp는 모델 로딩 정보를 stderr로 출력
         if (cleaned.includes('error') || cleaned.includes('Error') || cleaned.includes('failed')) {
-          mainWindow.webContents.send('output-update', '[ERROR] ' + cleaned);
+          sendToRenderer('output-update', '[ERROR] ' + cleaned);
         } else {
           // 모델 정보 등 일반 stderr 출력
-          mainWindow.webContents.send('output-update', cleaned);
+          sendToRenderer('output-update', cleaned);
         }
       });
 
@@ -2314,7 +2309,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         let srtExists = fs.existsSync(srtPath);
 
         // 토큰 끝시각 기반 끝 트림(VAD 늘어짐). 텍스트 위치는 안 바꿈. wav 삭제 전.
-        if (srtExists) {
+        if (code === 0 && srtExists) {
           applyTokenTightTiming(outputBase, srtPath);
         }
 
@@ -2337,10 +2332,10 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
         // 완전히 비어 있는 경우만 무음 정상 종료로 허용한다.
         const srtComplete = srtExists && isCompleteSrt(srtPath);
         const srtEmpty = !srtExists || !fs.readFileSync(srtPath, 'utf8').trim();
-        if ((code === 0 && (srtEmpty || srtComplete)) || srtComplete) {
+        if (code === 0 && !timedOut && (srtEmpty || srtComplete)) {
           if (code === 0 && srtEmpty) {
             console.warn(`[WARN] ${path.basename(filePath)} exited 0 with empty SRT (silent video?)`);
-            mainWindow.webContents.send(
+            sendToRenderer(
               'output-update',
               `[Warning] Subtitle file is empty (no speech detected in this video/audio).\n`
             );
@@ -2360,7 +2355,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
           let finalSrtPath = srtPath;
 
           // 유니코드 경로면 temp에서 원본 위치로 복사
-          if (usingSafeTemp && srtExists) {
+          if (srtExists && srtPath !== originalSrtPath) {
             try {
               fs.copyFileSync(srtPath, originalSrtPath);
               console.log(`[Unicode] Copied SRT to original location: ${originalSrtPath}`);
@@ -2373,7 +2368,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
             } catch (copyErr) {
               console.log(`[Unicode] Failed to copy SRT: ${copyErr.message}`);
               // 복사 실패해도 temp에 있는 SRT는 유효
-              mainWindow.webContents.send('output-update', `[Warning] SRT created at temp location: ${srtPath}\n`);
+              sendToRenderer('output-update', `[Warning] SRT created at temp location: ${srtPath}\n`);
             }
           }
 
@@ -2520,7 +2515,7 @@ function extractSingleFileOnce(filePath, model, language, device, srtOutputOverr
                 '   - Restart the app',
               ];
 
-          mainWindow.webContents.send(
+          sendToRenderer(
             'output-update',
             '\n' +
               '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
@@ -2571,11 +2566,11 @@ async function extractSingleFile(filePath, model, language, device, srtOutputOve
   // 장치가 넘어가므로 그쪽의 auto/cuda 비교 분기는 절대 참이 되지 않는다.
   const first = candidates[0];
   if (requested === 'auto') {
-    mainWindow?.webContents?.send('output-update', `Auto device: using ${first.toUpperCase()}\n`);
+    sendToRenderer('output-update', `Auto device: using ${first.toUpperCase()}\n`);
   } else if (first === 'vulkan') {
-    mainWindow?.webContents?.send('output-update', 'CUDA unavailable, using Vulkan GPU\n');
+    sendToRenderer('output-update', 'CUDA unavailable, using Vulkan GPU\n');
   } else if (first === 'cpu') {
-    mainWindow?.webContents?.send('output-update', 'GPU not available, falling back to CPU\n');
+    sendToRenderer('output-update', 'GPU not available, falling back to CPU\n');
   }
 
   let lastError = null;
@@ -2590,7 +2585,7 @@ async function extractSingleFile(filePath, model, language, device, srtOutputOve
       if (!next) throw error;
       const message = `${candidate.toUpperCase()} run failed, falling back to ${next.toUpperCase()}...\n`;
       console.warn(`[Whisper] ${message.trim()} ${error.message}`);
-      mainWindow?.webContents?.send('output-update', message);
+      sendToRenderer('output-update', message);
       await forceMemoryCleanup(candidate, true);
     }
   }
@@ -2599,9 +2594,27 @@ async function extractSingleFile(filePath, model, language, device, srtOutputOve
 
 // IPC Handler for processing one or more files sequentially
 
+// 종료 중 도착한 출력/진행률은 버린다. 알림 실패가 작업 Promise를 끊으면 안 된다.
+function sendToRenderer(channel, payload) {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const contents = mainWindow.webContents;
+    if (!contents.isDestroyed()) contents.send(channel, payload);
+  } catch (_error) {
+    // 창 종료와 전송이 겹쳐도 작업의 완료/오류 처리는 계속한다.
+  }
+}
+
 function setMainWindow(window) {
   mainWindow = window;
   translator.setMainWindow(window);
+  // 로컬 번역 엔진도 진행 로그를 보낼 창이 필요하다. 순환 참조를 피하려고
+  // 여기서 지연 로드한다(local-translator는 transcription을 require하지 않는다).
+  try {
+    require('./local-translator').setMainWindow(window);
+  } catch (_e) {
+    /* 창 연결 실패는 번역을 막지 않는다 */
+  }
 }
 
 function configureExtraction(payload = {}) {
@@ -2667,14 +2680,14 @@ async function downloadModel(modelName) {
     const partialPath = targetPath + '.partial';
     downloadsCancelled = false;
     const emitProgress = (percent, received, total) => {
-      mainWindow?.webContents?.send('output-update', `${path.basename(partialPath)} ${percent}%\n`);
-      mainWindow?.webContents?.send('whisper-model-progress', { modelName, percent, received, total });
+      sendToRenderer('output-update', `${path.basename(partialPath)} ${percent}%\n`);
+      sendToRenderer('whisper-model-progress', { modelName, percent, received, total });
     };
     if (fs.existsSync(targetPath) && hasExpectedSize(targetPath, manifest)) {
-      mainWindow?.webContents?.send('output-update', `Model already prepared: ${modelName}\n`);
+      sendToRenderer('output-update', `Model already prepared: ${modelName}\n`);
       return { success: true };
     }
-    mainWindow?.webContents?.send('output-update', `Starting GGML model download: ${modelName}\n`);
+    sendToRenderer('output-update', `Starting GGML model download: ${modelName}\n`);
     await downloadVerifiedFile({
       axios,
       assertDownloadDiskSpace,
@@ -2688,7 +2701,7 @@ async function downloadModel(modelName) {
       onProgress: emitProgress,
     });
     fs.renameSync(partialPath, targetPath);
-    mainWindow?.webContents?.send('output-update', `GGML Model download completed: ${modelName}\n`);
+    sendToRenderer('output-update', `GGML Model download completed: ${modelName}\n`);
     return { success: true };
   } catch (error) {
     const cancelled =
@@ -2696,14 +2709,14 @@ async function downloadModel(modelName) {
       error?.name === 'CanceledError' ||
       String(error?.name || '').includes('AbortError');
     if (cancelled) return { success: false, error: 'cancelled' };
-    mainWindow?.webContents?.send('output-update', `[ERROR] Model download failed: ${error.message}\n`);
+    sendToRenderer('output-update', `[ERROR] Model download failed: ${error.message}\n`);
     return { success: false, error: error.message };
   }
 }
 
 async function downloadSyncEngine() {
   const emit = (percent) =>
-    mainWindow?.webContents?.send('whisper-model-progress', {
+    sendToRenderer('whisper-model-progress', {
       modelName: SYNC_ENGINE_MODEL_ID,
       percent: Math.max(0, Math.min(100, Math.round(percent))),
     });
@@ -2767,5 +2780,4 @@ module.exports = {
   stop,
   terminateCurrentProcess,
   translator,
-  withoutExt,
 };

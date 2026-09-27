@@ -3,7 +3,7 @@ const C = require('../../shared/ipc-channels');
 const localTranslator = require('../services/local-translator');
 const { openPathSafely } = require('./files');
 
-let localDownloadAbort = null;
+const localDownloadAborts = new Map();
 let getMainWindow = () => null;
 
 function registerModelHandlers(ipcMain, transcription, mainWindowProvider) {
@@ -49,11 +49,16 @@ function registerModelHandlers(ipcMain, transcription, mainWindowProvider) {
   ipcMain.handle(C.LOCAL_MODEL_DOWNLOAD, async (event, modelId) => {
     const id = modelId || localTranslator.DEFAULT_MODEL_ID;
     if (localTranslator.isModelInstalled(id)) return { success: true, alreadyInstalled: true };
-    localDownloadAbort = new AbortController();
+    if (localDownloadAborts.has(id)) return { success: false, error: 'Download already in progress' };
+    const controller = new AbortController();
+    localDownloadAborts.set(id, controller);
     try {
       await localTranslator.downloadModel(
-        (progress) => event.sender.send(C.LOCAL_MODEL_PROGRESS, progress),
-        localDownloadAbort.signal,
+        // 이미 닫힌 창에는 진행률을 보내지 않는다. 앱 종료 시 취소는 별도 처리한다.
+        (progress) => {
+          if (!event.sender.isDestroyed()) event.sender.send(C.LOCAL_MODEL_PROGRESS, progress);
+        },
+        controller.signal,
         id
       );
       return { success: true };
@@ -63,12 +68,12 @@ function registerModelHandlers(ipcMain, transcription, mainWindowProvider) {
         ? { success: false, error: 'cancelled', userStopped: true }
         : { success: false, error: error.message };
     } finally {
-      localDownloadAbort = null;
+      localDownloadAborts.delete(id);
     }
   });
-  ipcMain.handle(C.LOCAL_MODEL_CANCEL, () => {
-    localDownloadAbort?.abort(new Error('cancelled'));
-    localDownloadAbort = null;
+  ipcMain.handle(C.LOCAL_MODEL_CANCEL, (_event, modelId) => {
+    const controllers = modelId ? [localDownloadAborts.get(modelId)] : localDownloadAborts.values();
+    for (const controller of controllers) controller?.abort(new Error('cancelled'));
     return true;
   });
   ipcMain.handle(C.LOCAL_MODEL_DELETE, async (_event, modelId) => {
@@ -79,8 +84,7 @@ function registerModelHandlers(ipcMain, transcription, mainWindowProvider) {
 }
 
 async function cleanupModels() {
-  localDownloadAbort?.abort();
-  localDownloadAbort = null;
+  for (const controller of localDownloadAborts.values()) controller.abort();
   await Promise.race([
     localTranslator.unloadModel().catch(() => {}),
     new Promise((resolve) => setTimeout(resolve, 15000)),

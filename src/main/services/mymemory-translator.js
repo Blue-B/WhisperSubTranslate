@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { setTimeout: delay } = require('timers/promises');
 
 // Free translation via MyMemory API (≈50K chars/day/IP)
 class MyMemoryTranslator {
@@ -21,10 +22,11 @@ class MyMemoryTranslator {
     return randomTemplate;
   }
 
-  async translate(text, sourceLang = 'auto', targetLang = 'ko') {
+  async translate(text, sourceLang = 'auto', targetLang = 'ko', signal = undefined) {
     let attempts = 0;
 
     while (attempts < this.maxRetries) {
+      signal?.throwIfAborted();
       try {
         const email = this.generateEmail();
         console.log(`[MyMemory] Attempt ${attempts + 1}/${this.maxRetries}: ${email.substring(0, 10)}...`);
@@ -39,7 +41,8 @@ class MyMemoryTranslator {
           de: email,
         };
 
-        const response = await axios.get(this.apiUrl, { params, timeout: 30000 });
+        const response = await axios.get(this.apiUrl, { params, timeout: 30000, signal });
+        signal?.throwIfAborted();
 
         if (response.data && response.data.responseData) {
           const translatedText = response.data.responseData.translatedText;
@@ -68,7 +71,7 @@ class MyMemoryTranslator {
             console.log('[MyMemory] Quota exceeded (403), trying next email...');
             this.emailIndex++;
             attempts++;
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            await delay(1000, undefined, { signal });
             continue;
           }
           if (status !== 200) {
@@ -105,12 +108,13 @@ class MyMemoryTranslator {
           this.emailIndex++;
           attempts++;
           // 403 로테이션도 1초 지연: 무한 스핀 방지
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await delay(1000, undefined, { signal });
           continue;
         } else {
           throw new Error('Unable to get translation result');
         }
       } catch (error) {
+        signal?.throwIfAborted();
         // 영구 오류(입력/설정 문제)는 재시도해도 성공할 수 없으므로 즉시 전파한다.
         if (String(error?.message || '').includes('permanent, not retried')) {
           throw error;
@@ -140,7 +144,7 @@ class MyMemoryTranslator {
         }
 
         // Wait briefly then retry
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await delay(1000, undefined, { signal });
       }
     }
 

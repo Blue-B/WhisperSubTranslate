@@ -2,124 +2,76 @@ const path = require('path');
 const fs = require('fs');
 const C = require('../../shared/ipc-channels');
 const { applySrtCleanup, wrapCuesForDisplay } = require('../services/srt-cleanup');
+const { outputDestination, writeFileAtomic } = require('../services/file-safety');
 
 function registerTranscriptionHandlers(ipcMain, transcription) {
   ipcMain.handle(C.EXTRACT_SUBTITLES, async (event, payload = {}) => {
-    const { filePaths, filePath, model, language, device, cleanup } = payload;
+    const { filePaths, filePath, model, language, device, cleanup, outputOptions } = payload;
     const filesToProcess = filePaths || (filePath ? [filePath] : []);
     if (!filesToProcess.length) return { success: true, results: [] };
-
     transcription.configureExtraction(payload);
     transcription.resetStop();
-    let successCount = 0;
-    let failCount = 0;
+    const send = (channel, message) => {
+      if (!event.sender.isDestroyed()) event.sender.send(channel, message);
+    };
+    const results = [];
+    const failures = [];
     let userStopped = false;
-    const successDetails = [];
-    const failureDetails = [];
-    const usedSrtBases = new Set();
-
-    for (let i = 0; i < filesToProcess.length; i++) {
-      const currentFile = filesToProcess[i];
-      if (!currentFile) continue;
+    for (const currentFile of filesToProcess) {
       if (transcription.isStopped()) {
         userStopped = true;
         break;
       }
-
-      const normalSrt = transcription.srtOutputPathFor(currentFile);
-      let srtOutputOverride = null;
-      if (usedSrtBases.has(normalSrt)) {
-        const srcExt = path.extname(currentFile);
-        srtOutputOverride = `${transcription.withoutExt(currentFile)}${srcExt}.srt`;
-        event.sender.send(
-          C.OUTPUT_UPDATE,
-          `[Collision] ${path.basename(normalSrt)} already used by an earlier file — saving as ${path.basename(srtOutputOverride)}\n`
-        );
-        usedSrtBases.add(srtOutputOverride);
-      } else {
-        usedSrtBases.add(normalSrt);
-      }
-
+      let staging;
       try {
-        const srtPath = await transcription.extractSingleFile(currentFile, model, language, device, srtOutputOverride);
-        if (cleanup && (cleanup.removeSpeakerTags || cleanup.removeSDH)) {
-          try {
-            const raw = fs.readFileSync(srtPath, 'utf-8');
-            const cleaned = applySrtCleanup(raw, cleanup);
-            if (!cleaned.trim() && raw.trim()) {
-              event.sender.send(C.OUTPUT_UPDATE, 'Output cleanup skipped (would remove all lines).\n');
-            } else if (cleaned !== raw) {
-              fs.writeFileSync(srtPath, cleaned, 'utf-8');
-              const applied = [cleanup.removeSpeakerTags ? 'speaker tags' : null, cleanup.removeSDH ? 'SDH tags' : null]
-                .filter(Boolean)
-                .join(', ');
-              event.sender.send(C.OUTPUT_UPDATE, `Output cleanup applied (${applied}).\n`);
-            }
-          } catch (error) {
-            console.warn('[Cleanup] SRT cleanup failed:', error.message);
-          }
+        const destination = outputDestination(currentFile, outputOptions);
+        if (destination.policy === 'skip' && fs.existsSync(destination.path)) {
+          results.push({ source: currentFile, skipped: true });
+          continue;
         }
-        try {
-          const raw = fs.readFileSync(srtPath, 'utf-8');
-          const wrapped = wrapCuesForDisplay(raw);
-          if (wrapped && wrapped !== raw) fs.writeFileSync(srtPath, wrapped, 'utf-8');
-        } catch (error) {
-          console.warn('[Wrap] display wrap failed:', error.message);
-        }
-
-        successCount++;
-        successDetails.push({ source: currentFile, srtPath });
-        event.sender.send(
-          C.OUTPUT_UPDATE,
-          `[${i + 1}/${filesToProcess.length}] Completed: ${path.basename(currentFile)}\n`
+        // Every invocation owns a fresh output directory. Old subtitles can never satisfy this run.
+        staging = fs.mkdtempSync(path.join(path.dirname(destination.path), '.wst-extract-'));
+        const srtPath = await transcription.extractSingleFile(
+          currentFile,
+          model,
+          language,
+          device,
+          path.join(staging, 'subtitle.srt')
         );
-        if (i < filesToProcess.length - 1) {
-          event.sender.send(C.OUTPUT_UPDATE, `Next file: ${path.basename(filesToProcess[i + 1])}\n`);
-          if (device === 'cuda') {
-            event.sender.send(C.OUTPUT_UPDATE, 'Cleaning GPU memory and preparing next file... (wait 10s)\n');
-            await new Promise((resolve) => setTimeout(resolve, 10000));
-            if (transcription.isStopped()) {
-              userStopped = true;
-              break;
-            }
-            event.sender.send(C.OUTPUT_UPDATE, 'Start next file!\n\n');
-          }
+        const raw = fs.readFileSync(srtPath, 'utf8');
+        let content = raw;
+        if (cleanup && (cleanup.removeSpeakerTags || cleanup.removeSDH)) {
+          const cleaned = applySrtCleanup(raw, cleanup);
+          if (!cleaned.trim() && raw.trim())
+            send(C.OUTPUT_UPDATE, 'Output cleanup skipped (would remove all lines).\n');
+          else content = cleaned;
         }
+        content = wrapCuesForDisplay(content) || content;
+        if (transcription.isStopped()) throw new Error('Stopped by user');
+        const saved = writeFileAtomic(destination.path, content, destination.policy);
+        results.push({ source: currentFile, srtPath: saved, skipped: !saved });
+        if (saved) send(C.OUTPUT_UPDATE, `Completed: ${path.basename(currentFile)}\n`);
       } catch (error) {
         const message = error?.message || String(error);
-        const stopped = message === 'Stopped by user';
-        if (!stopped) failCount++;
-        failureDetails.push({ source: currentFile, error: message, userStopped: stopped });
-        if (stopped) {
-          userStopped = true;
-          break;
-        }
-        if (i < filesToProcess.length - 1 && !transcription.isStopped()) {
-          event.sender.send(C.OUTPUT_UPDATE, `Next file: ${path.basename(filesToProcess[i + 1])}\n`);
-          if (device === 'cuda') {
-            event.sender.send(C.OUTPUT_UPDATE, 'Recovering and preparing next file... (wait 10s)\n');
-            await new Promise((resolve) => setTimeout(resolve, 10000));
-            if (transcription.isStopped()) {
-              userStopped = true;
-              break;
-            }
-            event.sender.send(C.OUTPUT_UPDATE, 'Start next file!\n\n');
-          }
-        }
+        userStopped = message === 'Stopped by user';
+        failures.push({ source: currentFile, error: message, userStopped });
+        if (userStopped) break;
+      } finally {
+        if (staging) fs.rmSync(staging, { recursive: true, force: true });
       }
     }
-
-    event.sender.send(C.OUTPUT_UPDATE, `\nExtraction stage finished (success: ${successCount}, failed: ${failCount})`);
-    const response = { success: failCount === 0 && !userStopped, results: successDetails };
-    if (successDetails.length === 1) response.srtFile = successDetails[0].srtPath;
-    if (failureDetails.length) {
-      response.failures = failureDetails;
-      if (failureDetails.length === 1) response.error = failureDetails[0].error;
-    }
-    if (userStopped) response.userStopped = true;
-    return response;
+    const successCount = results.filter((result) => !result.skipped).length;
+    send(C.OUTPUT_UPDATE, `\nExtraction stage finished (success: ${successCount}, failed: ${failures.length})`);
+    return {
+      success: failures.length === 0 && !userStopped,
+      results,
+      srtFile: results.length === 1 ? results[0].srtPath : undefined,
+      skipped: results.length > 0 && results.every((result) => result.skipped),
+      failures,
+      error: failures[0]?.error,
+      userStopped,
+    };
   });
-
   ipcMain.handle(C.STOP_CURRENT_PROCESS, async () => {
     transcription.stop();
     return { success: true };

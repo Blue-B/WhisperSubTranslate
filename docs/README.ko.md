@@ -15,7 +15,7 @@
 ## 주요 기능
 
 - 음성 인식이 100% 로컬에서 돌아갑니다. 영상이 PC를 벗어나지 않고 계정도 업로드도 없습니다.
-- Hy-MT2 모델을 처음 다운로드한 뒤 오프라인으로 번역하거나, 본인 키로 온라인 엔진(MyMemory, DeepL, OpenAI, Gemini)을 씁니다.
+- Hy-MT2 모델을 처음 다운로드한 뒤 오프라인으로 번역하거나, 본인 키로 온라인 엔진(MyMemory, DeepL, OpenAI, Gemini, Claude)을 씁니다.
 - 모델 자동 다운로드. 파이썬 설치나 수동 설정이 필요 없습니다.
 - 일반 모델로 싱크가 밀릴 때 쓰는 싱크 교정 모델(large-v2 싱크, 싱크 라이트)을 제공합니다.
 - 작업 큐, 실시간 진행률, 로컬 전용 작업 히스토리.
@@ -29,12 +29,12 @@
 ### 개발자
 
 ```bash
-npm install
+npm ci
 npm start
 ```
 
-- Node.js 22.12.0 이상 (`package.json`의 `engines` 참고, Electron 43 빌드 툴체인)
-- whisper.cpp는 `npm install` 때 자동으로 받습니다 (윈도우는 CUDA 빌드 약 700MB와 Vulkan 빌드 약 23MB)
+- Node.js 22.12.0 이상 (`package.json`의 `engines` 참고). 저장소의 잠금 파일을 사용합니다
+- 의존성 설치 시 whisper.cpp도 준비합니다 (Windows는 CUDA와 Vulkan 빌드). 디스크 공간을 수 GB 이상 확보하세요
 - FFmpeg는 npm으로 포함되며, 선택한 GGML 모델은 처음 쓸 때 받습니다
 
 애플리케이션 코드는 `src/main/`(Electron 메인 프로세스와 서비스), `src/preload/`(렌더러 브리지), `src/renderer/`(UI), `src/shared/`(공용 IPC 채널)로 구성됩니다.
@@ -43,18 +43,18 @@ npm start
 
 ```bash
 sudo apt install cmake build-essential git ffmpeg   # Ubuntu/Debian
-npm install   # whisper.cpp를 소스에서 빌드
+npm ci   # whisper.cpp를 소스에서 빌드
 npm start
 ```
 
-CUDA 가속이 필요하면 `npm install` 전에 NVIDIA CUDA Toolkit을 설치하세요. whisper.cpp 수동 빌드 방법은 [CONTRIBUTING.md](../CONTRIBUTING.md)에 있습니다.
+CUDA 가속이 필요하면 `npm ci` 전에 NVIDIA CUDA Toolkit을 설치하세요. whisper.cpp 수동 빌드 방법은 [CONTRIBUTING.md](../CONTRIBUTING.md)에 있습니다.
 
 - **Linux 키링**: API 키는 Electron safeStorage(libsecret)로 저장됩니다. 키링 데몬이 없는 환경(헤드리스 SSH 세션, 최소 데스크톱/WM)에서는 하드코딩된 키를 쓰는 기존 AES 방식으로 폴백되며, 앱은 명시적인 보안 경고를 기록하고 저장을 `insecure`로 표시합니다. 이 저장 방식은 **안전하지 않습니다**. 안전한 저장을 사용하려면 `gnome-keyring`을 설치하거나 키링이 실행되는 데스크톱 세션에서 앱을 실행하세요.
 
 ### Windows 빌드
 
 ```bash
-npm run build-win   # 결과물은 dist2/에 생성됩니다
+npm run build-win -- --publish never   # 결과물은 dist2/에 생성됩니다
 ```
 
 일반적인 Windows 의존성 설치를 위해서는 Windows에서 빌드하세요. Linux에서 교차 빌드하면 npm이 Windows 전용 선택적 패키지를 생략할 수 있습니다. 빌드 작업 공간에는 잠금 파일에 고정된 `@node-llama-cpp/win-x64`, `win-x64-cuda`, `win-x64-cuda-ext`, `win-x64-vulkan` 패키지와 각 패키지의 JS/JSON 메타데이터 및 네이티브 바이너리가 모두 있어야 합니다. 빌드 성공만으로는 로컬 번역 백엔드가 Windows에서 로드된다는 사실을 확인할 수 없습니다.
@@ -63,22 +63,24 @@ npm run build-win   # 결과물은 dist2/에 생성됩니다
 
 Tencent Hy-MT2 모델을 한 번 다운로드해 자막을 오프라인으로 번역하거나, 필요한 경우 API 키를 사용해 무료/유료 온라인 엔진을 씁니다.
 
-| 엔진                                          | 오프라인 | API 키 | 비용            | 비고                                                                      |
-| --------------------------------------------- | :------: | :----: | --------------- | ------------------------------------------------------------------------- |
-| Hy-MT2 1.8B (로컬, 기본)                      |    예    | 불필요 | 무료            | 약 1.13GB, VRAM 2GB / RAM 4GB, 온디바이스                                 |
-| Hy-MT2 7B (로컬)                              |    예    | 불필요 | 무료            | 약 6.16GB, VRAM 8GB / RAM 12GB, 더 큰 모델                                |
-| MyMemory                                      |  아니오  | 불필요 | 무료            | IP당 하루 약 5만 자                                                       |
-| DeepL                                         |  아니오  |  필요  | 요금제별 상이   | 신규 API Developer: 총 100만 자, 기존 API Free: 월 50만 자                 |
-| OpenAI GPT-5.x (설정 가능, 기본 gpt-5.6-sol)  |  아니오  |  필요  | 유료            | 기본 모델, 문맥 인식                                                      |
-| Gemini 3.x (설정 가능, 기본 gemini-3.6-flash) |  아니오  |  필요  | 무료 / 저비용   | 추천 저비용 경로 ([키 받기](https://aistudio.google.com/app/apikey))      |
-| Claude (설정 가능, 기본 claude-opus-5)        |  아니오  |  필요  | 유료            | 문맥 이해에 강함 ([키 받기](https://console.anthropic.com/settings/keys)) |
-| 커스텀 OpenAI 호환 공급자                     |  아니오  |  필요  | 상이            | 자체 엔드포인트 사용 (OpenRouter, Ollama, vLLM 등)                        |
+| 엔진                      | 오프라인 | API 키 | 비용          | 비고                                                                                       |
+| ------------------------- | :------: | :----: | ------------- | ------------------------------------------------------------------------------------------ |
+| Hy-MT2 1.8B (로컬, 기본)  |    예    | 불필요 | 무료          | 약 1.13GB, VRAM 2GB / RAM 4GB, 온디바이스                                                  |
+| Hy-MT2 7B (로컬)          |    예    | 불필요 | 무료          | 약 6.16GB, VRAM 8GB / RAM 12GB, 더 큰 모델                                                 |
+| MyMemory                  |  아니오  | 불필요 | 무료          | 일일 사용 한도 적용                                                                        |
+| DeepL                     |  아니오  |  필요  | 요금제별 상이 | 계정의 현재 API 한도 확인                                                                  |
+| OpenAI (모델 설정 가능)   |  아니오  |  필요  | 유료          | 설정에서 모델 선택 또는 직접 입력                                                          |
+| Gemini (모델 설정 가능)   |  아니오  |  필요  | 모델별 상이   | 계정별 한도 적용 ([키 받기](https://aistudio.google.com/app/apikey))                       |
+| Claude (모델 설정 가능)   |  아니오  |  필요  | 유료          | 설정에서 모델 선택 또는 직접 입력 ([키 받기](https://console.anthropic.com/settings/keys)) |
+| 커스텀 OpenAI 호환 공급자 |  아니오  |  필요  | 상이          | 자체 엔드포인트 사용 (OpenRouter, Ollama, vLLM 등)                                         |
 
 로컬 Hy-MT2 번역은 모델 다운로드 후 API 키나 네트워크 연결이 필요 없고, 사용당 비용도 없습니다. 이 엔진을 사용하면 자막 텍스트가 PC를 벗어나지 않습니다.
 
 Hy-MT2는 고정된 모델 리비전에서 다운로드되며, 설치 전에 정확한 파일 크기와 SHA-256 다이제스트를 확인합니다. 기존 모델도 로드 전에 해시를 확인하고, 앱 세션 중 변경되지 않은 파일은 성공한 검사 결과를 캐시합니다. 무결성 검사에 실패해도 기존 모델을 삭제하지 않습니다.
 
 로컬 번역은 GPU 백엔드를 자동으로 선택합니다. 백엔드 가용성에 따라 NVIDIA 하드웨어도 CUDA뿐 아니라 Vulkan을 사용할 수 있습니다. 이 선택은 whisper.cpp 음성 인식과 별개이며, CPU 모드도 사용할 수 있습니다.
+
+기본값인 **하나씩 번역**도 GPU를 사용할 수 있습니다. **자동 조절**은 직접 켜서 사용하는 실험 기능으로, 모델 전체가 CUDA GPU에 올라가고 메모리가 충분할 때 병렬 처리를 조절합니다. 특히 짧은 작업은 오히려 느려질 수 있습니다. 문제가 있으면 하나씩 번역을 선택하세요. 복구 가능한 병렬 준비 실패나 메모리 부족이 발생하면 같은 GPU에서 하나씩 재시도한다는 안내를 표시하고, 원인은 `errors.log`에 남깁니다. 장치 자동 선택의 CPU 재시도와는 별개이며, 재시도 성공을 보장하지는 않습니다.
 
 ### 번역 품질 (오프라인 엔진)
 
@@ -94,20 +96,20 @@ WhisperSubTranslate는 Tencent Hy-MT2 모델(기본 1.8B, 선택 7B) 다운로�
 
 모델은 필요할 때 `_models/`로 받아집니다. NVIDIA는 CUDA, Vulkan을 지원하는 다른 GPU(AMD, Intel)는 Vulkan, 둘 다 안 되면 CPU로 돌아갑니다. GPU에 맞는 크기를 고르세요.
 
-| 모델                  | 크기     | VRAM     | 속도      | 비고                           |
-| --------------------- | -------- | -------- | --------- | ------------------------------ |
-| tiny                  | 약 75MB  | 약 1GB   | 가장 빠름 | 기본                           |
-| base                  | 약 142MB | 약 1GB   | 빠름      | 양호                           |
-| small                 | 약 466MB | 약 1GB   | 보통      | 더 좋음                        |
-| medium                | 약 1.5GB | 약 2GB   | 보통      | 우수                           |
-| large-v3              | 약 3GB   | 약 4GB   | 느림      | 받아쓰기 최고                  |
-| large-v3-turbo (기본) | 약 809MB | 약 2GB   | 빠름      | 전반적으로 가장 무난           |
-| large-v2 싱크         | 약 4.4GB | 약 4.5GB | 느림      | 별도 엔진, 자막 싱크 교정      |
-| large-v2 싱크 라이트  | 공용     | 약 3GB   | 느림      | 싱크와 같은 파일, int8, 저VRAM |
+| 모델                  | 크기      | VRAM     | 속도      | 비고                           |
+| --------------------- | --------- | -------- | --------- | ------------------------------ |
+| tiny                  | 약 75MB   | 약 1GB   | 가장 빠름 | 기본                           |
+| base                  | 약 142MB  | 약 1GB   | 빠름      | 양호                           |
+| small                 | 약 466MB  | 약 1GB   | 보통      | 더 좋음                        |
+| medium                | 약 1.5GB  | 약 2GB   | 보통      | 우수                           |
+| large-v3              | 약 3GB    | 약 4GB   | 느림      | 받아쓰기 최고                  |
+| large-v3-turbo (기본) | 약 1.62GB | 약 2GB   | 빠름      | 전반적으로 가장 무난           |
+| large-v2 싱크         | 약 4.4GB  | 약 4.5GB | 느림      | 별도 엔진, 자막 싱크 교정      |
+| large-v2 싱크 라이트  | 공용      | 약 3GB   | 느림      | 싱크와 같은 파일, int8, 저VRAM |
 
 싱크와 싱크 라이트는 별도 Faster-Whisper 엔진(한 번 자동 다운로드; 엔진 아카이브 약 1.4GB + 모델 파일 약 3GB, 합계 약 4.4GB)을 쓰고 같은 모델 파일을 공유해서, 한 번 받으면 둘 다 쓸 수 있습니다. 일반 모델로 싱크가 밀릴 때만 쓰세요. 비영어 영상(일본어, 한국어, 중국어)에서 가장 정확하고, 영어는 보통 large-v3-turbo로 충분합니다.
 
-whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 약 10GB)보다 훨씬 적습니다. 싱크 모델 수치는 Faster-Whisper 벤치마크 기준입니다.
+크기와 메모리 요구량은 대략적인 값입니다. 실제 RAM과 VRAM 사용량은 백엔드, 모델과 설정에 따라 달라지며, 다운로드 크기와 실행 중 메모리 사용량은 다릅니다.
 
 ## 언어 지원
 
@@ -117,7 +119,7 @@ whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 
 
 ## 데이터 저장
 
-모든 데이터는 사용자 폴더에 로컬로만 저장되고 업로드되지 않습니다.
+설정, 모델 파일, 로그와 작업 이력은 로컬에 저장합니다. 온라인 번역을 사용하면 자막 텍스트를 선택한 서비스로 보내며, 로컬 Hy-MT2 번역은 보내지 않습니다.
 
 | 데이터         | 위치                                                                                                                                      |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -126,11 +128,15 @@ whisper.cpp 모델의 VRAM은 GGML 최적화 기준이라 PyTorch Whisper(large 
 | 에러 로그      | `%APPDATA%\whispersubtranslate\logs\errors.log`                                                                                           |
 | 모델           | `%APPDATA%\whispersubtranslate\_models` (사용자 데이터 폴더; 비ASCII Windows 계정은 `C:\Users\Public\WhisperSubTranslate\_models`로 폴백) |
 
-API 키는 OS 보안 저장소로 로컬에 저장되고, 설정 파일은 깃에 올라가거나 빌드에 포함되지 않습니다. 작업 히스토리는 선택이고(설정에서 토글) 최대 200개까지 보관됩니다.
+로컬 번역 모델은 `%APPDATA%\whispersubtranslate\hy-mt-models`에 저장합니다. 위 경로는 Windows 기본값이며, 포터블 모드에서는 사용자 데이터 폴더가 달라집니다.
+
+설정의 **진단 정보 복사**는 API 키, 경로와 자막 내용을 제외합니다. **오류 로그 위치 열기**는 포터블 모드를 포함한 실제 로그 위치를 보여 줍니다. 오류 로그가 없으면 빈 파일을 만들지 않고 폴더만 엽니다. 원본 로그를 공유하기 전에는 개인 경로나 내용이 들어 있는지 확인하세요.
+
+API 키는 사용 가능한 경우 OS 보안 저장소를 이용합니다 (위 Linux 키링 주의사항 참고). 설정 파일을 Git에 올리거나 배포물에 포함하지 마세요. 작업 히스토리는 선택이고(설정에서 토글) 최대 200개까지 보관됩니다.
 
 ### 포터블 데이터 구성
 
-기본적으로 모델·캐시·설정은 `%APPDATA%`(시스템 SSD)에 저장됩니다. USB나 외장 드라이브에 모두 두고 싶다면 실행 파일 옆에 `portable-data/` 폴더를 만들거나(또는 `WHISPER_PORTABLE_DATA` 환경 변수를 폴더 경로로 설정) 앱이 `userData`를 그곳으로 리다이렉션합니다.
+기본적으로 모델, 캐시와 설정은 `%APPDATA%`(시스템 SSD)에 저장됩니다. USB나 외장 드라이브에 모두 두고 싶다면 실행 파일 옆에 `portable-data/` 폴더를 만들거나(또는 `WHISPER_PORTABLE_DATA` 환경 변수를 폴더 경로로 설정) 앱이 `userData`를 그곳으로 리다이렉션합니다.
 
 ## 기여
 

@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./file-safety');
 
 let electronApp = null;
 let electronSafeStorage = null;
@@ -112,7 +113,7 @@ function migratePlaintextConfig() {
       const plainConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const encryptedData = encryptData(JSON.stringify(plainConfig));
       if (encryptedData) {
-        fs.writeFileSync(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
+        writeFileAtomic(encryptedConfigPath, JSON.stringify({ data: encryptedData }));
         console.log('[Migration] Removing plaintext config after successful migration');
         try {
           fs.rmSync(configPath, { force: true });
@@ -155,7 +156,7 @@ function loadConfig(hydrate, getDefault) {
           try {
             const reencrypted = safeStorageEncryptJson(JSON.stringify(hydrated));
             if (reencrypted) {
-              fs.writeFileSync(safePath, JSON.stringify({ data: reencrypted }));
+              writeFileAtomic(safePath, JSON.stringify({ data: reencrypted }));
               try {
                 fs.rmSync(encryptedConfigPath, { force: true });
               } catch (_error) {
@@ -186,7 +187,7 @@ function saveConfig(keys, hydrate, getDefault) {
     if (safeStorageAvailable()) {
       const encryptedSafe = safeStorageEncryptJson(json);
       if (encryptedSafe) {
-        fs.writeFileSync(getSafeStorageConfigPath(), JSON.stringify({ data: encryptedSafe }));
+        writeFileAtomic(getSafeStorageConfigPath(), JSON.stringify({ data: encryptedSafe }));
         console.log('[Config] API keys saved via Electron safeStorage');
         return { result: true, config: loadConfig(hydrate, getDefault) };
       }
@@ -200,7 +201,7 @@ function saveConfig(keys, hydrate, getDefault) {
     );
     const encryptedData = encryptData(json);
     if (!encryptedData) throw new Error('Encryption failed');
-    fs.writeFileSync(getEncryptedConfigPath(), JSON.stringify({ data: encryptedData }));
+    writeFileAtomic(getEncryptedConfigPath(), JSON.stringify({ data: encryptedData }));
     console.warn('[Config] API keys saved via legacy AES fallback (INSECURE - hardcoded key)');
     return { result: { success: true, insecure: true }, config: loadConfig(hydrate, getDefault) };
   } catch (error) {

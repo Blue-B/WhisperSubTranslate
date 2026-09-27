@@ -113,11 +113,10 @@ window.deleteHistoryItem = deleteHistoryItem;
 
 function saveFileToHistory(file, errorMsg) {
   if (!file || !file.path) return;
-  if (file._historySaved) return;
   if (!isHistoryEnabled()) return; // 설정에서 OFF 면 기록 건너뜀
-  file._historySaved = true;
   try {
     const list = loadHistory();
+    file._historyTs ||= Math.max(Date.now(), ...list.map((item) => (Number(item.ts) || 0) + 1));
     const fileName = file.path.split(/[\\/]/).pop();
     const entry = {
       name: fileName,
@@ -126,11 +125,21 @@ function saveFileToHistory(file, errorMsg) {
       //   - SRT 단독 번역 완료: 따로 저장한 번역 결과(_ko.srt)를 열어야 함
       path: file.outputPath || file.path,
       sourcePath: file.path, // 원본 경로 (부가 정보)
-      status: file.status === 'completed' ? 'success' : 'failed',
-      ts: Date.now(),
+      status: file.partial
+        ? 'partial'
+        : file.status === 'completed'
+          ? 'success'
+          : file.status === 'skipped'
+            ? 'skipped'
+            : 'failed',
+      failedLangs: file.failedLangs || [],
+      outputPaths: file.outputPaths || [],
+      ts: file._historyTs,
       error: errorMsg || undefined,
     };
-    list.unshift(entry);
+    const index = list.findIndex((item) => item.ts === file._historyTs);
+    if (index >= 0) list[index] = entry;
+    else list.unshift(entry);
     saveHistoryList(list);
   } catch (e) {
     console.warn('[History] save failed:', e?.message);
@@ -168,7 +177,7 @@ function renderHistory(filter) {
   };
   setNum('statTotalFiles', list.length);
   setNum('statSuccess', list.filter((x) => x.status === 'success').length);
-  setNum('statFailed', list.filter((x) => x.status === 'failed').length);
+  setNum('statFailed', list.filter((x) => x.status === 'failed' || x.status === 'partial').length);
   const weekAgo = Date.now() - 7 * 86400000;
   setNum('statThisWeek', list.filter((x) => x.ts >= weekAgo).length);
 
@@ -198,9 +207,9 @@ function renderHistory(filter) {
       .map(
         (it) => `
     <div class="history-item">
-      <span class="history-item-status ${it.status === 'success' ? 'success' : 'failed'}" title="${it.status}"></span>
+      <span class="history-item-status ${it.status === 'success' ? 'success' : 'failed'}" title="${_esc(it.status === 'partial' ? d.qPartial : it.status)}"></span>
       <span class="history-item-name" title="${_esc(it.path || it.name)}">${_esc(it.name || '')}</span>
-      <span class="history-item-meta">${timeAgo(it.ts)}</span>
+      <span class="history-item-meta">${it.status === 'partial' ? _esc(d.qPartial) + ' ' : ''}${timeAgo(it.ts)}</span>
       <span class="history-item-actions">
         <button class="history-item-btn" data-hist-open="${_esc(it.path || '')}">${d.histOpen || 'Open'}</button>
         <button class="history-item-btn" data-hist-folder="${_esc(it.path || '')}">${d.histFolder || 'Folder'}</button>

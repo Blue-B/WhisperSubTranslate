@@ -98,16 +98,19 @@ async function run() {
 
     const priorText = fs.readFileSync(safeFile, 'utf8');
     config = loadConfigModule(safeDir, fakeSafeStorage);
-    const originalWrite = fs.writeFileSync;
-    fs.writeFileSync = (file, ...args) => {
-      if (file === safeFile) throw new Error('simulated write failure');
-      return originalWrite(file, ...args);
-    };
-    try {
-      saved = config.saveConfig({ apiKey: 'replacement' }, hydrate, defaults);
-      assert.strictEqual(saved.result, false);
-    } finally {
-      fs.writeFileSync = originalWrite;
+    for (const operation of ['writeFileSync', 'renameSync']) {
+      const original = fs[operation];
+      fs[operation] = (file, ...args) => {
+        if (path.dirname(file) === safeDir) throw new Error(`simulated ${operation} failure`);
+        return original(file, ...args);
+      };
+      try {
+        saved = config.saveConfig({ apiKey: 'replacement' }, hydrate, defaults);
+        assert.strictEqual(saved.result, false);
+      } finally {
+        fs[operation] = original;
+      }
+      assert.deepStrictEqual(fs.readdirSync(safeDir), ['translation-config-safe.json'], 'no staging file leak');
     }
     assert.strictEqual(fs.readFileSync(safeFile, 'utf8'), priorText, 'failed save must not destroy prior config');
     assert.strictEqual(config.loadConfig(hydrate, defaults).apiKey, 'fake-key');

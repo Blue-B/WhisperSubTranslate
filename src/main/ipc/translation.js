@@ -1,103 +1,125 @@
-const path = require('path');
+const fs = require('fs');
 const C = require('../../shared/ipc-channels');
-
+const { outputDestination } = require('../services/file-safety');
 const TARGET_LANG_RE = /^[a-z]{2,8}$/i;
 
 function registerTranslationHandlers(ipcMain, translator) {
-  ipcMain.handle(
-    C.TRANSLATE_SUBTITLE,
-    async (event, { filePath, method, targetLang, targetLangs, sourceLang, device, localModelId, sessionId }) => {
-      const outputPaths = [];
-      const failedLangs = [];
-      try {
-        translator.resetAbort();
-        const fileName = path.basename(filePath, path.extname(filePath));
-        const fileDir = path.dirname(filePath);
-        let langs = (Array.isArray(targetLangs) && targetLangs.length ? targetLangs : [targetLang])
-          .map((lang) => (typeof lang === 'string' ? lang.trim() : ''))
-          .filter(Boolean);
-        langs = [...new Set(langs.length ? langs : ['ko'])];
-        const invalidLangs = langs.filter((lang) => !TARGET_LANG_RE.test(lang));
-        if (invalidLangs.length) throw new Error(`Invalid target language code: ${invalidLangs.join(', ')}`);
+  // Finish cancellation before resetting the shared translator for an immediate retry.
+  let pending = Promise.resolve();
+  ipcMain.handle(C.TRANSLATE_SUBTITLE, (event, payload) => {
+    const epoch = translator._abortEpoch || 0;
+    const job = pending.then(() => translate(event, payload, epoch));
+    pending = job.catch(() => {});
+    return job;
+  });
 
-        translator.setCurrentFile(filePath);
-        translator.localDevice = device === 'cpu' ? 'cpu' : 'auto';
-        translator.localModelId = localModelId || '1.8b';
-        event.sender.send(C.TRANSLATION_PROGRESS, { stage: 'starting', sessionId });
-
-        for (let index = 0; index < langs.length; index++) {
-          const lang = langs[index];
-          if (translator._aborted) throw new Error('ABORTED: Translation stopped by user');
-          const outputPath = path.join(fileDir, `${fileName}_${lang}.srt`);
-          try {
-            const result = await translator.translateSRTFile(
-              filePath,
-              outputPath,
-              method,
-              lang,
-              (progress) => {
-                const within = progress?.total ? progress.current / progress.total : 0;
-                event.sender.send(C.TRANSLATION_PROGRESS, {
-                  stage: progress?.stage || 'translating',
-                  current: progress?.current,
-                  total: progress?.total,
-                  progress: Math.round(((index + within) / langs.length) * 100),
-                  currentText: progress?.text,
-                  lang,
-                  langIndex: index + 1,
-                  langTotal: langs.length,
-                  sessionId,
-                });
-              },
-              sourceLang
-            );
-            outputPaths.push(result);
-          } catch (error) {
-            if (String(error?.message || '').includes('ABORTED')) throw error;
-            console.error(`[Translate] Language ${lang} failed: ${error.message}`);
-            failedLangs.push(lang);
-          }
-        }
-
-        translator.clearFileCache();
-        if (!outputPaths.length) {
-          throw new Error(
-            failedLangs.length ? `All target languages failed: ${failedLangs.join(', ')}` : 'Translation failed'
-          );
-        }
-        event.sender.send(C.TRANSLATION_PROGRESS, {
-          stage: 'completed',
-          progress: 99,
-          outputPath: outputPaths[0],
-          outputPaths,
-          failedLangs,
-          sessionId,
-        });
-        return { success: true, outputPath: outputPaths[0], outputPaths, failedLangs };
-      } catch (error) {
+  async function translate(
+    event,
+    {
+      filePath,
+      method,
+      targetLang,
+      targetLangs,
+      sourceLang,
+      device,
+      localModelId,
+      localProcessingMode,
+      sessionId,
+      outputOptions,
+    },
+    epoch
+  ) {
+    const outputPaths = [];
+    const failedLangs = [];
+    const skippedLangs = [];
+    const outputs = {};
+    const send = (payload) => {
+      if (!event.sender.isDestroyed()) event.sender.send(C.TRANSLATION_PROGRESS, { ...payload, sessionId });
+    };
+    try {
+      if ((translator._abortEpoch || 0) !== epoch) throw new Error('ABORTED: Translation stopped by user');
+      translator.resetAbort();
+      let langs = (Array.isArray(targetLangs) && targetLangs.length ? targetLangs : [targetLang])
+        .map((lang) => (typeof lang === 'string' ? lang.trim() : ''))
+        .filter(Boolean);
+      langs = [...new Set(langs.length ? langs : ['ko'])];
+      if (langs.some((lang) => !TARGET_LANG_RE.test(lang))) throw new Error('Invalid target language code');
+      translator.setCurrentFile(filePath);
+      translator.localDevice = device === 'cpu' ? 'cpu' : 'auto';
+      translator.localModelId = localModelId || '1.8b';
+      translator.localProcessingMode = localProcessingMode === 'auto' ? 'auto' : 'sequential';
+      send({ stage: 'starting' });
+      for (let index = 0; index < langs.length; index++) {
+        const lang = langs[index];
+        if (translator._aborted) throw new Error('ABORTED: Translation stopped by user');
         try {
-          translator.clearFileCache();
-        } catch (_error) {}
-        if (String(error?.message || '').includes('ABORTED')) {
-          event.sender.send(C.TRANSLATION_PROGRESS, {
-            stage: 'error',
-            errorMessage: 'Stopped by user',
-            outputPaths,
-            sessionId,
-          });
-          return {
-            success: false,
-            error: 'Stopped by user',
-            userStopped: true,
-            partialOutputPaths: outputPaths,
-            outputPaths,
-          };
+          const destination = outputDestination(filePath, outputOptions, `_${lang}`);
+          if (destination.policy === 'skip' && fs.existsSync(destination.path)) {
+            skippedLangs.push(lang);
+            outputs[lang] = destination.path;
+            continue;
+          }
+          const result = await translator.translateSRTFile(
+            filePath,
+            destination.path,
+            method,
+            lang,
+            (progress) => {
+              const within = progress?.total ? progress.current / progress.total : 0;
+              send({
+                stage: progress?.stage || 'translating',
+                current: progress?.current,
+                total: progress?.total,
+                progress: Math.round(((index + within) / langs.length) * 100),
+                currentText: progress?.text,
+                lang,
+                langIndex: index + 1,
+                langTotal: langs.length,
+              });
+            },
+            sourceLang,
+            { policy: destination.policy }
+          );
+          if (translator._aborted) throw new Error('ABORTED: Translation stopped by user');
+          if (result) {
+            outputPaths.push(result);
+            outputs[lang] = result;
+          } else {
+            skippedLangs.push(lang);
+            outputs[lang] = destination.path;
+          }
+        } catch (error) {
+          if (translator._aborted || String(error?.message || '').includes('ABORTED'))
+            throw new Error('ABORTED: Translation stopped by user');
+          console.error(`[Translate] Language ${lang} failed: ${error.message}`);
+          failedLangs.push(lang);
         }
-        event.sender.send(C.TRANSLATION_PROGRESS, { stage: 'error', errorMessage: error.message, sessionId });
-        return { success: false, error: error.message };
       }
+      translator.clearFileCache();
+      if (!outputPaths.length && !skippedLangs.length)
+        throw new Error(`All target languages failed: ${failedLangs.join(', ')}`);
+      const result = {
+        success: true,
+        outputPath: outputPaths[0] || Object.values(outputs)[0],
+        outputPaths,
+        outputs,
+        failedLangs,
+        skippedLangs,
+        partial: failedLangs.length > 0,
+        skipped: !outputPaths.length && !failedLangs.length,
+      };
+      send({ stage: 'completed', progress: 100, ...result });
+      return result;
+    } catch (error) {
+      try {
+        translator.clearFileCache();
+      } catch (_error) {}
+      const userStopped = String(error?.message || '').includes('ABORTED');
+      const message = userStopped ? 'Stopped by user' : error.message;
+      const result = { success: false, error: message, userStopped, outputPaths, outputs, failedLangs, skippedLangs };
+      send({ stage: 'error', errorMessage: message, ...result });
+      return result;
     }
-  );
+  }
 }
-
 module.exports = { registerTranslationHandlers };

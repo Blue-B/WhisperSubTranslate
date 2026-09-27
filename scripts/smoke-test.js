@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 const { PassThrough } = require('stream');
+const vm = require('vm');
 const EnhancedSubtitleTranslator = require('../src/main/services/translator');
 const localTranslator = require('../src/main/services/local-translator');
 const {
@@ -33,6 +34,91 @@ const { isCompleteWavFile } = require('../src/main/services/file-safety');
 const { downloadVerifiedFile } = require('../src/main/services/verified-downloader');
 const runAfterPack = require('./afterPack');
 const runTranslationConfigTests = require('./test-translation-config');
+const windowLifecycleTests = require('./test-window-lifecycle');
+const runLateChildProcessTests = require('./test-late-child-process');
+
+function runBundledCudaDetectionPath() {
+  const source = fs.readFileSync(path.join(__dirname, '../src/main/services/local-translator.js'), 'utf8');
+  const start = source.indexOf('function prepareBundledCudaRuntime()');
+  const end = source.indexOf('\n/**', start);
+  assert.ok(start >= 0 && end > start);
+  const directory = 'C:\\portable\\resources\\whisper-cpp';
+  for (const platform of ['win32', 'linux']) {
+    for (const missing of [null, 'cudart64_12.dll', 'cublas64_12.dll', 'cublasLt64_12.dll']) {
+      const runtime = { platform, resourcesPath: 'C:\\portable\\resources', env: { PATH: 'C:\\Windows\\System32' } };
+      const prepare = vm.runInNewContext(`(${source.slice(start, end)})`, {
+        process: runtime,
+        path: path.win32,
+        fs: { existsSync: (file) => path.win32.dirname(file) === directory && path.win32.basename(file) !== missing },
+      });
+      prepare();
+      prepare();
+      assert.strictEqual(
+        runtime.env.PATH,
+        platform === 'win32' && !missing ? `C:\\Windows\\System32;${directory}` : 'C:\\Windows\\System32',
+        'Only complete bundled Windows CUDA runtimes should be appended once, preserving existing PATH'
+      );
+    }
+  }
+  assert.match(source, /prepareBundledCudaRuntime\(\);\s*const \{ getLlama \} = await import/);
+  console.log('[BundledCUDA] auto-detection path, missing DLLs, other platforms and repeated loads (ok)');
+}
+
+async function runGpuContextFallback() {
+  await require('./test-local-fallback')();
+  await require('./test-local-batch')();
+}
+
+function runCpuFallbackIsVisible() {
+  // 폴백은 조용히 일어나면 안 된다. 왜 CPU로 갔는지 화면 로그에서 볼 수 있어야 한다.
+  const local = fs.readFileSync(path.join(__dirname, '../src/main/services/local-translator.js'), 'utf8');
+  const sends = local.match(/notifyUser\(/g) || [];
+  assert.ok(sends.length >= 3, 'notifyUser must be defined and used by both fallback paths');
+  assert.match(local, /로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다/, 'GPU load fallback must explain itself');
+  assert.match(
+    local,
+    /로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다/,
+    'the VRAM context fallback must explain itself'
+  );
+  // notifyUser는 output-update(로그 패널)로 보내고, 파괴된 창을 견뎌야 한다.
+  const notifyStart = local.indexOf('function notifyUser(');
+  const notifyEnd = local.indexOf('async function ensureModelIntegrity(', notifyStart);
+  assert.ok(notifyStart >= 0 && notifyEnd > notifyStart, 'notifyUser source must be present');
+  const notify = local.slice(notifyStart, notifyEnd);
+  assert.match(notify, /isDestroyed\(\)/, 'progress logging must not throw after the window closed');
+  assert.match(notify, /output-update/, 'progress logging must use the panel channel the UI already renders');
+
+  // 로컬 번역 엔진도 창을 받아야 한다. 연결이 빠지면 문구가 어디에도 안 보인다.
+  const transcription = fs.readFileSync(path.join(__dirname, '../src/main/services/transcription.js'), 'utf8');
+  const setter = transcription.slice(transcription.indexOf('function setMainWindow('));
+  assert.match(
+    setter.slice(0, 400),
+    /require\('\.\/local-translator'\)\.setMainWindow\(window\)/,
+    'transcription.setMainWindow must propagate the window to the local translation engine'
+  );
+
+  // 사용자에게 보이는 문구는 5개 UI 언어로 번역되어야 한다 (ko는 원문 그대로).
+  const logs = fs.readFileSync(path.join(__dirname, '../src/renderer/features/logs.js'), 'utf8');
+  for (const [lang, expected] of [
+    ['en', 'Local translation: using CPU'],
+    ['ja', 'ローカル翻訳'],
+    ['zh', '本地翻译'],
+    ['pl', 'Tłumaczenie lokalne'],
+  ]) {
+    assert.ok(
+      logs.includes(`to: '${expected}`) || logs.includes(`to: "${expected}`),
+      `the CPU fallback notice needs a ${lang} translation`
+    );
+  }
+  const matches = logs.match(/GPU를 사용할 수 없어 CPU로 진행|GPU 메모리가 부족해 CPU로 진행/g) || [];
+  // ko는 규칙 없이 원문을 그대로 쓰므로, 번역 규칙은 en/ja/zh/pl × 2문구 = 8개다.
+  assert.strictEqual(
+    matches.length,
+    8,
+    'the CPU fallback notice must be translated for the four non-Korean interface languages'
+  );
+  console.log('[CpuFallbackNotice] source wiring and locale entries present (ok)');
+}
 
 async function runAfterPackCudaRuntimeCopy() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-after-pack-cuda-'));
@@ -184,11 +270,37 @@ function runRefactoredLayout() {
   assert.doesNotMatch(mainEntry, /electron-updater/, 'unused electron-updater path must not return');
   const preload = fs.readFileSync(path.join(root, 'src/preload/index.js'), 'utf8');
   const channels = require('../src/shared/ipc-channels');
-  Object.values(channels).forEach((channel) =>
-    assert.ok(preload.includes(`'${channel}'`), `preload bridge is missing shared IPC channel: ${channel}`)
+  const channelValues = Object.values(channels);
+  assert.strictEqual(new Set(channelValues).size, channelValues.length, 'IPC channel names must be unique');
+  const bridgeChannels = [...preload.matchAll(/ipcRenderer\.(invoke|on)\('([^']+)'/g)];
+  assert.deepStrictEqual(
+    bridgeChannels.map((match) => match[2]).sort(),
+    [...channelValues].sort(),
+    'preload requests and events must match the shared channel registry exactly'
+  );
+  const ipcDirectory = path.join(root, 'src/main/ipc');
+  const handlers = fs
+    .readdirSync(ipcDirectory)
+    .filter((file) => file.endsWith('.js'))
+    .flatMap((file) => {
+      const source = fs.readFileSync(path.join(ipcDirectory, file), 'utf8');
+      assert.doesNotMatch(source, /ipcMain\.handle\(\s*['"]/, 'main handlers must use the shared channel registry');
+      return [...source.matchAll(/ipcMain\.handle\(C\.(\w+)/g)].map((match) => {
+        assert.ok(channels[match[1]], `unknown IPC channel: ${match[1]}`);
+        return channels[match[1]];
+      });
+    });
+  assert.deepStrictEqual(
+    handlers.sort(),
+    bridgeChannels
+      .filter((match) => match[1] === 'invoke')
+      .map((match) => match[2])
+      .sort(),
+    'each preload request must have exactly one main handler'
   );
   const html = fs.readFileSync(path.join(root, 'src/renderer/index.html'), 'utf8');
-  for (const script of [
+  const scripts = [
+    '../../locales/i18n.js',
     'state.js',
     'features/logs.js',
     'features/progress.js',
@@ -199,10 +311,16 @@ function runRefactoredLayout() {
     'features/providers.js',
     'features/processing.js',
     'index.js',
-  ]) {
-    assert.ok(html.includes(`src="${script}?`), `renderer script missing from index.html: ${script}`);
-  }
-  console.log('[RefactoredLayout] entries, responsibilities, and package paths are wired (ok)');
+  ];
+  assert.deepStrictEqual(
+    [...html.matchAll(/<script src="([^"?]+)(?:\?[^\"]*)?"/g)].map((match) => match[1]),
+    scripts,
+    'classic renderer scripts must load once in dependency order'
+  );
+  new vm.Script(
+    scripts.map((script) => fs.readFileSync(path.join(root, 'src/renderer', script), 'utf8')).join('\n;\n')
+  );
+  console.log('[RefactoredLayout] entries, IPC contracts, renderer order and package paths are wired (ok)');
 }
 
 async function runPostinstallRedirectDrain() {
@@ -850,14 +968,32 @@ function runReleaseVulkanGate() {
 
 function runRendererSourceLangPayload() {
   const source = readRendererSource();
-  const calls = [...source.matchAll(/window\.electronAPI\.translateSubtitle\(\{([\s\S]*?)\n\s*\}\);/g)];
-  assert.strictEqual(calls.length, 2, 'renderer must have direct-SRT and post-extraction translation calls');
-  for (const [, payload] of calls) {
-    assert.match(
-      payload,
-      /sourceLang:\s*language === 'auto' \? null : language/,
-      'each renderer translation payload must forward the selected source language'
-    );
+  const calls = [...source.matchAll(/window\.electronAPI\.translateSubtitle\(\s*translationRequest\(/g)];
+  assert.strictEqual(calls.length, 2, 'direct-SRT and post-extraction calls must use the shared payload');
+  const renderer = vm.createContext({
+    document: { getElementById: (id) => ({ value: id === 'localProcessingSelect' ? 'sequential' : 'cpu' }) },
+    getSelectedTargetLangs: () => ['ko', 'ja'],
+    getOutputOptions: () => ({ directory: '/output', policy: 'rename' }),
+    _processingEpoch: 7,
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/renderer/features/processing.js'), 'utf8'), renderer);
+  for (const language of ['auto', 'en']) {
+    const file = {};
+    const payload = renderer.translationRequest(file, '/movie.srt', 'local', language);
+    assert.strictEqual(payload.sourceLang, language === 'auto' ? null : language);
+    assert.strictEqual(payload.sessionId, 7);
+    assert.strictEqual(payload.device, 'cpu');
+    assert.strictEqual(payload.localProcessingMode, 'sequential');
+    assert.deepStrictEqual(payload.targetLangs, ['ko', 'ja']);
+    file.failedLangs = ['ja'];
+    file.retryTranslation = true;
+    const retry = renderer.translationRequest(file, file.translationInput, 'none', 'fr');
+    assert.deepStrictEqual(Array.from(retry.targetLangs), ['ja']);
+    assert.strictEqual(retry.method, 'local');
+    assert.strictEqual(retry.localProcessingMode, payload.localProcessingMode);
+    assert.strictEqual(retry.sourceLang, payload.sourceLang);
+    assert.strictEqual(retry.filePath, '/movie.srt');
+    assert.strictEqual(retry.outputOptions.policy, 'rename');
   }
   assert.match(
     source,
@@ -1174,36 +1310,65 @@ async function runLocalTranslationGuards() {
   parent.abort(new Error('ABORTED: test'));
   await assert.rejects(() => aborted, /ABORTED/);
 
-  const sequential = new EnhancedSubtitleTranslator();
-  let active = 0;
-  let maxActive = 0;
-  sequential.translateAuto = async (text) => {
-    active++;
-    maxActive = Math.max(maxActive, active);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    active--;
-    return `translated ${text}`;
-  };
-  await sequential.translateBatch(['one', 'two', 'three'], 'local', 'en');
-  assert.strictEqual(maxActive, 1, 'local translations must not queue parallel work behind the model mutex');
-
-  const timeout = new EnhancedSubtitleTranslator();
-  timeout.translateAuto = async () => {
-    throw new Error('LOCAL_TIMEOUT: test');
-  };
-  await assert.rejects(() => timeout.translateBatch(['one', 'two'], 'local', 'en'), /LOCAL_TIMEOUT/);
-
-  const passthrough = new EnhancedSubtitleTranslator();
+  const originalBatch = localTranslator.translateLocalBatch;
+  let behavior = 'ok';
+  let requestedConcurrency;
+  let closed = 0;
   let calls = 0;
-  passthrough.translateAuto = async () => {
-    calls++;
-    throw new Error('LOCAL_UNTRANSLATED: test');
+  localTranslator.translateLocalBatch = async function* (texts, _lang, _device, _model, concurrency) {
+    requestedConcurrency = concurrency;
+    try {
+      for (let index = 0; index < texts.length; index++) {
+        calls++;
+        if (behavior === 'timeout') throw new Error('LOCAL_TIMEOUT: test');
+        yield behavior === 'echo'
+          ? { index, error: new Error('LOCAL_UNTRANSLATED: test') }
+          : { index, translation: `translated ${texts[index]}` };
+      }
+    } finally {
+      closed++;
+    }
   };
-  await assert.rejects(
-    () => passthrough.translateBatch(['one', 'two', 'three', 'four', 'five', 'six'], 'local', 'en'),
-    /TRANSLATION_PASSTHROUGH/
-  );
-  assert.strictEqual(calls, 5, 'repeated local echoes should fail before processing the whole file');
+  try {
+    const local = new EnhancedSubtitleTranslator();
+    local.apiKeys.batchTranslation = true;
+    local.localProcessingMode = 'sequential';
+    local.translateAuto = async () => {
+      throw new Error('local mode must never use the online fallback path');
+    };
+    await local.translateBatch(['one', 'two', 'three'], 'local', 'en');
+    assert.strictEqual(requestedConcurrency, 1, 'explicit sequential comparison reaches the engine');
+    assert.strictEqual(closed, 1);
+    local.localProcessingMode = 'auto';
+    await local.translateBatch(['one', 'two'], 'local', 'en');
+    assert.strictEqual(requestedConcurrency, undefined, 'automatic mode delegates its safe limit to the engine');
+    assert.strictEqual(local.hydrateApiConfig({ localProcessingMode: 'sequential' }).localProcessingMode, 'sequential');
+    assert.strictEqual(local.hydrateApiConfig({ localProcessingMode: 'invalid' }).localProcessingMode, 'sequential');
+    assert.strictEqual(local.hydrateApiConfig({}).localProcessingMode, 'sequential');
+    assert.strictEqual(local.hydrateApiConfig({ localProcessingMode: 'auto' }).localProcessingMode, 'auto');
+
+    behavior = 'timeout';
+    await assert.rejects(() => local.translateBatch(['one', 'two'], 'local', 'en'), /LOCAL_TIMEOUT/);
+    behavior = 'echo';
+    calls = 0;
+    await assert.rejects(
+      () => local.translateBatch(['one', 'two', 'three', 'four', 'five', 'six'], 'local', 'en'),
+      /TRANSLATION_PASSTHROUGH/
+    );
+    assert.strictEqual(calls, 5, 'stop consuming repeated echoes before the whole file');
+    assert.strictEqual(closed, 4, 'early failure closes the iterator and releases its lock');
+    behavior = 'ok';
+    await assert.rejects(
+      () =>
+        local.translateBatch(['one', 'two'], 'local', 'en', null, () => {
+          throw new Error('progress failure');
+        }),
+      /progress failure/
+    );
+    assert.strictEqual(closed, 5, 'a failing consumer must close the engine iterator');
+  } finally {
+    localTranslator.translateLocalBatch = originalBatch;
+  }
 
   const makeSrt = (texts) =>
     texts
@@ -2098,6 +2263,14 @@ async function run() {
   runSyncPreflightOrdering();
   await runPostinstallRedirectDrain();
   await runTranslationConfigTests();
+  await require('./test-release-safety')();
+  windowLifecycleTests.runWindowLifecycleTests();
+  await require('./test-ipc-window')();
+  await runLateChildProcessTests();
+  runBundledCudaDetectionPath();
+  await runGpuContextFallback();
+  runCpuFallbackIsVisible();
+  require('./test-log-localization')();
   const translator = new EnhancedSubtitleTranslator();
 
   // deepl-node 1.27: en/pt는 지역 코드가 아니면 deprecated로 throw(이슈 #41)
@@ -2145,6 +2318,7 @@ async function run() {
   await runMyMemoryCombined403Classification();
   await runMyMemoryNormalPhrase();
   await runProviderModelFiltering();
+  await require('./test-settings-runtime')();
   await runRetryOn429Case();
   await runThrottleSerialization();
   runCacheKeyConsistency();

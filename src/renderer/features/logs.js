@@ -141,7 +141,11 @@ const _LOG_GROUP_THRESHOLD = 3; // 3개 이상 연속이면 "... 외 N개"
 
 function _appendLogLine(output, line) {
   const cat = _classifyLog(line);
-  const sameAsPrev = _lastLog.cat && _lastLog.cat.id === cat.id;
+  // Keep local runtime, fallback and completion notices visible rather than folding them into translation logs.
+  const sameAsPrev =
+    !/^(?:로컬 번역:|Local translation:|ローカル翻訳:|本地翻译：|Tłumaczenie lokalne:)/.test(line) &&
+    _lastLog.cat &&
+    _lastLog.cat.id === cat.id;
 
   if (sameAsPrev) {
     _lastLog.count += 1;
@@ -185,6 +189,7 @@ function addOutput(text) {
   output.scrollTop = output.scrollHeight;
 }
 
+// eslint-disable-next-line no-unused-vars -- shared classic-script API used by renderer/index.js E2E hook
 function clearOutput() {
   const output = document.getElementById('output');
   if (output) output.textContent = '';
@@ -196,162 +201,118 @@ function clearOutput() {
 // 로그 메시지 간단 현지화 매핑(패턴→치환)
 const LOG_I18N = {
   en: [
-    { re: /^\[(\d+)\/(\d+)\] 처리 중: (.*)$/m, to: '[$1/$2] Processing: $3' },
-    { re: /자막 추출 시작/g, to: 'Start subtitle extraction' },
-    { re: /자막 추출 완료/g, to: 'Subtitle extraction completed' },
-    { re: /오류:/g, to: 'Error:' },
-    { re: /오류/g, to: 'Error' },
-    { re: /중지됨/g, to: 'Stopped' },
-    { re: /다음 파일/g, to: 'Next file' },
-    { re: /모든 파일 처리 완료/g, to: 'All files completed' },
-    { re: /번역 시작/g, to: 'Translation started' },
-    { re: /번역 완료/g, to: 'Translation completed' },
-    { re: /번역 실패/g, to: 'Translation failed' },
-    { re: /번역 진행/g, to: 'Translation progress' },
-    { re: /GPU 메모리 정리/g, to: 'GPU memory cleanup' },
-    { re: /자동 장치 선택: CUDA 사용/g, to: 'Auto device: using CUDA' },
-    { re: /자동 장치 선택: CPU 사용/g, to: 'Auto device: using CPU' },
-    // 추가 일반 로그 패턴
-    { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '$1 files added to queue.' },
-    { re: /^(\d+)개 파일 순차 처리 시작/m, to: 'Starting sequential processing of $1 file(s)' },
-    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CUDA device...' },
-    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'Starting extraction with CPU device...' },
-    { re: /파일 선택 중 오류 발생:/g, to: 'File selection error:' },
-    { re: /이미 대기열에 있는 파일입니다:/g, to: 'Already in queue:' },
-    { re: /대기열이 모두 삭제되었습니다\./g, to: 'Queue cleared.' },
-    { re: /대기 중인 (\d+)개 파일이 삭제되었습니다\./g, to: 'Removed $1 pending files.' },
-    { re: /처리 중지 요청됨\. 현재 파일 완료 후 중지됩니다\./g, to: 'Stop requested. Will stop after current file.' },
-    { re: /대기열에서 제거됨:/g, to: 'Removed from queue:' },
-    { re: /지원되지 않는 파일 형식:/g, to: 'Unsupported file type:' },
-    { re: /모델 다운로드 중:/g, to: 'Downloading model:' },
-    { re: /다음 파일을 위한 메모리 정리 중\. \(10초 대기\)/g, to: 'Cleaning up memory for next file... (wait 10s)' },
-    { re: /모델: /g, to: 'Model: ' },
-    { re: /언어: /g, to: 'Language: ' },
-    { re: /장치: /g, to: 'Device: ' },
-    { re: /자동감지/g, to: 'Auto-detect' },
-    { re: /자동/g, to: 'Auto' },
-    // 영어 원문 → 영어 유지 (불필요), 하지만 호환을 위해 그대로 둠
-    { re: /🌐\s*번역을 시작 \[(MyMemory) \(무료\)\]/g, to: '🌐 Start translation [$1 (free)]' },
-    { re: /메모리 정리 중\. \(잠시만 기다려주세요\)/g, to: 'Cleaning up memory... (please wait)' },
+    { re: /^로컬 번역: 실행 정보/, to: 'Local translation: runtime' },
+    { re: /^로컬 번역: 처리 완료/, to: 'Local translation: completed' },
+    {
+      re: /^로컬 번역: 동시 처리를 사용할 수 없어 개별 처리로 전환합니다/,
+      to: 'Local translation: parallel processing unavailable; switching to one at a time',
+    },
+    {
+      re: /^로컬 번역: 메모리가 부족해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'Local translation: insufficient memory; retrying one at a time on the same GPU',
+    },
+    {
+      re: /^로컬 번역: 병렬 실행 준비에 실패해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'Local translation: parallel setup failed; retrying one at a time on the same GPU',
+    },
+    {
+      re: /^로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다/gm,
+      to: 'Local translation: using CPU because the GPU is unavailable',
+    },
+    {
+      re: /^로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다/gm,
+      to: 'Local translation: using CPU because of insufficient GPU memory',
+    },
   ],
   ja: [
-    { re: /^\[(\d+)\/(\d+)\] 처리 중: (.*)$/m, to: '[$1/$2] 処理中: $3' },
-    { re: /자막 추출 시작/g, to: '字幕抽出を開始' },
-    { re: /자막 추출 완료/g, to: '字幕抽出が完了しました' },
-    { re: /오류:/g, to: 'エラー:' },
-    { re: /오류/g, to: 'エラー' },
-    { re: /중지됨/g, to: '停止しました' },
-    { re: /다음 파일/g, to: '次のファイル' },
-    { re: /모든 파일 처리 완료/g, to: 'すべてのファイルの処理が完了しました' },
-    { re: /번역 시작/g, to: '翻訳を開始' },
-    { re: /번역 완료/g, to: '翻訳が完了しました' },
-    { re: /번역 실패/g, to: '翻訳に失敗しました' },
-    { re: /번역 진행/g, to: '翻訳の進行状況' },
-    { re: /GPU 메모리 정리/g, to: 'GPUメモリのクリーンアップ' },
-    { re: /자동 장치 선택: CUDA 사용/g, to: '自動デバイス: CUDAを使用' },
-    { re: /자동 장치 선택: CPU 사용/g, to: '自動デバイス: CPUを使用' },
-    // 追加: 예시 로그 문구들 변환
-    { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '$1 件のファイルをキューに追加しました。' },
-    { re: /^(\d+)개 파일 순차 처리 시작/m, to: '$1 件のファイルを順次処理開始' },
-    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CUDA デバイスで字幕抽出を開始します...' },
-    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: 'CPU デバイスで字幕抽出を開始します...' },
-    { re: /파일 선택 중 오류 발생:/g, to: 'ファイル選択エラー:' },
-    { re: /이미 대기열에 있는 파일입니다:/g, to: 'すでにキューにあります:' },
-    { re: /대기열이 모두 삭제되었습니다\./g, to: 'キューをすべて削除しました。' },
-    { re: /대기 중인 (\d+)개 파일이 삭제되었습니다\./g, to: '待機中の $1 件のファイルを削除しました。' },
+    { re: /^로컬 번역: 실행 정보/, to: 'ローカル翻訳: 実行情報' },
+    { re: /^로컬 번역: 처리 완료/, to: 'ローカル翻訳: 処理完了' },
     {
-      re: /처리 중지 요청됨\. 현재 파일 완료 후 중지됩니다\./g,
-      to: '停止要求を受けました。現在のファイル終了後に停止します。',
+      re: /^로컬 번역: 동시 처리를 사용할 수 없어 개별 처리로 전환합니다/,
+      to: 'ローカル翻訳: 同時処理を利用できないため個別処理に切り替えます',
     },
-    { re: /대기열에서 제거됨:/g, to: 'キューから削除:' },
-    { re: /지원되지 않는 파일 형식:/g, to: '未対応のファイル形式:' },
-    { re: /모델 다운로드 중:/g, to: 'モデルをダウンロード中:' },
-    { re: /다음 파일을 위한 메모리 정리 중\. \(10초 대기\)/g, to: '次のファイルのためメモリを整理中...（10秒待機）' },
-    { re: /모델: /g, to: 'モデル: ' },
-    { re: /언어: /g, to: '言語: ' },
-    { re: /장치: /g, to: 'デバイス: ' },
-    { re: /자동감지/g, to: '自動検出' },
-    { re: /자동/g, to: '自動' },
-    // 영어 원문 → 일본어
     {
-      re: /Standalone Faster-Whisper-XXL\s+r[0-9\.]+\s+running on:\s*(\w+)/g,
+      re: /^로컬 번역: 메모리가 부족해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'ローカル翻訳: メモリ不足のため、同じGPUで1件ずつ再試行します',
+    },
+    {
+      re: /^로컬 번역: 병렬 실행 준비에 실패해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'ローカル翻訳: 並列処理の準備に失敗したため、同じGPUで1件ずつ再試行します',
+    },
+    {
+      re: /^Standalone Faster-Whisper-XXL\s+r[0-9\.]+\s+running on:\s*(\w+)/,
       to: 'Standalone Faster-Whisper-XXL 実行環境: $1',
     },
-    { re: /Starting to process:\s*/g, to: '処理開始: ' },
-    { re: /Starting translation\.\.\./g, to: '翻訳を開始します...' },
-    { re: /Translating\.\.\. (\d+)\/(\d+)/g, to: '翻訳中... $1/$2' },
-    { re: /Translation completed\. Finalizing\.\.\./g, to: '翻訳が完了しました。最終処理中...' },
-    { re: /Translation failed: (.*)$/g, to: '翻訳に失敗しました: $1' },
-    { re: /🌐\s*번역을 시작 \[(MyMemory) \(무료\)\]/g, to: '🌐 翻訳を開始 [$1（無料）]' },
-    { re: /메모리 정리 중\. \(잠시만 기다려주세요\)/g, to: 'メモリを整理中...（少々お待ちください）' },
+    { re: /^Starting to process:\s*/, to: '処理開始: ' },
+    { re: /^Starting translation\.\.\.$/, to: '翻訳を開始します...' },
+    { re: /^Translating\.\.\. (\d+)\/(\d+)$/, to: '翻訳中... $1/$2' },
+    { re: /^Translation completed\. Finalizing\.\.\.$/, to: '翻訳が完了しました。最終処理中...' },
+    { re: /^Translation failed: /, to: '翻訳に失敗しました: ' },
+    {
+      re: /^로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다/gm,
+      to: 'ローカル翻訳: GPUを使用できないためCPUで続行します',
+    },
+    {
+      re: /^로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다/gm,
+      to: 'ローカル翻訳: GPUメモリが不足しているためCPUで続行します',
+    },
   ],
   pl: [
-    { re: /^\[(\d+)\/(\d+)\] 처리 중: (.*)$/m, to: '[$1/$2] Przetwarzanie: $3' },
-    { re: /자막 추출 시작/g, to: 'Rozpoczęcie ekstrakcji napisów' },
-    { re: /자막 추출 완료/g, to: 'Ekstrakcja napisów zakończona' },
-    { re: /오류:/g, to: 'Błąd:' },
-    { re: /오류/g, to: 'Błąd' },
-    { re: /중지됨/g, to: 'Zatrzymano' },
-    { re: /다음 파일/g, to: 'Następny plik' },
-    { re: /모든 파일 처리 완료/g, to: 'Przetwarzanie wszystkich plików zakończone' },
-    { re: /번역 시작/g, to: 'Rozpoczęcie tłumaczenia' },
-    { re: /번역 완료/g, to: 'Tłumaczenie zakończone' },
-    { re: /번역 실패/g, to: 'Tłumaczenie nieudane' },
-    { re: /번역 진행/g, to: 'Postęp tłumaczenia' },
-    { re: /GPU 메모리 정리/g, to: 'Czyszczenie pamięci GPU' },
-    { re: /자동 장치 선택: CUDA 사용/g, to: 'Auto urządzenie: CUDA' },
-    { re: /자동 장치 선택: CPU 사용/g, to: 'Auto urządzenie: CPU' },
-    { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: 'Dodano $1 plik(ów) do kolejki.' },
-    { re: /^(\d+)개 파일 순차 처리 시작/m, to: 'Rozpoczęcie przetwarzania $1 plik(ów)' },
-    { re: /메모리 정리 중\. \(잠시만 기다려주세요\)/g, to: 'Czyszczenie pamięci... (proszę czekać)' },
+    { re: /^로컬 번역: 실행 정보/, to: 'Tłumaczenie lokalne: informacje o wykonaniu' },
+    { re: /^로컬 번역: 처리 완료/, to: 'Tłumaczenie lokalne: ukończono' },
+    {
+      re: /^로컬 번역: 동시 처리를 사용할 수 없어 개별 처리로 전환합니다/,
+      to: 'Tłumaczenie lokalne: przetwarzanie równoległe niedostępne; przełączam na tryb pojedynczy',
+    },
+    {
+      re: /^로컬 번역: 메모리가 부족해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'Tłumaczenie lokalne: za mało pamięci; ponawiam pojedynczo na tym samym GPU',
+    },
+    {
+      re: /^로컬 번역: 병렬 실행 준비에 실패해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: 'Tłumaczenie lokalne: przygotowanie pracy równoległej nie powiodło się; ponawiam pojedynczo na tym samym GPU',
+    },
+    {
+      re: /^로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다/gm,
+      to: 'Tłumaczenie lokalne: używam CPU, ponieważ GPU jest niedostępne',
+    },
+    {
+      re: /^로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다/gm,
+      to: 'Tłumaczenie lokalne: używam CPU z powodu braku pamięci GPU',
+    },
   ],
   zh: [
-    { re: /^\[(\d+)\/(\d+)\] 처리 중: (.*)$/m, to: '[$1/$2] 处理中: $3' },
-    { re: /자막 추출 시작/g, to: '开始提取字幕' },
-    { re: /자막 추출 완료/g, to: '字幕提取完成' },
-    { re: /오류:/g, to: '错误:' },
-    { re: /오류/g, to: '错误' },
-    { re: /중지됨/g, to: '已停止' },
-    { re: /다음 파일/g, to: '下一个文件' },
-    { re: /모든 파일 처리 완료/g, to: '所有文件处理完成' },
-    { re: /번역 시작/g, to: '开始翻译' },
-    { re: /번역 완료/g, to: '翻译完成' },
-    { re: /번역 실패/g, to: '翻译失败' },
-    { re: /번역 진행/g, to: '翻译进度' },
-    { re: /GPU 메모리 정리/g, to: '清理GPU内存' },
-    { re: /자동 장치 선택: CUDA 사용/g, to: '自动设备: 使用CUDA' },
-    { re: /자동 장치 선택: CPU 사용/g, to: '自动设备: 使用CPU' },
-    // 追加: 예시 로그 변환
-    { re: /^(\d+)개 파일이 대기열에 추가되었습니다\./m, to: '已将 $1 个文件添加到队列。' },
-    { re: /^(\d+)개 파일 순차 처리 시작/m, to: '开始顺序处理 $1 个文件' },
-    { re: /CUDA 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CUDA 设备开始提取字幕...' },
-    { re: /CPU 장치로 자막 추출을 시작합니다\.\.\./g, to: '使用 CPU 设备开始提取字幕...' },
-    { re: /파일 선택 중 오류 발생:/g, to: '选择文件时出错:' },
-    { re: /이미 대기열에 있는 파일입니다:/g, to: '已在队列中:' },
-    { re: /대기열이 모두 삭제되었습니다\./g, to: '已清空队列。' },
-    { re: /대기 중인 (\d+)개 파일이 삭제되었습니다\./g, to: '已删除 $1 个等待中文件。' },
-    { re: /처리 중지 요청됨\. 현재 파일 완료 후 중지됩니다\./g, to: '已请求停止。当前文件完成后停止。' },
-    { re: /대기열에서 제거됨:/g, to: '已从队列中移除:' },
-    { re: /지원되지 않는 파일 형식:/g, to: '不支持的文件类型:' },
-    { re: /모델 다운로드 중:/g, to: '正在下载模型:' },
-    { re: /다음 파일을 위한 메모리 정리 중\. \(10초 대기\)/g, to: '为下一个文件清理内存...（等待10秒）' },
-    { re: /모델: /g, to: '模型: ' },
-    { re: /언어: /g, to: '语言: ' },
-    { re: /장치: /g, to: '设备: ' },
-    { re: /자동감지/g, to: '自动检测' },
-    { re: /자동/g, to: '自动' },
-    // 영어 원문 → 중국어
+    { re: /^로컬 번역: 실행 정보/, to: '本地翻译：运行信息' },
+    { re: /^로컬 번역: 처리 완료/, to: '本地翻译：处理完成' },
     {
-      re: /Standalone Faster-Whisper-XXL\s+r[0-9\.]+\s+running on:\s*(\w+)/g,
+      re: /^로컬 번역: 동시 처리를 사용할 수 없어 개별 처리로 전환합니다/,
+      to: '本地翻译：无法并行处理，切换为逐条处理',
+    },
+    {
+      re: /^로컬 번역: 메모리가 부족해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: '本地翻译：内存不足，将在同一 GPU 上逐条重试',
+    },
+    {
+      re: /^로컬 번역: 병렬 실행 준비에 실패해 같은 GPU에서 하나씩 번역으로 다시 시도합니다/,
+      to: '本地翻译：并行处理准备失败，将在同一 GPU 上逐条重试',
+    },
+    {
+      re: /^Standalone Faster-Whisper-XXL\s+r[0-9\.]+\s+running on:\s*(\w+)/,
       to: 'Standalone Faster-Whisper-XXL 运行于: $1',
     },
-    { re: /Starting to process:\s*/g, to: '开始处理: ' },
-    { re: /Starting translation\.\.\./g, to: '开始翻译...' },
-    { re: /Translating\.\.\. (\d+)\/(\d+)/g, to: '翻译中... $1/$2' },
-    { re: /Translation completed\. Finalizing\.\.\./g, to: '翻译完成。正在收尾...' },
-    { re: /Translation failed: (.*)$/g, to: '翻译失败: $1' },
-    { re: /🌐\s*번역을 시작 \[(MyMemory) \(무료\)\]/g, to: '🌐 开始翻译 [$1（免费）]' },
-    { re: /메모리 정리 중\. \(잠시만 기다려주세요\)/g, to: '正在清理内存...（请稍候）' },
+    { re: /^Starting to process:\s*/, to: '开始处理: ' },
+    { re: /^Starting translation\.\.\.$/, to: '开始翻译...' },
+    { re: /^Translating\.\.\. (\d+)\/(\d+)$/, to: '翻译中... $1/$2' },
+    { re: /^Translation completed\. Finalizing\.\.\.$/, to: '翻译完成。正在收尾...' },
+    { re: /^Translation failed: /, to: '翻译失败: ' },
+    {
+      re: /^로컬 번역: GPU를 사용할 수 없어 CPU로 진행합니다/gm,
+      to: '本地翻译：GPU 不可用，改用 CPU 继续',
+    },
+    {
+      re: /^로컬 번역: GPU 메모리가 부족해 CPU로 진행합니다/gm,
+      to: '本地翻译：GPU 内存不足，改用 CPU 继续',
+    },
   ],
 };
 
@@ -362,6 +323,7 @@ const LOG_I18N = {
 // "all translations failed" summary message, chosen by translation method.
 // Local translation has no API key, so never show the API key/quota hint here
 // (that wrong hint was the source of user confusion).
+// eslint-disable-next-line no-unused-vars -- shared classic-script API used by progress.js and processing.js
 function getAllFailedMsg() {
   const d = I18N[currentUiLang] || I18N.ko;
   const method = document.getElementById('translationSelect')?.value;
@@ -370,6 +332,7 @@ function getAllFailedMsg() {
   return d.allFailed || 'All tasks failed';
 }
 
+// eslint-disable-next-line no-unused-vars -- shared classic-script API used by progress.js, processing.js and models.js
 function getLocalizedError(errorMessage) {
   if (!errorMessage) return I18N[currentUiLang].errorUnknown;
 
@@ -440,14 +403,22 @@ function localizeLog(text) {
   if (!text || currentUiLang === 'ko') return text;
   const rules = LOG_I18N[currentUiLang];
   if (!rules) return text;
-  let out = text;
-  for (const { re, to } of rules) {
-    out = out.replace(re, to);
-  }
-  return out;
+  // 청크에 섞인 상태 줄은 번역하되, 전사 내용과 원래 줄바꿈은 보존한다.
+  return text
+    .split(/(\r\n|\n|\r)/)
+    .map((line) => {
+      if (_TRANSCRIPT_LINE_RE.test(line)) return line;
+      for (const { re, to } of rules) {
+        // 상태 접두사 하나만 치환한다. 뒤의 파일명/오류 사유는 다시 번역하지 않는다.
+        if (re.test(line)) return line.replace(re, to);
+      }
+      return line;
+    })
+    .join('');
 }
 
 // RAW 출력 함수(현지화 없이 실제 출력만 수행)
+// eslint-disable-next-line no-unused-vars -- shared classic-script API used by progress.js
 function appendOutputRaw(text) {
   // Route through the styled addOutput (defined earlier) so every log path
   // gets timestamp + icon + category color + group collapsing.
@@ -457,6 +428,7 @@ function appendOutputRaw(text) {
 // translating 단계 진행 줄: div 로그와 같은 방식으로 추가하고, 다음 이벤트에서 같은 div만 교체한다.
 // (이전 구현은 output.textContent.split('\n')로 전체 로그를 textContent로 바꿔 기존 div 로그를 소멸시킴)
 let _translatingLineEl = null;
+// eslint-disable-next-line no-unused-vars -- shared classic-script API used by progress.js
 function updateTranslatingLine(text) {
   const output = document.getElementById('output');
   if (!output) return;

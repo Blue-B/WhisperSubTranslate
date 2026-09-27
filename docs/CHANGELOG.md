@@ -2,27 +2,53 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.5.1] - Unreleased
+## [2.5.1] - 2026-09-27
 
-Maintenance release for local-model download integrity, translation error handling, and application packaging.
+Update for output-file protection, translation retries, local-model download integrity, and application packaging.
+
+### Added
+
+- Local translation offers an experimental Automatic mode alongside the existing One at a time default. With full CUDA offload and sufficient RAM/VRAM, Automatic compares resource-admitted candidates on a length-stratified sample without a fixed two-worker limit for short jobs. Baseline sample translations are reused in the output. Probes that cannot repay their cost even with ideal scaling are skipped, and sufficiently small jobs stay sequential. The same policy applies to 1.8B and 7B. Calibration adds startup work; candidates need a measured gain of at least 5% and estimated remaining-work savings above the candidate's setup/probe cost. Already-spent probe time is reported rather than used to discard a faster selection. This is a bounded estimate, not a global performance optimum. Extra-context allocation failures or parallel memory errors fall back to one context on the same GPU. The screen explains the cause and same-GPU sequential retry; errors.log retains the original error, failure stage, model, backend, GPU layers and before/attempted/retry worker counts. This records a retry attempt, not guaranteed recovery. Runtime logs show the backend, GPU layers, worker count, and elapsed time. This does not combine subtitles into one prompt or guarantee a speedup on every workload.
+- Choose an output folder and an existing-file policy: save under a new name (default), skip, or replace after successful processing.
+- Retry only failed target languages, reusing the extracted SRT and preserving successful translations. Show partial completion in the queue and history, and update the same history entry after a retry.
+- Copy diagnostic information containing app/engine versions, backend availability, and the latest error category in the current session. Keys, paths, and subtitle text are excluded. A neighboring action reveals the existing error log in the file manager, or opens its folder if no log exists, without creating a placeholder or uploading it. A reminder asks users to check private information before attaching raw logs.
 
 ### Fixed
+
+- **Cloud model choices:** refresh presets and empty-setting defaults from official documentation checked on September 27, 2026: GPT-6 Sol/Luna/Astra, Gemini 3.8/3.7 Flash, Claude Opus 5.5 and Fable 5.1. Existing saved model IDs remain unchanged. Omit unsupported sampling parameters, budget for always-on reasoning, and exclude Gemini thought parts from subtitle text. Account access still depends on the provider; automated checks use mocked responses, not paid API calls.
+- **Settings autosave:** save only the selection fields owned by the autosave handler. A delayed save no longer overwrites a newer local processing mode or provider model with a stale full-config snapshot.
+- **Settings controls:** make diagnostics copying an outlined button with an icon, and place the output path, ellipsis picker, and same-folder action in one row. Keep Automatic guidance concise in all five languages: experimental parallel processing, no guarantee of the fastest setting, and One at a time as the fallback.
+- **Numeric subtitle text:** keep number-only lines inside dialogue with the surrounding sentence instead of treating them as cue indices. Cues containing only numbers remain untranslated; cue indices and timestamps are preserved.
+- **Output safety:** isolate each extraction attempt so an old SRT cannot turn a failed native process into a success. Save subtitles and encrypted settings through temporary files, preserving the previous destination if writing fails. Separate queue invocations no longer overwrite same-name results under the default policy.
+- **Translation completion:** reject empty or missing translated dialogue, cancel supported HTTP requests on stop, and check cancellation again before saving. An immediate retry waits for the cancelled invocation to settle.
+- **Download cancellation:** keep separate cancellation controllers for concurrent local-model downloads, so completing one does not disable cancellation of another.
+- **Retry history:** keep independent entries for files completed in the same millisecond and replace the original failure entry when its retry succeeds.
 
 - **Local model integrity:** Hy-MT2 1.8B and 7B downloads now use pinned revisions, exact sizes, and SHA-256 digests. Existing files are checked before loading; integrity results are cached until the file's size or modification time changes.
 - **Local download recovery:** use the shared verified downloader for resume, retry, and mirror fallback. Preserve the previous model until a verified replacement is ready, restore it if installation fails, and wait for a cancelled transfer to settle before an immediate retry.
 - **MyMemory errors:** permanent input errors are no longer retried as quota failures when returned with status 403. The final MyMemory fallback now receives the requested source language.
-- **Windows packaging:** copy CUDA 12 runtime DLLs beside both installed node-llama-cpp CUDA backend locations. DLL placement alone does not imply that GPU translation is active.
+- **Windows packaging:** copy CUDA 12 runtime DLLs beside both installed node-llama-cpp CUDA backend locations. Add the complete bundled runtime directory to the app process's search path before local-model loading so automatic CUDA detection works without a system CUDA installation.
+- **Small-window layout:** keep file selection and supported-format labels visible at the minimum window height, including when local translation is enabled. Local model/mode controls share a row, and model details and automatic-mode guidance can be expanded when needed. Long settings remain accessible by scrolling.
+- **Language switching:** refresh engine-specific target-language guidance when changing the UI language.
+- **Interface wording:** corrected five-language file input, stop, history, and shared-model guidance. Restored quiet-speech warnings in Japanese, Chinese, and Polish, fixed Korean typos and English/Polish model descriptions, and replaced model-count suffixes with complete localized messages.
+- **Window lifecycle:** clear service window references on close and bind reopened windows again. Late transcription output and progress notifications are dropped when their window is absent or destroyed, without interrupting completion/error handling. This does not add background queue processing: closing the last Windows/Linux window still quits the app and stops work.
+- **Log display:** preserve timestamped transcript lines while localizing status lines in the same output chunk. Restrict retained status rules to line starts and replace only one status prefix, so matching phrases inside displayed paths or error details are not translated again. Saved SRT content and actual filenames are not changed by log localization.
+- **Removed obsolete log rules:** removed 35 distinct Korean patterns (123 language-specific entries) with no identified intended status producer. They could still match user content accidentally; this is not a project-wide dead-code audit.
+- **Whisper child-process cleanup:** capture the spawned process in PID cleanup listeners instead of reading a shared reference that may already be null. This prevents the reproduced late-callback exception; it does not change normal app-exit behavior.
+- **Local device fallback:** with device-auto, GPU-related model-load or first-context failures can retry on CPU. Remember failed models until explicit unload or app restart to avoid repeating GPU attempts for each cue. This is separate from same-GPU sequential recovery after parallel failures. Show the reason in all five interface languages while a window is open; notices without a live window are not queued for replay. This does not establish physical 7B/6GB performance.
 
 ### Changed
 
-- Updated DeepL account-plan guidance in all five UI languages and READMEs. Clarified that speech and local translation models require an initial download before offline use.
+- Updated all five READMEs with experimental local processing, diagnostics, actual model storage and online-text disclosure. Removed stale cloud-model examples and fixed quota claims; corrected the large-v3-turbo download size. Speech and local translation models still require an initial download before offline use.
+- Documented module ownership, sandboxed IPC, classic renderer script ordering, isolated development profiles and validation commands in CONTRIBUTING. Corrected the translation guide's selector and README paths. Ignore root-level user configs, profiles and models to reduce accidental commits.
 - Excluded Linux shared libraries from Windows packages and removed the installer-only `scripts/postinstall.js` from the app archive. The install script remains in the repository and still runs during dependency installation.
 
 ### Internal
 
 - Split the application into `src/main/`, `src/preload/`, `src/renderer/`, and `src/shared/`. Centralized translation configuration and error logging, and removed unused preload methods.
 - Moved the sample audio to `assets/nya.wav` while retaining `resources/nya.wav` in packaged builds. Updated development tests and release checks for these paths.
-- Added regression coverage for configuration encryption and migration, failed saves, local-model integrity and cancellation, MyMemory fallback, CUDA DLL destinations, and UI navigation.
+- Added regression coverage for configuration encryption and migration, failed saves, local-model integrity and cancellation, MyMemory fallback, CUDA DLL destinations, and UI navigation. Log localization, late transcription callbacks and GPU fallback now also execute production functions with synthetic inputs or mocked native dependencies; these tests do not replace hardware and packaged-app checks.
+- Completed the shared diagnostic-channel registry and added bidirectional request/handler parity and renderer load-order checks. Removed five unused service export entries without deleting their internally used implementations.
 - Kept whisper.cpp pinned to v1.9.1. No dependency versions were changed for this release.
 
 ## [2.5.0] - 2026-08-26

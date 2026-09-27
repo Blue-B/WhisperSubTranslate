@@ -1305,7 +1305,9 @@ body::after {
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  container-type: inline-size;
   gap: 0;
 }
 
@@ -1313,8 +1315,8 @@ body::after {
        DROP ZONE — Horizontal compact layout (icon left, text right)
        ============================================================ */
 .dropzone {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: min-content;
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -1437,6 +1439,7 @@ body::after {
   align-items: center;
   justify-content: center;
   gap: 11px;
+  flex-shrink: 0;
   position: relative;
   z-index: 2;
   width: 100%;
@@ -1572,12 +1575,33 @@ body::after {
 /* Settings grid: 2x2 with descriptions restored */
 .settings-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 60%;
+  overflow-y: auto;
   background: linear-gradient(180deg, rgba(203, 166, 247, 0.025), transparent 60%), var(--mantle);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   position: relative;
+}
+
+/* Keep file controls visible without squeezing or overlapping settings rows. */
+@media (max-height: 800px) {
+  .drop-mascot-frame {
+    display: none;
+  }
+  .drop-stack {
+    gap: 8px;
+    padding: 0;
+  }
+  .settings-grid {
+    max-height: 55%;
+    overflow-y: auto;
+    grid-template-rows: none;
+    grid-auto-rows: max-content;
+  }
 }
 
 .setting-card {
@@ -1667,6 +1691,54 @@ body::after {
 }
 .settings-grid .setting-card:nth-child(5) .setting-label svg {
   color: var(--yellow);
+}
+
+#localModelGroup {
+  grid-column: 1 / -1;
+  border-right: none;
+  cursor: default;
+}
+
+.local-controls-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px 36px;
+}
+
+.local-setting {
+  min-width: 0;
+}
+
+.setting-help,
+.local-processing-help {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--subtext0);
+}
+
+.setting-help > summary,
+.local-processing-help > summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.setting-help > summary:focus-visible,
+.local-processing-help > summary:focus-visible {
+  outline: 2px solid var(--mauve);
+  outline-offset: 3px;
+}
+
+.setting-help .setting-hint,
+.local-processing-help .setting-hint {
+  color: var(--subtext0);
+  max-width: 80ch;
+}
+
+@container (max-width: 540px) {
+  .local-controls-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
 }
 
 #targetLanguageGroup {
@@ -2026,6 +2098,78 @@ body::after {
 .btn-secondary svg {
   width: 16px;
   height: 16px;
+}
+
+.diagnostics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  box-shadow: 2px 2px 0 var(--border);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-action:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-primary);
+}
+
+.settings-action:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+.settings-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.settings-action svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.output-folder-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.output-folder-field {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.output-folder-field .form-input {
+  min-width: 0;
+  border-right: 0;
+}
+
+.output-folder-picker {
+  flex: 0 0 34px;
+  padding: 0;
+  box-shadow: none;
+  font-size: 20px;
+}
+
+#resetOutputDirectory {
+  max-width: 45%;
 }
 
 .btn-control {

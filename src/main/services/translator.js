@@ -8,6 +8,7 @@ const MyMemoryTranslator = require('./mymemory-translator');
 const localTranslator = require('./local-translator');
 const errLogger = require('./error-logger');
 const translationConfig = require('./translation-config');
+const { writeFileAtomic } = require('./file-safety');
 
 // ===== LLM 공급자 기본값 =====
 // 모델명·엔드포인트·프롬프트는 전부 설정에서 덮어쓸 수 있고, 여기는 빈 설정일 때 쓰는 값이다.
@@ -15,37 +16,39 @@ const translationConfig = require('./translation-config');
 const PROVIDER_DEFAULTS = {
   openai: {
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-5.6-sol',
+    model: 'gpt-6-sol',
   },
   gemini: {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    model: 'gemini-3.6-flash',
+    model: 'gemini-3.8-flash',
   },
   claude: {
     baseUrl: 'https://api.anthropic.com/v1',
-    model: 'claude-opus-5',
+    model: 'claude-opus-5-5',
   },
 };
 
-// 키 없이도 드롭다운에서 고를 수 있게 넣어둔 알려진 모델 목록 (2026-08 기준 최신 포함).
+// 키 없이도 드롭다운에서 고를 수 있는 모델 목록 (공식 문서 확인: 2026-09-27).
 // 키가 등록되면 models API로 최신 목록을 받아와 이 목록을 대체한다.
 const PROVIDER_MODEL_PRESETS = {
-  openai: ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano'],
+  openai: ['gpt-6-sol', 'gpt-6-luna', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5'],
   gemini: [
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite',
     'gemini-3.1-pro-preview',
-    'gemini-3-flash-preview',
   ],
   claude: [
+    'claude-opus-5-5',
+    'claude-fable-5-1',
     'claude-opus-5',
     'claude-sonnet-5',
     'claude-fable-5',
     'claude-haiku-4-5',
     'claude-opus-4-8',
     'claude-opus-4-5',
-    'claude-3-7-sonnet',
   ],
 };
 
@@ -173,6 +176,8 @@ class EnhancedSubtitleTranslator {
     this.batchSize = 5; // 3 → 5 (5개씩 묶어서 처리)
     this.mainWindow = null; // mainWindow 참조 저장
     this._aborted = false; // 사용자 중지 플래그
+    this._requestAbort = new AbortController();
+    this._abortEpoch = 0;
     this._sleepAborters = new Set();
     this.cacheHits = 0;
     this.cacheMisses = 0;
@@ -180,6 +185,8 @@ class EnhancedSubtitleTranslator {
 
   abort() {
     this._aborted = true;
+    this._abortEpoch++;
+    this._requestAbort?.abort(new Error('ABORTED: Translation stopped by user'));
     for (const abortSleep of [...this._sleepAborters]) abortSleep();
     localTranslator.abortTranslation();
     console.log('[Translator] Abort requested');
@@ -187,6 +194,11 @@ class EnhancedSubtitleTranslator {
 
   resetAbort() {
     this._aborted = false;
+    if (!this._requestAbort || this._requestAbort.signal.aborted) this._requestAbort = new AbortController();
+  }
+
+  throwIfAborted(signal = this._requestAbort?.signal) {
+    if (this._aborted || signal?.aborted) throw new Error('ABORTED: Translation stopped by user');
   }
 
   // MainWindow 설정
@@ -243,6 +255,7 @@ class EnhancedSubtitleTranslator {
       preferredService: config.preferredService || 'mymemory',
       enableCache: config.enableCache !== false,
       batchTranslation: config.batchTranslation !== false,
+      localProcessingMode: config.localProcessingMode === 'auto' ? 'auto' : 'sequential',
       maxConcurrent: config.maxConcurrent || this.getOptimalConcurrency(),
       uiLanguage: config.uiLanguage || 'ko',
       selectedModel: config.selectedModel || '',
@@ -278,6 +291,7 @@ class EnhancedSubtitleTranslator {
       preferredService: 'mymemory',
       enableCache: true,
       batchTranslation: true,
+      localProcessingMode: 'sequential',
       maxConcurrent: this.getOptimalConcurrency(),
       uiLanguage: 'ko',
     };
@@ -503,8 +517,11 @@ class EnhancedSubtitleTranslator {
         if (attempt > 0) {
           await this.sleep(1000 * Math.pow(2, attempt)); // exponential backoff (지수 백오프)
         }
-        return await translateFn(text);
+        const result = await translateFn(text);
+        this.throwIfAborted();
+        return result;
       } catch (error) {
+        this.throwIfAborted();
         if (String(error?.message || error).includes('ABORTED')) throw error;
         lastError = error;
         this.logError(`Translation attempt ${attempt + 1}/${maxRetries} failed`, error);
@@ -715,19 +732,23 @@ class EnhancedSubtitleTranslator {
 
   // 공급자 스키마별 요청/응답 차이를 흡수하는 단일 호출 지점.
   async callLLM(provider, { system, user, maxTokens, temperature, timeout }) {
+    this.throwIfAborted();
+    const signal = this._requestAbort?.signal;
     if (!provider.apiKey) throw new Error(`${provider.label} API key is not configured.`);
     if (!provider.model) throw new Error(`${provider.label} model is not configured.`);
     if (!provider.baseUrl) throw new Error(`${provider.label} base URL is not configured.`);
 
     if (provider.format === 'anthropic') {
+      const alwaysThinking = /^claude-(?:opus-5-5|fable-5)(?:-|$)/.test(provider.model);
       const response = await axios.post(
         `${provider.baseUrl}/messages`,
         {
           model: provider.model,
           system,
           messages: [{ role: 'user', content: user }],
-          max_tokens: maxTokens,
-          temperature,
+          // Recent Claude models reject non-default sampling parameters.
+          max_tokens: alwaysThinking ? Math.max(4096, maxTokens) : maxTokens,
+          ...(alwaysThinking ? { output_config: { effort: 'low' } } : {}),
         },
         {
           headers: {
@@ -736,8 +757,10 @@ class EnhancedSubtitleTranslator {
             'Content-Type': 'application/json',
           },
           timeout,
+          signal,
         }
       );
+      this.throwIfAborted(signal);
       const blocks = response.data?.content;
       const textBlock = Array.isArray(blocks) ? blocks.find((block) => block?.type === 'text') : null;
       return { content: textBlock?.text || '', finishReason: response.data?.stop_reason, raw: response.data };
@@ -749,16 +772,24 @@ class EnhancedSubtitleTranslator {
         {
           system_instruction: { parts: [{ text: system }] },
           contents: [{ parts: [{ text: user }] }],
-          generationConfig: { temperature, maxOutputTokens: maxTokens },
+          // Gemini 3.8 removes sampling controls; leave defaults on older models too.
+          generationConfig: /^gemini-3[.-]/.test(provider.model)
+            ? { maxOutputTokens: Math.max(4096, maxTokens), thinkingConfig: { thinkingLevel: 'low' } }
+            : { maxOutputTokens: maxTokens },
         },
         {
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': provider.apiKey },
           timeout,
+          signal,
         }
       );
+      this.throwIfAborted(signal);
       const candidate = response.data?.candidates?.[0];
       return {
-        content: candidate?.content?.parts?.[0]?.text || '',
+        content: (candidate?.content?.parts || [])
+          .filter((part) => !part.thought && typeof part.text === 'string')
+          .map((part) => part.text)
+          .join(''),
         finishReason: candidate?.finishReason,
         raw: response.data,
       };
@@ -775,6 +806,11 @@ class EnhancedSubtitleTranslator {
     };
     if (isOfficialOpenAI(provider.baseUrl)) {
       body.max_completion_tokens = maxTokens;
+      if (/^gpt-6-(?:sol|luna)(?:-|$)/.test(provider.model)) body.reasoning_effort = 'none';
+      if (/^gpt-6-astra(?:-|$)/.test(provider.model)) {
+        body.reasoning_effort = 'low';
+        body.max_completion_tokens = Math.max(4096, maxTokens);
+      }
     } else {
       body.max_tokens = maxTokens;
       if (typeof temperature === 'number') body.temperature = temperature;
@@ -786,7 +822,9 @@ class EnhancedSubtitleTranslator {
         'Content-Type': 'application/json',
       },
       timeout,
+      signal,
     });
+    this.throwIfAborted(signal);
     const choice = response.data?.choices?.[0];
     return { content: choice?.message?.content || '', finishReason: choice?.finish_reason, raw: response.data };
   }
@@ -876,7 +914,8 @@ class EnhancedSubtitleTranslator {
     await this.throttleRequest('mymemory');
 
     try {
-      let result = await this.myMemoryTranslator.translate(text, sourceLang, targetLang);
+      let result = await this.myMemoryTranslator.translate(text, sourceLang, targetLang, this._requestAbort?.signal);
+      this.throwIfAborted();
 
       // 따옴표 제거 (앞뒤로 있는 따옴표들 제거)
       result = result.replace(/^["'"'「」『』]+|["'"'「」『』]+$/g, '');
@@ -963,6 +1002,7 @@ class EnhancedSubtitleTranslator {
           }
         }
       } catch (err) {
+        this.throwIfAborted();
         console.error(`[${m.name} Translation Failed] "${text.substring(0, 40)}..." - ${err.message}`);
 
         // 429/쿼터 초과면 즉시 중단하지 않고 다음 서비스로 넘어간다 (F2).
@@ -994,6 +1034,7 @@ class EnhancedSubtitleTranslator {
         sourceLang || 'auto'
       );
     } catch (finalErr) {
+      this.throwIfAborted();
       console.error(`[Final Attempt Failed] "${text.substring(0, 40)}..." - ${finalErr.message}`);
       // 쿼터 초과는 폴백이 끝난 뒤에도 삼키지 않는다: 할당량이면 다른 줄도
       // 전부 실패할 것이므로 원문 반환 대신 명확한 에러로 전파한다.
@@ -1212,7 +1253,13 @@ ${lines}`;
           );
         }
 
-        const cleaned = translations.map((text) => this.sanitizeTranslationText(text));
+        this.throwIfAborted();
+        const cleaned = translations.map((text) => {
+          if (typeof text !== 'string' || !this.sanitizeTranslationText(text).trim()) {
+            throw new Error('EMPTY_TRANSLATION: Missing translated dialogue');
+          }
+          return this.sanitizeTranslationText(text);
+        });
         // 쓰기 경로만 유지: 같은 provider.cacheKey + ctx:1 플래그로 기록해
         // 읽기 재활성화 시(지문 추가 PR) 바로 사용할 수 있게 한다.
         const cacheMethod = this.resolveProvider(selectedMethod)?.cacheKey || selectedMethod;
@@ -1228,6 +1275,7 @@ ${lines}`;
           typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : context.summary;
         context.glossary = this.mergeGlossary(context.glossary, parsed.glossary);
       } catch (error) {
+        this.throwIfAborted();
         console.error(`[Context-Aware Failed] batch ${Math.floor(start / batchSize) + 1}: ${error.message}`);
         console.log('[Context-Aware Fallback] Falling back to per-line translation for this batch');
 
@@ -1236,6 +1284,7 @@ ${lines}`;
             const fallback = await this.translateAuto(text, selectedMethod, targetLang, _sourceLang);
             results.push(fallback);
           } catch (fallbackErr) {
+            this.throwIfAborted();
             // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
             // (isQuotaError로 통일 — 다른 재시도 경로와 같은 판정을 쓴다)
             if (isQuotaError(fallbackErr)) {
@@ -1271,129 +1320,158 @@ ${lines}`;
     const preferredMethod = method || this.apiKeys.preferredService;
 
     if (preferredMethod === 'local' || !this.apiKeys.batchTranslation || texts.length <= 1) {
-      // 로컬 엔진은 내부 mutex로 직렬화되므로 여기서 병렬 큐를 만들지 않는다.
+      // The local engine owns its independent contexts and job-level lock.
+      const localResults =
+        preferredMethod === 'local'
+          ? localTranslator.translateLocalBatch(
+              texts,
+              targetLang || 'ko',
+              this.localDevice || 'auto',
+              this.localModelId || localTranslator.DEFAULT_MODEL_ID,
+              !this.apiKeys.batchTranslation ||
+                (this.localProcessingMode || this.apiKeys.localProcessingMode) === 'sequential'
+                ? 1
+                : undefined
+            )
+          : null;
       const results = [];
       let localProcessed = 0;
       let localUntranslated = 0;
-      for (let i = 0; i < texts.length; i++) {
-        if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
-        try {
-          console.log(`[Batch Translation] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
+      try {
+        for (let i = 0; i < texts.length; i++) {
+          if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+          try {
+            console.log(`[Batch Translation] ${i + 1}/${texts.length}: ${texts[i].substring(0, 40)}...`);
 
-          const result = await this.translateAuto(texts[i], method, targetLang, _sourceLang, contexts?.[i] || null);
-          results.push(result);
-          if (preferredMethod === 'local') localProcessed++;
-
-          console.log(`[Batch Success] ${i + 1}/${texts.length}: ${result.substring(0, 40)}...`);
-
-          // 진행률 업데이트
-          if (progressCallback) {
-            progressCallback({
-              stage: 'translating',
-              current: i + 1,
-              total: texts.length,
-              text: texts[i].substring(0, 50) + '...',
-            });
-          }
-        } catch (error) {
-          console.error(
-            `[Batch Failed] ${i + 1}/${texts.length}: "${texts[i].substring(0, 40)}..." - ${error.message}`
-          );
-
-          // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
-          // (병렬 경로와 동일 판정 — 직렬 경로도 같은 규칙으로 동작하게 한다)
-          if (isQuotaError(error)) {
-            throw new Error('API_QUOTA_EXCEEDED: ' + String(error?.message || error));
-          }
-
-          // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
-          let retryResult = texts[i]; // 기본값은 원문
-          // 로컬(오프라인)을 고른 경우 온라인 API(mymemory/chatgpt)로 폴백하지 않는다.
-          // 사용자 의도(오프라인)와 프라이버시를 존중하고, 잘못된 API 키/할당량 에러도 안 뜨게 한다.
-          // 원문 유지 → translateSRTContent의 passthrough 안전망이 명확한 에러로 처리한다.
-          if (preferredMethod === 'local') {
-            const message = String(error?.message || error);
-            // 모델 로드/추론 실패와 사용자 중지는 모든 세그먼트에서 반복하지 말고 즉시 알린다.
-            // 컨텍스트 초과(LOCAL_TEXT_TOO_LONG)는 원문 유지로 처리해 파일 전체 중단을 막는다.
-            if (!message.includes('LOCAL_UNTRANSLATED') && !message.includes('LOCAL_TEXT_TOO_LONG')) throw error;
-
-            localProcessed++;
-            localUntranslated++;
-            if (message.includes('LOCAL_TEXT_TOO_LONG')) {
-              console.warn(`[Local] segment too long for context, keeping original: ${i + 1}/${texts.length}`);
+            const localResult = localResults ? await localResults.next() : null;
+            if (localResults && (localResult.done || localResult.value.index !== i)) {
+              throw new Error('EMPTY_TRANSLATION: Missing local result');
             }
-            const failureSample = Math.min(5, texts.length);
-            if (localProcessed >= failureSample && localUntranslated / localProcessed >= 0.8) {
-              throw new Error(
-                `TRANSLATION_PASSTHROUGH: ${localUntranslated}/${localProcessed} local segments were untranslated.`
-              );
+            if (localResult?.value.error) throw localResult.value.error;
+            const result = localResults
+              ? localResult.value.translation
+              : await this.translateAuto(texts[i], method, targetLang, _sourceLang, contexts?.[i] || null);
+            results.push(result);
+            if (preferredMethod === 'local') localProcessed++;
+
+            console.log(`[Batch Success] ${i + 1}/${texts.length}: ${result.substring(0, 40)}...`);
+
+            // 진행률 업데이트
+            if (progressCallback) {
+              progressCallback({
+                stage: 'translating',
+                current: i + 1,
+                total: texts.length,
+                text: texts[i].substring(0, 50) + '...',
+              });
             }
-            console.warn(`[Local] segment failed, keeping original (no online fallback): ${i + 1}/${texts.length}`);
-          } else {
-            // 재시도는 translateAuto(전체 폴백 체인: 선호+mymemory+deepl+LLM)를
-            // 재호출하지 않는다 — 실패한 줄에 대해 구체적 폴백 서비스만 1회 직접
-            // 호출한다. translateAuto를 재호출하면 이미 실패한 유료 서비스
-            // (DeepL/LLM)까지 다시 호출돼 과청구가 난다 (P1).
-            const retryCandidates = [];
-            if (preferredMethod !== 'mymemory') retryCandidates.push('mymemory');
-            if (preferredMethod !== 'chatgpt' && this.resolveProvider('chatgpt')?.apiKey) {
-              retryCandidates.push('chatgpt');
+          } catch (error) {
+            console.error(
+              `[Batch Failed] ${i + 1}/${texts.length}: "${texts[i].substring(0, 40)}..." - ${error.message}`
+            );
+
+            // 429/할당량 초과는 폴백을 계속해도 의미가 없으므로 즉시 중지한다.
+            // (병렬 경로와 동일 판정 — 직렬 경로도 같은 규칙으로 동작하게 한다)
+            if (isQuotaError(error)) {
+              throw new Error('API_QUOTA_EXCEEDED: ' + String(error?.message || error));
             }
-            // 이미 파이프라인이 전 서비스를 다 돌았거나 재시도 후보가 없으면
-            // 재시도 없이 원문 유지로 넘어간다.
-            for (const fallbackMethod of retryCandidates) {
-              // 사용자가 중지한 뒤에는 유료 API를 다시 호출하지 않는다 (F4).
-              if (this._aborted) {
-                retryResult = texts[i];
-                break;
+
+            // 실패한 텍스트에 대해 더 적극적인 재시도 (2회)
+            let retryResult = texts[i]; // 기본값은 원문
+            // 로컬(오프라인)을 고른 경우 온라인 API(mymemory/chatgpt)로 폴백하지 않는다.
+            // 사용자 의도(오프라인)와 프라이버시를 존중하고, 잘못된 API 키/할당량 에러도 안 뜨게 한다.
+            // 원문 유지 → translateSRTContent의 passthrough 안전망이 명확한 에러로 처리한다.
+            if (preferredMethod === 'local') {
+              const message = String(error?.message || error);
+              // 모델 로드/추론 실패와 사용자 중지는 모든 세그먼트에서 반복하지 말고 즉시 알린다.
+              // 컨텍스트 초과(LOCAL_TEXT_TOO_LONG)는 원문 유지로 처리해 파일 전체 중단을 막는다.
+              if (!message.includes('LOCAL_UNTRANSLATED') && !message.includes('LOCAL_TEXT_TOO_LONG')) throw error;
+
+              localProcessed++;
+              localUntranslated++;
+              if (message.includes('LOCAL_TEXT_TOO_LONG')) {
+                console.warn(`[Local] segment too long for context, keeping original: ${i + 1}/${texts.length}`);
               }
-              try {
-                console.log(`[Retry] ${i + 1}/${texts.length}: ${fallbackMethod}...`);
-                await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 지연
+              const failureSample = Math.min(5, texts.length);
+              if (localProcessed >= failureSample && localUntranslated / localProcessed >= 0.8) {
+                throw new Error(
+                  `TRANSLATION_PASSTHROUGH: ${localUntranslated}/${localProcessed} local segments were untranslated.`
+                );
+              }
+              console.warn(`[Local] segment failed, keeping original (no online fallback): ${i + 1}/${texts.length}`);
+            } else {
+              // 재시도는 translateAuto(전체 폴백 체인: 선호+mymemory+deepl+LLM)를
+              // 재호출하지 않는다 — 실패한 줄에 대해 구체적 폴백 서비스만 1회 직접
+              // 호출한다. translateAuto를 재호출하면 이미 실패한 유료 서비스
+              // (DeepL/LLM)까지 다시 호출돼 과청구가 난다 (P1).
+              const retryCandidates = [];
+              if (preferredMethod !== 'mymemory') retryCandidates.push('mymemory');
+              if (preferredMethod !== 'chatgpt' && this.resolveProvider('chatgpt')?.apiKey) {
+                retryCandidates.push('chatgpt');
+              }
+              // 이미 파이프라인이 전 서비스를 다 돌았거나 재시도 후보가 없으면
+              // 재시도 없이 원문 유지로 넘어간다.
+              for (const fallbackMethod of retryCandidates) {
+                // 사용자가 중지한 뒤에는 유료 API를 다시 호출하지 않는다 (F4).
                 if (this._aborted) {
                   retryResult = texts[i];
                   break;
                 }
-                if (fallbackMethod === 'mymemory') {
-                  retryResult = await this.translateWithRetry((t) => {
-                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
-                    return this.translateWithMyMemory(
-                      t,
-                      targetLang === 'KO' ? 'ko' : targetLang.toLowerCase(),
-                      _sourceLang || 'auto'
-                    );
-                  }, texts[i]);
-                } else {
-                  const provider = this.resolveProvider('chatgpt');
-                  retryResult = await this.translateWithRetry((t) => {
-                    if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
-                    return this.translateWithLLM(
-                      t,
-                      this.mapToHumanLang ? this.mapToHumanLang(targetLang) : targetLang,
-                      provider,
-                      _sourceLang
-                    );
-                  }, texts[i]);
+                try {
+                  console.log(`[Retry] ${i + 1}/${texts.length}: ${fallbackMethod}...`);
+                  await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 지연
+                  if (this._aborted) {
+                    retryResult = texts[i];
+                    break;
+                  }
+                  if (fallbackMethod === 'mymemory') {
+                    retryResult = await this.translateWithRetry((t) => {
+                      if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                      return this.translateWithMyMemory(
+                        t,
+                        targetLang === 'KO' ? 'ko' : targetLang.toLowerCase(),
+                        _sourceLang || 'auto'
+                      );
+                    }, texts[i]);
+                  } else {
+                    const provider = this.resolveProvider('chatgpt');
+                    retryResult = await this.translateWithRetry((t) => {
+                      if (this._aborted) throw new Error('ABORTED: Translation stopped by user');
+                      return this.translateWithLLM(
+                        t,
+                        this.mapToHumanLang ? this.mapToHumanLang(targetLang) : targetLang,
+                        provider,
+                        _sourceLang
+                      );
+                    }, texts[i]);
+                  }
+                  console.log(`[Retry Success] ${i + 1}/${texts.length}: ${retryResult.substring(0, 40)}...`);
+                  break; // 성공하면 재시도 중단
+                } catch (retryError) {
+                  console.error(`[Retry Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
+                  // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
+                  if (isQuotaError(retryError)) {
+                    throw new Error('API_QUOTA_EXCEEDED: ' + String(retryError?.message || retryError));
+                  }
+                  if (String(retryError?.message || '').includes('ABORTED')) {
+                    retryResult = texts[i];
+                    break;
+                  }
+                  retryResult = texts[i]; // 마지막 실패 시 원문 유지
                 }
-                console.log(`[Retry Success] ${i + 1}/${texts.length}: ${retryResult.substring(0, 40)}...`);
-                break; // 성공하면 재시도 중단
-              } catch (retryError) {
-                console.error(`[Retry Failed] ${i + 1}/${texts.length}: ${retryError.message}`);
-                // 폴백 서비스(MyMemory/chatgpt)도 429를 던지면 재시도를 계속해도 의미 없다.
-                if (isQuotaError(retryError)) {
-                  throw new Error('API_QUOTA_EXCEEDED: ' + String(retryError?.message || retryError));
-                }
-                if (String(retryError?.message || '').includes('ABORTED')) {
-                  retryResult = texts[i];
-                  break;
-                }
-                retryResult = texts[i]; // 마지막 실패 시 원문 유지
               }
             }
-          }
 
-          results.push(retryResult);
+            results.push(retryResult);
+          }
         }
+        if (localResults && !(await localResults.next()).done) {
+          throw new Error('EMPTY_TRANSLATION: Unexpected extra local result');
+        }
+      } finally {
+        // Early passthrough failure, cancellation, or a throwing progress callback
+        // must release the engine's generator lock before the next job/unload.
+        await localResults?.return();
       }
       return results;
     }
@@ -1561,13 +1639,15 @@ ${lines}`;
     method = 'mymemory',
     targetLang = null,
     progressCallback = null,
-    sourceLang = null
+    sourceLang = null,
+    outputOptions = {}
   ) {
     // HIGH-1: 중지 플래그는 새 번역 요청마다 항상 리셋한다. 한 번 중지해도
     // 같은 세션의 다음 새 번역은 다시 시작할 수 있어야 한다. 언어 간 abort
     // 보호(중지 후 남은 언어 시작 금지)는 translation IPC 다국어 루프가 translateSRTFile
     // 호출 전에 translator._aborted를 직접 검사하므로 여기서 리셋해도 유지된다.
     this.resetAbort();
+    const signal = this._requestAbort?.signal;
     // 구버전 설정에 남은 경량 항목은 OpenAI로 보낸다.
     if (method === 'chatgpt-nano') method = 'chatgpt';
     try {
@@ -1583,9 +1663,9 @@ ${lines}`;
       // 번역 결과는 큐당 한 줄(길 수 있음)이므로 화면 표시용으로 줄바꿈만 적용한다.
       // 타임링은 추출 단계(토큰 끝시각)에서 이미 실발화에 맞춰졌으므로, 여기서 시간 비례
       // 추측 분할(싱크 드리프트 유발)은 하지 않는다. 큐(타임스탬프) 구조는 그대로 둔다.
+      this.throwIfAborted(signal);
       const displayContent = wrapCuesForDisplay(translatedContent);
-      fs.writeFileSync(outputPath, displayContent, 'utf8');
-      return outputPath;
+      return writeFileAtomic(outputPath, displayContent, outputOptions.policy || 'overwrite');
     } catch (error) {
       this.logError('SRT file translation failed', error);
       throw error;
@@ -1649,8 +1729,8 @@ ${lines}`;
         continue;
       }
 
-      // 자막 번호 (숫자만 있는 줄)
-      if (/^\d+$/.test(trimmed)) {
+      // 숫자 뒤에 타임코드가 있을 때만 자막 번호로 취급한다.
+      if (/^\d+$/.test(trimmed) && lines[i + 1]?.includes('-->')) {
         translatedLines.push(line);
         i++;
         continue;
@@ -1676,16 +1756,16 @@ ${lines}`;
         // 타임코드면 자막 끝
         if (nextLine.includes('-->')) break;
 
-        // 숫자만 있으면 다음 자막 번호이므로 끝
-        if (/^\d+$/.test(nextLine)) break;
+        // 숫자 본문은 수집하고, 다음 타임코드 앞의 번호에서만 끝낸다.
+        if (/^\d+$/.test(nextLine) && lines[j + 1]?.includes('-->')) break;
 
         // 자막 텍스트 계속 수집
         subtitleText += '\n' + nextLine;
         j++;
       }
 
-      // 비대사 부분은 번역하지 않고 원본 유지
-      if (this.isNonDialogue(subtitleText)) {
+      // 숫자만 있는 자막과 비대사 부분은 기존처럼 번역하지 않고 유지한다.
+      if (/^[\d\s]+$/.test(subtitleText) || this.isNonDialogue(subtitleText)) {
         translatedLines.push(subtitleText);
         console.log('[Non-Dialogue] Skipping translation:', subtitleText.substring(0, 30) + '...');
       } else {
@@ -1717,6 +1797,13 @@ ${lines}`;
       ? await this.translateContextAwareBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback)
       : await this.translateBatch(textsToTranslate, method, targetLang, sourceLang, progressCallback, deeplContexts);
 
+    this.throwIfAborted();
+    if (
+      translatedTexts.length !== textsToTranslate.length ||
+      translatedTexts.some((text) => typeof text !== 'string' || !text.trim())
+    ) {
+      throw new Error('EMPTY_TRANSLATION: Missing translated dialogue');
+    }
     // 3단계: 결과 삽입
     for (let k = 0; k < translatedTexts.length; k++) {
       const index = textIndices[k];

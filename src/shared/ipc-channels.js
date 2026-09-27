@@ -26,6 +26,8 @@ module.exports = Object.freeze({
   OPEN_EXTERNAL: 'open-external',
   GET_AUDIO_DATA: 'get-audio-data',
   GET_CURRENT_VERSION: 'get-current-version',
+  GET_DIAGNOSTICS: 'get-diagnostics',
+  OPEN_ERROR_LOG_LOCATION: 'open-error-log-location',
   GET_GPU_INFO: 'get-gpu-info',
   LOCAL_MODEL_LIST: 'local-model-list',
   LOCAL_MODEL_STATUS: 'local-model-status',

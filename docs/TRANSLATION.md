@@ -46,7 +46,7 @@ npm run i18n:check      # verifies i18n.js is in sync (also runs in `npm run che
 
 ### 2. Add LOG_I18N mappings (src/renderer/features/logs.js)
 
-In `src/renderer/features/logs.js`, find the `LOG_I18N` object and add a mapping array for your language. This translates Korean log output into your language:
+In `src/renderer/features/logs.js`, find the `LOG_I18N` object and add a mapping array for your language. This translates Korean status output into your language. Keep patterns anchored to the status prefix so they cannot rewrite filenames, subtitle text or error details. Extend `scripts/test-log-localization.js` with representative producer messages:
 
 ```js
 const LOG_I18N = {
@@ -56,8 +56,8 @@ const LOG_I18N = {
   pl: [ ... ],
   // Add your language:
   xx: [
-    { re: /자막 추출을 시작합니다/g, to: 'Starting subtitle extraction' },
-    { re: /처리 중:/g, to: 'Processing:' },
+    { re: /^자막 추출을 시작합니다/, to: 'Starting subtitle extraction' },
+    { re: /^처리 중:/, to: 'Processing:' },
     // ... add patterns for log messages
   ]
 };
@@ -68,7 +68,7 @@ const LOG_I18N = {
 In `src/renderer/index.html`, add an `<option>` to the language selector:
 
 ```html
-<select id="uiLangSelect">
+<select id="uiLanguageSelect">
   <option value="ko">한국어</option>
   <option value="en">English</option>
   <!-- Add your language -->
@@ -80,13 +80,15 @@ Model names, descriptions, and target-language names come from the `modelNames`,
 
 ### 4. (Optional) Add a README translation
 
-Create `README.xx.md` following the same structure as `README.md`, and add a link to it in all existing READMEs.
+Create `docs/README.xx.md` following the structure of `README.md` and the existing translations. Use `../` for links to root files or assets, and add its language link to all existing READMEs.
 
 ### 5. Submit a Pull Request
 
 - Branch: `feature/i18n-add-<language>`
 - Include all modified files
-- Test with `npm start` and switch the UI language to verify
+- Run `npm run i18n:check` and `npm run check`
+- Test with `npm start` using a separate profile as described in [CONTRIBUTING.md](../CONTRIBUTING.md)
+- Switch languages and check narrow-window wrapping, keyboard access, logs and settings
 
 ## How to Add a Translation Target Language
 

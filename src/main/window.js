@@ -121,7 +121,10 @@ function createWindow(app, transcription, checkForUpdates) {
       } catch (_error) {}
     }
   });
-  window.on('closed', () => transcription.forceMemoryCleanup('cuda'));
+  window.on('closed', () => {
+    transcription.setMainWindow(null);
+    transcription.forceMemoryCleanup('cuda');
+  });
   return window;
 }
 
