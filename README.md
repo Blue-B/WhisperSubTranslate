@@ -8,9 +8,16 @@ Turn any video into multilingual subtitles, locally. Drop in a video, generate a
 
 ## Preview
 
-<p align="center">
-  <img src="assets/hero/hero.png" alt="WhisperSubTranslate main UI" width="100%">
-</p>
+[![30-second real app demo](assets/demo/demo-30s.gif)](assets/demo/demo-30s.mp4)
+
+[Watch/download the 30-second MP4](assets/demo/demo-30s.mp4). English UI, real video-to-subtitle extraction and local translation. [Recording notes](docs/DEMO_RECORDING.md).
+
+<details>
+<summary>Static app screenshot</summary>
+
+![WhisperSubTranslate main UI](assets/hero/hero.png)
+
+</details>
 
 ## Features
 
@@ -24,7 +31,33 @@ Turn any video into multilingual subtitles, locally. Drop in a video, generate a
 
 ### Users
 
-Download the latest portable archive from [Releases](https://github.com/Blue-B/WhisperSubTranslate/releases), extract it, and run `WhisperSubTranslate.exe`. After the selected speech model is downloaded, extraction runs fully offline on your PC. Translation is optional.
+**[Download Windows x64 ZIP · v2.5.1 · 2.15 GB](https://github.com/Blue-B/WhisperSubTranslate/releases/download/v2.5.1/WhisperSubTranslate-v2.5.1-win-x64.zip)** · [Release notes / newer versions](https://github.com/Blue-B/WhisperSubTranslate/releases/latest)
+
+Choose `WhisperSubTranslate-v2.5.1-win-x64.zip`, not GitHub's “Source code” archives. No Python or separate CUDA Toolkit installation is needed for this Windows package. Linux users should follow the source setup below.
+
+1. Extract the **entire ZIP into a new folder**, then run `WhisperSubTranslate.exe` inside it. Do not run the EXE from inside the ZIP or move it away from its bundled files.
+2. For a first check, add a short video (about 10–30 seconds) with clear speech. Keep **Translation → No translation**, choose the spoken language (or Automatic), and leave **Device → Automatic**. The default speech model is `large-v3-turbo`; `tiny`/`base` use less download space for a quick setup check, with lower accuracy.
+3. Click **Start Extraction**. Confirm the selected model download if prompted and keep the internet connected until it finishes. Model download happens once; it is separate from transcription time.
+4. When the job completes, use **Open output folder** to find the `.srt`. By default it is saved beside the source video; existing files are saved under a new name. Check a few lines and their timing in your video player.
+5. To translate, select **Hy-MT2 (local)** and a target language, then start again (or add an existing SRT). The selected translation model downloads separately on first use. After the required models are downloaded, local extraction and local translation work offline without an API key.
+
+#### Download size and disk space
+
+The Windows ZIP and AI models are **separate downloads**. Approximate decimal sizes for v2.5.1:
+
+| What you download | Additional download | When needed |
+| --- | ---: | --- |
+| Windows x64 portable ZIP | 2.15 GB | Once per app version |
+| `large-v3-turbo` speech model (default) | 1.62 GB | First extraction with this model |
+| `tiny` / `base` speech model | 77.7 MB / 148 MB | Optional smaller setup check |
+| Hy-MT2 1.8B translation model | 1.13 GB | Only for local translation |
+| Hy-MT2 7B translation model | 6.16 GB | Optional larger local translator |
+
+ZIP + default speech model is about **3.77 GB of network downloads**; adding Hy-MT2 1.8B makes it about **4.90 GB**. These are not free-disk-space requirements: extraction needs space for both the ZIP and unpacked app, and processing also needs temporary audio, output and download headroom. The unpacked Windows app size is not measured here, so no exact total disk requirement is claimed. Sync models need additional engine/model downloads; see [Speech recognition models](#speech-recognition-models).
+
+Models normally live on the system drive under `%APPDATA%\whispersubtranslate`, even when the EXE is on another drive. For a self-contained installation, create `portable-data` next to the EXE **before first launch**; see [Portable data layout](#portable-data-layout).
+
+If the first job seems stuck, distinguish **model downloading**, **speech extraction**, and **translation** in the log. For unexpectedly slow local translation, check the actual backend shown in the log, then use **Settings → Copy diagnostics**. Speech recognition and translation choose their backends separately; owning an NVIDIA GPU does not prove a translation job used CUDA.
 
 ### Developers
 
