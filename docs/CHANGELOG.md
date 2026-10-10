@@ -2,6 +2,18 @@
 
 All notable changes to WhisperSubTranslate are documented here. This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.2] - 2026-10-10
+
+Patch for multi-GPU systems and screen scaling on exit.
+
+### Added
+
+- **GPU selection:** on systems with two or more CUDA GPUs, the device list shows each GPU by its `nvidia-smi` number and name. Selecting one limits whisper.cpp, faster-whisper and local translation to that GPU through `CUDA_VISIBLE_DEVICES` with PCI bus ordering. The choice is saved and restored at startup. If local translation has already loaded a model, restart the app for the new GPU to apply to translation. Automatic, GPU and CPU keep their previous behavior, and single-GPU systems see no new options. Vulkan device selection is not included.
+
+### Fixed
+
+- **Screen scaling on exit:** removed the `nvidia-smi --gpu-reset` call that ran when the window closed or the app quit. On Windows this command restarts the NVIDIA display driver for every GPU, which could briefly enlarge all windows as if text scaling had changed. Ending the app's child processes already releases CUDA memory.
+
 ## [2.5.1] - 2026-09-27
 
 Update for output-file protection, translation retries, local-model download integrity, and application packaging.
