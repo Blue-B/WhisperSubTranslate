@@ -40,6 +40,7 @@
       "src/**",
       "build/icon.png",
       "assets/**",
+      "!assets/demo/**",
       "locales/**",
       "node_modules/**/*",
       "!node_modules/**/{*.md,*.markdown,LICENSE*,test,tests,__tests__,*.map}",

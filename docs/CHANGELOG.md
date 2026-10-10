@@ -14,6 +14,10 @@ Patch for multi-GPU systems and screen scaling on exit.
 
 - **Screen scaling on exit:** removed the `nvidia-smi --gpu-reset` call that ran when the window closed or the app quit. On Windows this command restarts the NVIDIA display driver for every GPU, which could briefly enlarge all windows as if text scaling had changed. Ending the app's child processes already releases CUDA memory.
 
+### Changed
+
+- **Windows package size:** README demo media under `assets/demo/` is no longer bundled into the app. The app never loads it, and including it pushed the Windows zip over GitHub's 2 GiB release asset limit.
+
 ## [2.5.1] - 2026-09-27
 
 Update for output-file protection, translation retries, local-model download integrity, and application packaging.
