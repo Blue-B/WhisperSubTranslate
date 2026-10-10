@@ -198,8 +198,8 @@ function getGpuInfo() {
       _gpuInfoCache = { available: false };
       return _gpuInfoCache;
     }
-    const firstLine = raw.split('\n')[0];
-    const parts = firstLine.split(',').map((s) => s.trim());
+    const lines = raw.split('\n');
+    const parts = lines[0].split(',').map((s) => s.trim());
     const gpuName = parts[0] || 'Unknown GPU';
     const computeCap = parseFloat(parts[1]) || 0;
     _gpuInfoCache = {
@@ -207,6 +207,8 @@ function getGpuInfo() {
       name: gpuName,
       computeCap,
       cudaCompatible: computeCap >= CUDA12_MIN_COMPUTE,
+      // nvidia-smi 순서(PCI 버스 순) 그대로. 멀티 GPU에서 특정 GPU 지정 옵션에 쓴다.
+      gpus: lines.map((line) => line.split(',')[0].trim()),
     };
     console.log(
       `[GPU Info] ${gpuName}, Compute Capability: ${computeCap}, CUDA 12 compatible: ${computeCap >= CUDA12_MIN_COMPUTE}`
@@ -334,8 +336,24 @@ function getWhisperSpawnEnv(device, whisperDir) {
   return { ...process.env, [envVar]: newPath };
 }
 
+// 'cuda:N'을 고르면 앱과 자식 프로세스(whisper-cli, faster-whisper)가 N번 GPU만 보게 한다.
+// 지정이 없으면 llama.cpp(로컬 번역)가 모든 GPU에 모델을 나눠 올린다.
+// 로컬 번역은 앱 안에서 CUDA를 한 번만 초기화하므로, 번역 모델을 이미 올린 뒤 바꾸면 재시작해야 반영된다.
+const ORIGINAL_CUDA_VISIBLE_DEVICES = process.env.CUDA_VISIBLE_DEVICES;
+function applyGpuSelection(device) {
+  const index = /^cuda:(\d+)$/.exec(device || '')?.[1];
+  if (index !== undefined && Number(index) < (getGpuInfo().gpus?.length || 0)) {
+    process.env.CUDA_DEVICE_ORDER = 'PCI_BUS_ID'; // nvidia-smi 번호와 일치시킨다
+    process.env.CUDA_VISIBLE_DEVICES = index;
+  } else if (ORIGINAL_CUDA_VISIBLE_DEVICES === undefined) {
+    delete process.env.CUDA_VISIBLE_DEVICES;
+  } else {
+    process.env.CUDA_VISIBLE_DEVICES = ORIGINAL_CUDA_VISIBLE_DEVICES;
+  }
+}
+
 function resolveDevice(requestedDevice, basePath) {
-  const req = (requestedDevice || 'auto').toLowerCase();
+  const req = (requestedDevice || 'auto').toLowerCase().replace(/^cuda:\d+$/, 'cuda');
   if (req === 'cpu') return 'cpu';
   if (req === 'vulkan') return isVulkanAvailable(basePath) ? 'vulkan' : 'cpu';
   if (req !== 'auto' && req !== 'cuda' && req !== 'gpu') return 'cpu';
@@ -380,26 +398,9 @@ function forceMemoryCleanup(device, isFileTransition = false) {
       //    taskkill /IM 은 같은 이름의 타 앱(OBS 등)까지 죽이므로 쓰지 않는다(P1-6).
       killTrackedChildProcesses();
 
-      // 3. GPU 정리 (Windows + CUDA 한정). GPU 리셋은 동기 5회(최대 65초) 대신
-      //    비동기 1회 시도만 한다 — 프로세스 종료만으로 CUDA 컨텍스트는 해제되며,
-      //    리셋은 최후 수단으로 실패해도 추출은 계속되어야 한다(P1-6).
-      if (process.platform === 'win32' && device === 'cuda') {
-        const delay = isFileTransition ? 2000 : 500; // Longer delay for file transitions
-
-        setTimeout(() => {
-          console.log('   - Flushing GPU cache...');
-          execFile('nvidia-smi', ['--gpu-reset'], { timeout: 15000, windowsHide: true }, (err) => {
-            if (err) {
-              console.log('   - GPU reset failed (continuing):', err.message);
-            } else {
-              console.log('   - GPU memory cleanup completed');
-            }
-            resolve();
-          });
-        }, delay);
-      } else {
-        resolve();
-      }
+      // nvidia-smi GPU 리셋은 쓰지 않는다. 윈도우에서는 모든 GPU의 디스플레이 드라이버를
+      // 재시작해 화면 배율이 깨졌다 돌아온다. 프로세스 종료만으로 CUDA 메모리는 해제된다.
+      resolve();
 
       // 5. Node.js garbage collection
       if (global.gc) {
@@ -2620,6 +2621,7 @@ function setMainWindow(window) {
 function configureExtraction(payload = {}) {
   reduceRepetition = payload.reduceRepetition !== false;
   naturalSegmentation = payload.naturalSegmentation !== false;
+  applyGpuSelection(payload.device);
 }
 
 function resetStop() {
@@ -2762,6 +2764,7 @@ function getGpuStatus() {
 }
 
 module.exports = {
+  applyGpuSelection,
   cancelDownloads: cancelActiveDownloads,
   checkModelStatus,
   configureExtraction,

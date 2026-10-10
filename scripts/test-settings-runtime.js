@@ -104,8 +104,17 @@ async function testCleanup() {
     VAD_MODEL_NAME: 'silero.bin',
     FASTER_WHISPER_MODEL: 'large-v2',
     getFasterWhisperModelsDir: () => '/fixture/models',
+    process: { env: {} },
+    getGpuInfo: () => ({ gpus: ['RTX 5080', 'RTX 5070'] }),
+    ORIGINAL_CUDA_VISIBLE_DEVICES: undefined,
   });
-  const functions = ['configureExtraction', 'getWhisperCppSettings', 'getWhisperVadArgs', 'buildFasterWhisperArgs'];
+  const functions = [
+    'applyGpuSelection',
+    'configureExtraction',
+    'getWhisperCppSettings',
+    'getWhisperVadArgs',
+    'buildFasterWhisperArgs',
+  ];
   vm.runInContext(
     'let reduceRepetition = true; let naturalSegmentation = true;\n' +
       functions
@@ -132,6 +141,18 @@ async function testCleanup() {
   }
   context.configureExtraction({});
   assert.ok(context.getWhisperCppSettings('cpu').includes('-mc'), 'repetition control defaults on');
+
+  // 특정 GPU 지정: 존재하는 번호만 적용하고, 자동/없는 번호는 지정을 푼다.
+  const env = context.process.env;
+  context.configureExtraction({ device: 'cuda:1' });
+  assert.strictEqual(env.CUDA_VISIBLE_DEVICES, '1');
+  assert.strictEqual(env.CUDA_DEVICE_ORDER, 'PCI_BUS_ID');
+  context.configureExtraction({ device: 'cuda:2' });
+  assert.strictEqual(env.CUDA_VISIBLE_DEVICES, undefined, 'missing GPU index must not hide every GPU');
+  context.applyGpuSelection('cuda:0');
+  context.applyGpuSelection('auto');
+  assert.strictEqual(env.CUDA_VISIBLE_DEVICES, undefined);
+  assert.doesNotMatch(source, /--gpu-reset/, 'GPU reset restarts the Windows display driver');
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wst-cleanup-test-'));
   const input = path.join(dir, 'original.wav');

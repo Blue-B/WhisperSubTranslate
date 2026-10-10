@@ -78,6 +78,12 @@ app.whenReady().then(async () => {
       console.log('[Cache] Failed to clear cache:', error.message);
     }
   }
+  // 로컬 번역(CUDA)이 처음 초기화되기 전에 저장된 GPU 지정을 적용한다.
+  try {
+    transcription.applyGpuSelection(transcription.translator.loadApiKeys()?.selectedDevice);
+  } catch (error) {
+    console.warn('[GPU] Failed to apply saved GPU selection:', error.message);
+  }
   openMainWindow();
 });
 

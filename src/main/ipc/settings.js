@@ -75,6 +75,7 @@ function registerSettingsHandlers(ipcMain, app, transcription) {
   ipcMain.handle(C.SAVE_API_KEYS, (_event, keys) => {
     try {
       const result = translator.saveApiKeys(keys);
+      if (keys && 'selectedDevice' in keys) transcription.applyGpuSelection(keys.selectedDevice);
       return { success: !!result, insecure: !!result?.insecure };
     } catch (error) {
       return { success: false, error: error.message };

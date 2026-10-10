@@ -293,7 +293,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const lang = I18N[currentUiLang];
     const langDisplay = language === 'auto' ? lang.langAuto : language;
-    const deviceDisplay = device === 'auto' ? lang.deviceAutoLabel : device === 'cuda' ? 'GPU' : 'CPU';
+    const deviceDisplay =
+      device === 'auto'
+        ? lang.deviceAutoLabel
+        : device.startsWith('cuda')
+          ? device.replace('cuda:', 'GPU ').replace('cuda', 'GPU')
+          : 'CPU';
 
     addOutput(`\n${lang.processingStart(fileQueue.length)}\n`);
     addOutput(`${lang.processingInfo(model, langDisplay, deviceDisplay)}\n\n`);

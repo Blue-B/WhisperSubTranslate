@@ -45,6 +45,8 @@ function rebuildLanguageSelectOptions(lang) {
 // 이전 언어 텍스트가 그대로 복원되는 문제가 있다(F1). 언어별 문구는 표시 시점에
 // 현재 UI 언어로 생성한다.
 let _gpuStatusData = null; // { name, computeCap, backend: 'cuda'|'vulkan'|'cpu', legacyNvidia } | null
+// GPU 목록은 저장된 설정을 불러온 뒤에 도착하므로 'cuda:N' 선택을 두었다가 그때 복원한다.
+let _savedDevice = null;
 
 // 현재 언어로 장치 상태 문구를 만든다. 감지 전이면 기본 안내를 그대로 쓴다.
 function getDeviceStatusMarkup(lang) {
@@ -54,7 +56,10 @@ function getDeviceStatusMarkup(lang) {
   if (_gpuStatusData.legacyNvidia && _gpuStatusData.backend === 'cpu' && l.gpuIncompatibleHtml) {
     return l.gpuIncompatibleHtml(_gpuStatusData.name, _gpuStatusData.computeCap);
   }
-  return l.gpuDetectedHtml ? l.gpuDetectedHtml(_gpuStatusData.name, _gpuStatusData.backend) : l.deviceStatusHtml;
+  // 특정 GPU를 골랐으면 첫 번째 GPU 대신 그 GPU 이름을 보여준다.
+  const picked = document.getElementById('deviceSelect')?.selectedOptions[0];
+  const name = picked?.value.startsWith('cuda:') ? picked.text.replace(/^GPU \d+: /, '') : _gpuStatusData.name;
+  return l.gpuDetectedHtml ? l.gpuDetectedHtml(name, _gpuStatusData.backend) : l.deviceStatusHtml;
 }
 
 function rebuildDeviceSelectOptions(lang) {
@@ -126,6 +131,19 @@ async function checkGpuCompatibility() {
   };
   const deviceStatus = document.getElementById('deviceStatus');
   if (deviceStatus) setStatusMarkup(deviceStatus, getDeviceStatusMarkup(currentUiLang));
+
+  // GPU가 2개 이상이면 특정 GPU 하나만 쓰는 선택지를 추가한다.
+  const sel = document.getElementById('deviceSelect');
+  if (!sel || !info.cudaCompatible || !(info.gpus?.length > 1) || sel.querySelector('option[value^="cuda:"]')) return;
+  const cpuOption = sel.querySelector('option[value="cpu"]');
+  info.gpus.forEach((name, i) => sel.add(new Option(`GPU ${i}: ${name}`, `cuda:${i}`), cpuOption));
+  sel.addEventListener('change', () => {
+    if (deviceStatus) setStatusMarkup(deviceStatus, getDeviceStatusMarkup(currentUiLang));
+  });
+  if (_savedDevice && sel.querySelector(`option[value="${_savedDevice}"]`)) {
+    sel.value = _savedDevice;
+    sel.dispatchEvent(new Event('change', { bubbles: false }));
+  }
 }
 
 function getModelDisplayName(lang, id) {
@@ -816,7 +834,8 @@ async function loadSavedSettings() {
     // 처리 장치 선택
     if (keys.selectedDevice) {
       const deviceSelect = document.getElementById('deviceSelect');
-      if (deviceSelect) {
+      _savedDevice = keys.selectedDevice;
+      if (deviceSelect && deviceSelect.querySelector(`option[value="${keys.selectedDevice}"]`)) {
         deviceSelect.value = keys.selectedDevice;
         console.log('[Settings] Restored device:', keys.selectedDevice);
       }

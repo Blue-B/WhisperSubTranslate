@@ -825,6 +825,7 @@ function runWhisperDeviceRouting() {
   assert.strictEqual(makeResolver(false, false)('auto', '/app'), 'cpu');
   assert.strictEqual(makeResolver(true, true)('cpu', '/app'), 'cpu');
   assert.strictEqual(makeResolver(true, true)('unknown', '/app'), 'cpu');
+  assert.strictEqual(makeResolver(true, true)('cuda:1', '/app'), 'cuda');
   assert.match(source, /useVulkanBuild = chosenDevice === 'vulkan'/, 'Vulkan must select its bundled CLI directory');
   assert.match(
     source,
