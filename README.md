@@ -31,9 +31,9 @@ Turn any video into multilingual subtitles, locally. Drop in a video, generate a
 
 ### Users
 
-**[Download Windows x64 ZIP · v2.5.1 · 2.15 GB](https://github.com/Blue-B/WhisperSubTranslate/releases/download/v2.5.1/WhisperSubTranslate-v2.5.1-win-x64.zip)** · [Release notes / newer versions](https://github.com/Blue-B/WhisperSubTranslate/releases/latest)
+**[Download the latest Windows x64 ZIP · about 2.15 GB](https://github.com/Blue-B/WhisperSubTranslate/releases/latest)**
 
-Choose `WhisperSubTranslate-v2.5.1-win-x64.zip`, not GitHub's “Source code” archives. No Python or separate CUDA Toolkit installation is needed for this Windows package. Linux users should follow the source setup below.
+On the release page, choose `WhisperSubTranslate-v<version>-win-x64.zip` under Assets, not GitHub's “Source code” archives. No Python or separate CUDA Toolkit installation is needed for this Windows package. Linux users should follow the source setup below.
 
 1. Extract the **entire ZIP into a new folder**, then run `WhisperSubTranslate.exe` inside it. Do not run the EXE from inside the ZIP or move it away from its bundled files.
 2. For a first check, add a short video (about 10–30 seconds) with clear speech. Keep **Translation → No translation**, choose the spoken language (or Automatic), and leave **Device → Automatic**. The default speech model is `large-v3-turbo`; `tiny`/`base` use less download space for a quick setup check, with lower accuracy.
@@ -43,7 +43,7 @@ Choose `WhisperSubTranslate-v2.5.1-win-x64.zip`, not GitHub's “Source code” 
 
 #### Download size and disk space
 
-The Windows ZIP and AI models are **separate downloads**. Approximate decimal sizes for v2.5.1:
+The Windows ZIP and AI models are **separate downloads**. Approximate decimal sizes for the current release:
 
 | What you download | Additional download | When needed |
 | --- | ---: | --- |

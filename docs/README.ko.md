@@ -31,9 +31,9 @@
 
 ### 사용자
 
-**[Windows x64 ZIP 다운로드 · v2.5.1 · 2.15 GB](https://github.com/Blue-B/WhisperSubTranslate/releases/download/v2.5.1/WhisperSubTranslate-v2.5.1-win-x64.zip)** · [변경 사항 / 최신 버전](https://github.com/Blue-B/WhisperSubTranslate/releases/latest)
+**[최신 Windows x64 ZIP 다운로드 · 약 2.15 GB](https://github.com/Blue-B/WhisperSubTranslate/releases/latest)**
 
-GitHub의 “Source code”가 아닌 `WhisperSubTranslate-v2.5.1-win-x64.zip`을 받으세요. 이 Windows 배포본은 Python이나 CUDA Toolkit을 별도로 설치할 필요가 없습니다. Linux 사용자는 아래 소스 실행 안내를 따라 주세요.
+릴리스 페이지의 Assets에서 GitHub의 “Source code”가 아닌 `WhisperSubTranslate-v<버전>-win-x64.zip`을 받으세요. 이 Windows 배포본은 Python이나 CUDA Toolkit을 별도로 설치할 필요가 없습니다. Linux 사용자는 아래 소스 실행 안내를 따라 주세요.
 
 1. **새 폴더에 ZIP 전체를 압축 해제**한 뒤 그 안의 `WhisperSubTranslate.exe`를 실행합니다. ZIP 안에서 바로 실행하거나 EXE만 다른 폴더로 옮기지 마세요.
 2. 처음에는 말소리가 또렷한 짧은 영상(약 10~30초)을 추가합니다. **번역 → 번역 안함**, 영상의 음성 언어(또는 자동 감지), **처리 장치 → 자동**을 선택하세요. 기본 음성 모델은 `large-v3-turbo`입니다. 설치 확인만 빨리 해보려면 다운로드가 작은 `tiny`/`base`를 쓸 수 있지만 정확도는 낮습니다.
@@ -43,7 +43,7 @@ GitHub의 “Source code”가 아닌 `WhisperSubTranslate-v2.5.1-win-x64.zip`�
 
 #### 다운로드 용량과 디스크 공간
 
-Windows ZIP과 AI 모델은 **별도 다운로드**입니다. v2.5.1 기준 대략적인 다운로드 용량(10진 단위):
+Windows ZIP과 AI 모델은 **별도 다운로드**입니다. 현재 릴리스 기준 대략적인 다운로드 용량(10진 단위):
 
 | 다운로드 항목 | 추가 다운로드 용량 | 필요한 때 |
 | --- | ---: | --- |
